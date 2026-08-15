@@ -5,7 +5,7 @@ export interface LatLng {
   lng: number;
 }
 
-export type PlaceSource = "google" | "overpass";
+export type PlaceSource = "google" | "geoapify" | "overpass";
 
 export interface Place {
   id: string;
@@ -78,5 +78,5 @@ export interface RecommendResult {
   places: ScoredPlace[];
   generatedAt: string;
   radiusKm: number;
-  sourceNote: "google" | "overpass" | "cache" | "none";
+  sourceNote: "google" | "geoapify" | "overpass" | "cache" | "none";
 }

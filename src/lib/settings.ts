@@ -11,6 +11,8 @@ export interface AppConfig {
   googlePlacesApiKey: string;
   opencodeApiKey: string; // OpenCode Zen
   opencodeGoApiKey: string; // OpenCode Go
+  geoapifyApiKey: string; // free tier, no credit card
+  overpassEndpoint: string; // custom Overpass instance (e.g. self-hosted osm3s)
 }
 
 const CONFIG_PATH = path.join(process.cwd(), "data", "config.json");
@@ -19,12 +21,16 @@ export const ENV_KEYS: Record<keyof AppConfig, string> = {
   googlePlacesApiKey: "GOOGLE_PLACES_API_KEY",
   opencodeApiKey: "OPENCODE_API_KEY",
   opencodeGoApiKey: "OPENCODE_GO_API_KEY",
+  geoapifyApiKey: "GEOAPIFY_API_KEY",
+  overpassEndpoint: "OVERPASS_ENDPOINT",
 };
 
 const DEFAULT_CONFIG: AppConfig = {
   googlePlacesApiKey: "",
   opencodeApiKey: "",
   opencodeGoApiKey: "",
+  geoapifyApiKey: "",
+  overpassEndpoint: "",
 };
 
 function readFile(): AppConfig {
@@ -58,12 +64,23 @@ export function setConfig(partial: Partial<AppConfig>): AppConfig {
   return next;
 }
 
-/** Connection status booleans — safe to expose to the client. */
-export function configStatus(): Record<keyof AppConfig, boolean> {
+/** Public config surface — safe to expose to the client.
+ * API keys are booleans; the Overpass endpoint is not a secret. */
+export interface PublicConfig {
+  googlePlacesApiKey: boolean;
+  opencodeApiKey: boolean;
+  opencodeGoApiKey: boolean;
+  geoapifyApiKey: boolean;
+  overpassEndpoint: string;
+}
+
+export function configStatus(): PublicConfig {
   const c = getConfig();
   return {
     googlePlacesApiKey: Boolean(c.googlePlacesApiKey),
     opencodeApiKey: Boolean(c.opencodeApiKey),
     opencodeGoApiKey: Boolean(c.opencodeGoApiKey),
+    geoapifyApiKey: Boolean(c.geoapifyApiKey),
+    overpassEndpoint: c.overpassEndpoint,
   };
 }

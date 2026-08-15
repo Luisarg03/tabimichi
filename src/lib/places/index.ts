@@ -3,7 +3,8 @@ import { getConfig } from "../settings";
 import { cachePlaces, cachedNear } from "../db";
 import { resolveTypes, type ExperienceType } from "./taxonomy";
 import { googleSearch } from "./google";
-import { overpassSearch } from "./overpass";
+import { geoapifySearch } from "./geoapify";
+import { overpassSearch, setOverpassEndpoint } from "./overpass";
 
 export interface DiscoverOptions {
   lat: number;
@@ -13,7 +14,7 @@ export interface DiscoverOptions {
   lang?: string;
 }
 
-export type SourceNote = "google" | "overpass" | "cache" | "none";
+export type SourceNote = "google" | "geoapify" | "overpass" | "cache" | "none";
 
 function dedupe(places: Place[]): Place[] {
   const seen = new Set<string>();
@@ -28,10 +29,12 @@ function dedupe(places: Place[]): Place[] {
 }
 
 /**
- * Discovery orchestrator: Google Places when a key is configured,
- * otherwise OpenStreetMap Overpass (best-effort, mirror failover).
- * Results are cached in SQLite. If live discovery fails entirely,
- * falls back to the local cache (type-filtered).
+ * Multi-source discovery orchestrator, tried in priority order:
+ *   1. Google Places          — when a key is configured (rich: ratings, hours, photos)
+ *   2. Geoapify               — when a free key is configured (curated OSM categories)
+ *   3. OpenStreetMap Overpass — custom osm3s endpoint if set, else public mirrors
+ *   4. local SQLite cache     — last resort (type-filtered)
+ * The first source that returns places wins. Results are cached.
  */
 export async function discover(opts: DiscoverOptions): Promise<{ places: Place[]; source: SourceNote }> {
   const { lat, lng, radiusKm, types, lang = "es" } = opts;
@@ -40,6 +43,8 @@ export async function discover(opts: DiscoverOptions): Promise<{ places: Place[]
   const config = getConfig();
   let places: Place[] = [];
   let source: SourceNote = "none";
+
+  if (config.overpassEndpoint) setOverpassEndpoint(config.overpassEndpoint);
 
   if (config.googlePlacesApiKey) {
     try {
@@ -53,13 +58,22 @@ export async function discover(opts: DiscoverOptions): Promise<{ places: Place[]
         .flatMap((r) => (r as PromiseFulfilledResult<Place[]>).value);
       if (places.length > 0) source = "google";
     } catch {
-      // fall through to overpass
+      // fall through
+    }
+  }
+
+  if (places.length === 0 && config.geoapifyApiKey) {
+    try {
+      places = await geoapifySearch(config.geoapifyApiKey, experienceTypes, lat, lng, radiusM, lang);
+      if (places.length > 0) source = "geoapify";
+    } catch {
+      // fall through
     }
   }
 
   if (places.length === 0) {
     try {
-      // single combined query (mirror failover inside)
+      // single combined query (custom endpoint first, then mirror failover)
       places = await overpassSearch(experienceTypes, lat, lng, radiusM);
       if (places.length > 0) source = "overpass";
     } catch {

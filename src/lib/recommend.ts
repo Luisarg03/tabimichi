@@ -22,6 +22,8 @@ export async function recommend(input: RecommendInput): Promise<RecommendResult>
     budgetMin,
     weather,
     now: new Date(),
+    // Google Places only biases by radius, so hard-drop results beyond it (50% slack)
+    maxDistKm: radiusKm * 1.5,
   });
 
   return {

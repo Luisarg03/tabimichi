@@ -37,15 +37,15 @@ Where are you? + time budget + mood/type
   Cards + map with "why now" reasons
 ```
 
-- **Weather** — [Open-Meteo](https://open-meteo.com): free, no API key, hourly
-  forecast (rain, snow, wind, probability). Rain boosts indoor types (onsen,
-  museum, food…), clear skies boost viewpoints/parks/hiking.
-- **Discovery** — Google Places Text Search when an API key is configured;
-  otherwise OpenStreetMap via Overpass (mirror failover + retries, best-effort).
-  Results are cached in SQLite (`data/tabi.db`).
+- **Discovery** — multi-source, tried in priority order:
+  1. **Google Places** (text + nearby search, strictbounds) when a key is configured
+  2. **Geoapify** (free tier, 3k req/day) when a key is configured
+  3. **OpenStreetMap Overpass** — your own osm3s endpoint if set, else public mirrors
+  4. **local SQLite cache** (`data/tabi.db`) as last resort
+  Results are always cached for resilience.
 - **Scoring** — rule-based "base fit" score (0–100): travel time vs. budget,
-  weather fit, rating, open-now status. The LLM (next phase) narrates the *why*,
-  it doesn't score.
+  weather fit, rating, open-now status, hard distance cap. The LLM (next phase)
+  narrates the *why*, it doesn't score.
 - **Storage** — `node:sqlite` (built into Node ≥ 22.5, no native deps):
   place cache + (later) user profile & feedback.
 
@@ -56,13 +56,15 @@ Keys never leave your machine; environment variables override the file.
 
 | Key | Env var | Purpose |
 |-----|---------|---------|
-| Google Places | `GOOGLE_PLACES_API_KEY` | Rich discovery: ratings, hours, photos (needs Google billing). |
+| Google Places | `GOOGLE_PLACES_API_KEY` | Primary source: ratings, hours, photos. $200/month free credit (~6k calls) — effectively free for personal use. |
+| Geoapify | `GEOAPIFY_API_KEY` | Free backup source (3,000 req/day, no credit card). |
+| Overpass endpoint | `OVERPASS_ENDPOINT` | Point to your own osm3s (Docker) for unlimited reliable OSM data; empty = public mirrors. |
 | OpenCode Zen | `OPENCODE_API_KEY` | LLM guide — next phase (M2). |
 | OpenCode Go | `OPENCODE_GO_API_KEY` | LLM guide — next phase (M2). |
 
-Without a Google key the app works with OpenStreetMap (free). Note: public
-Overpass instances are shared and can be slow or overloaded; the app degrades
-gracefully (local cache, or a clear "data unavailable" message).
+Without any key the app still works via public Overpass + local cache; public
+instances are shared and can be slow or overloaded — the app degrades
+gracefully with a clear "data unavailable" message.
 
 ## Tech stack
 

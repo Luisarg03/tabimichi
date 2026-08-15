@@ -7,6 +7,8 @@ export interface ScoreContext {
   budgetMin: number;
   weather: WeatherInfo;
   now: Date;
+  /** hard max distance (km); results beyond it are dropped */
+  maxDistKm?: number;
 }
 
 function isIndoor(tag: string): boolean {
@@ -29,7 +31,8 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
     const distanceKm = haversineKm(base, p);
     const t = travelMin(distanceKm);
 
-    // hard filter: too far for the time budget (25% slack)
+    // hard filters: beyond the discovery radius, or too far for the budget (25% slack)
+    if (ctx.maxDistKm !== undefined && distanceKm > ctx.maxDistKm) continue;
     if (t > budgetMin * 1.25) continue;
 
     let score = 50;

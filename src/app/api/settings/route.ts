@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid json" }, { status: 400 });
   }
   const clean: Partial<AppConfig> = {};
-  for (const k of ["googlePlacesApiKey", "opencodeApiKey", "opencodeGoApiKey"] as const) {
+  for (const k of ["googlePlacesApiKey", "opencodeApiKey", "opencodeGoApiKey", "geoapifyApiKey", "overpassEndpoint"] as const) {
     if (typeof body[k] === "string") clean[k] = body[k].trim();
   }
   try {

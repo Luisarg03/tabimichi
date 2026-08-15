@@ -21,6 +21,16 @@ const MIRRORS = [
   "https://overpass.kumi.systems/api/interpreter",
 ];
 
+/**
+ * Optional custom Overpass instance (e.g. self-hosted osm3s in Docker).
+ * When set, it is tried first; public mirrors remain as fallback.
+ */
+let customEndpoint: string | null = null;
+
+export function setOverpassEndpoint(endpoint: string): void {
+  customEndpoint = endpoint.trim() || null;
+}
+
 const TIMEOUT_MS = 40000;
 
 function fetchWithTimeout(url: string, init: RequestInit, ms: number): Promise<Response> {
@@ -116,11 +126,13 @@ export async function overpassSearch(
   const query = buildQuery(valid, lat, lng, radiusM);
   let lastErr: unknown = null;
 
-  for (const mirror of MIRRORS) {
+  const endpoints = customEndpoint ? [customEndpoint, ...MIRRORS] : MIRRORS;
+
+  for (const endpoint of endpoints) {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const res = await fetchWithTimeout(
-          mirror,
+          endpoint,
           {
             method: "POST",
             headers: {
