@@ -12,6 +12,8 @@ export interface DiscoverPayload {
   budget: TimeBudget;
   types: string[];
   mode: TransportMode;
+  /** true when the position is exact GPS, false when geocoded address */
+  gps?: boolean;
 }
 
 const BUDGETS: TimeBudget[] = ["lunch", "afternoon", "full_day"];
@@ -21,12 +23,19 @@ const MODES: Array<{ id: TransportMode; emoji: string }> = [
   { id: "car", emoji: "🚗" },
 ];
 
+interface PanelLocation {
+  lat: number;
+  lng: number;
+  label: string;
+  gps?: boolean;
+}
+
 export default function DayPanel({
   initialLocation,
   loading,
   onDiscover,
 }: {
-  initialLocation?: { lat: number; lng: number; label: string } | null;
+  initialLocation?: PanelLocation | null;
   loading: boolean;
   onDiscover: (payload: DiscoverPayload) => void;
 }) {
@@ -48,7 +57,7 @@ export default function DayPanel({
       return;
     }
     const data = await res.json();
-    setLocation({ lat: data.lat, lng: data.lng, label: data.name });
+    setLocation({ lat: data.lat, lng: data.lng, label: data.name, gps: false });
   }
 
   function useGps() {
@@ -60,6 +69,7 @@ export default function DayPanel({
           lat: pos.coords.latitude,
           lng: pos.coords.longitude,
           label: "📍",
+          gps: true,
         });
         setLocating(false);
       },
