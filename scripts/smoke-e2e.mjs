@@ -91,9 +91,14 @@ async function main() {
     })),
   });
   check("narrate responds", narr.status === 200, `status ${narr.status}`);
+
+  // 7. persisted logs endpoint
+  console.log("logs:");
+  const logs = await fetch(`${BASE}/api/logs?tail=20`).then((x) => x.json()).catch(() => null);
+  check("logs endpoint returns entries", Array.isArray(logs?.entries) && logs.entries.length > 0);
   check(
-    "narrate returns data or degrades gracefully",
-    narr.json?.narratedBy !== undefined || narr.json?.narratives === undefined || true
+    "entries include recommend results",
+    logs?.entries.some((e) => e.type === "recommend" && Array.isArray(e.top))
   );
 
   console.log(failures === 0 ? "\n✅ E2E smoke passed" : `\n❌ ${failures} check(s) failed`);

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getWeather, weatherAt } from "@/lib/weather";
 import { narrateTop } from "@/lib/llm";
 import { jstHourStamp } from "@/lib/jst";
+import { logEntry } from "@/lib/logger";
 import type { NarratePlaceInput, NarrateResponse } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -59,6 +60,7 @@ export async function POST(req: NextRequest) {
     reasons: [],
   }));
 
+  const startedAt = performance.now();
   const { narratives, summary, provider } = await narrateTop({
     places: scored,
     weather,
@@ -66,6 +68,20 @@ export async function POST(req: NextRequest) {
     mode,
     lang: lang === "en" ? "en" : "es",
     types,
+  });
+
+  logEntry({
+    type: "narrate",
+    lat,
+    lng,
+    budget,
+    mode,
+    lang,
+    sim: simulated !== null,
+    provider,
+    narratives: narratives.size,
+    summary: Boolean(summary),
+    ms: Math.round(performance.now() - startedAt),
   });
 
   const out: NarrateResponse = {

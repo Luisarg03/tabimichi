@@ -43,8 +43,8 @@ const DEFAULT_CONFIG: AppConfig = {
 
 function readFile(): AppConfig {
   try {
-    if (existsSync(configPath)) {
-      const raw = JSON.parse(readFileSync(configPath, "utf8"));
+    if (existsSync(/* turbopackIgnore: true */ configPath)) {
+      const raw = JSON.parse(readFileSync(/* turbopackIgnore: true */ configPath, "utf8"));
       return { ...DEFAULT_CONFIG, ...raw };
     }
   } catch {
@@ -67,8 +67,8 @@ export function getConfig(): AppConfig {
 /** Persist provided keys (empty string clears). Env overrides still win at read time. */
 export function setConfig(partial: Partial<AppConfig>): AppConfig {
   const next = { ...readFile(), ...partial };
-  mkdirSync(path.dirname(configPath), { recursive: true });
-  writeFileSync(configPath, JSON.stringify(next, null, 2), "utf8");
+  mkdirSync(/* turbopackIgnore: true */ path.dirname(configPath), { recursive: true });
+  writeFileSync(/* turbopackIgnore: true */ configPath, JSON.stringify(next, null, 2), "utf8");
   return next;
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import DayPanel, { type DiscoverPayload } from "@/components/DayPanel";
@@ -34,6 +34,17 @@ export default function HomePage() {
   const [profile, setProfile] = useState<PlaceProfile | null>(null);
   /** time simulation: null = real now; else a SIM_PRESETS id (JST hour) */
   const [simPreset, setSimPreset] = useState<string | null>(null);
+  const lastQueryRef = useRef<{
+    lat: number;
+    lng: number;
+    budget: string;
+    types: string[];
+    mode: string;
+    now?: string;
+  } | null>(null);
+  const lastPlacesRef = useRef<
+    Array<{ id: string; name: string; distanceKm: number; travelMin: number; rating?: number; tags: string[] }> | null
+  >(null);
 
   useEffect(() => {
     try {
@@ -137,56 +148,23 @@ export default function HomePage() {
             .catch(() => {});
         }
 
-        // phase 2 (async): LLM narrative — day summary + per-place why
         if (data.places.length > 0) {
-          setGuideState("thinking");
-          try {
-            const narrRes = await fetch("/api/narrate", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                lat: payload.lat,
-                lng: payload.lng,
-                budget: payload.budget,
-                mode: payload.mode,
-                types: payload.types,
-                lang: locale,
-                now,
-                places: data.places.map((p) => ({
-                  id: p.id,
-                  name: p.name,
-                  distanceKm: p.distanceKm,
-                  travelMin: p.travelMin,
-                  rating: p.rating,
-                  tags: p.tags,
-                })),
-              }),
-            });
-            if (narrRes.ok) {
-              const narr = (await narrRes.json()) as {
-                summary?: string;
-                narratives?: Record<string, string>;
-                narratedBy?: string;
-              };
-              setResult((prev) => {
-                if (!prev) return prev;
-                const narrMap = narr.narratives ?? {};
-                return {
-                  ...prev,
-                  narrated: true,
-                  narratedBy: narr.narratedBy,
-                  summary: narr.summary,
-                  places: prev.places.map((p) =>
-                    narrMap[p.id] ? { ...p, why: narrMap[p.id] } : p
-                  ),
-                };
-              });
-            }
-          } catch {
-            // guide unavailable — cards with rule reasons remain
-          } finally {
-            setGuideState("done");
-          }
+          lastQueryRef.current = {
+            lat: payload.lat,
+            lng: payload.lng,
+            budget: payload.budget,
+            types: payload.types,
+            mode: payload.mode,
+            now,
+          };
+          lastPlacesRef.current = data.places.map((p) => ({
+            id: p.id,
+            name: p.name,
+            distanceKm: p.distanceKm,
+            travelMin: p.travelMin,
+            rating: p.rating,
+            tags: p.tags,
+          }));
         }
       } catch {
         setError(true);
@@ -195,6 +173,44 @@ export default function HomePage() {
     },
     [locale, simPreset]
   );
+
+  /** On-demand guide: narrates the current results (button, not automatic). */
+  const narrateNow = useCallback(async () => {
+    const q = lastQueryRef.current;
+    if (!q || (lastPlacesRef.current?.length ?? 0) === 0) return;
+    setGuideState("thinking");
+    try {
+      const narrRes = await fetch("/api/narrate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...q, lang: locale, places: lastPlacesRef.current }),
+      });
+      if (narrRes.ok) {
+        const narr = (await narrRes.json()) as {
+          summary?: string;
+          narratives?: Record<string, string>;
+          narratedBy?: string;
+        };
+        setResult((prev) => {
+          if (!prev) return prev;
+          const narrMap = narr.narratives ?? {};
+          return {
+            ...prev,
+            narrated: true,
+            narratedBy: narr.narratedBy,
+            summary: narr.summary,
+            places: prev.places.map((p) =>
+              narrMap[p.id] ? { ...p, why: narrMap[p.id] } : p
+            ),
+          };
+        });
+      }
+    } catch {
+      // guide unavailable — cards with rule reasons remain
+    } finally {
+      setGuideState("done");
+    }
+  }, [locale]);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
@@ -281,6 +297,19 @@ export default function HomePage() {
               ) : (
                 <>
                   <div className="text-xs text-slate-400">{t(`panel.source.${result.sourceNote}`)}</div>
+                  {result.places.length > 0 && (
+                    <button
+                      onClick={narrateNow}
+                      disabled={guideState === "thinking"}
+                      className="w-full rounded-xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-sm font-medium text-sky-700 transition-colors hover:bg-sky-100 disabled:opacity-50"
+                    >
+                      {guideState === "thinking"
+                        ? t("status.guideThinking")
+                        : result.narrated
+                          ? t("card.guideRegenerate")
+                          : t("card.guideButton")}
+                    </button>
+                  )}
                   {guideState === "thinking" && !result.summary && (
                     <div className="rounded-xl border border-sky-100 bg-sky-50 p-4 text-sm text-slate-500">
                       <span className="inline-block animate-pulse">🧠 {t("status.guideThinking")}</span>

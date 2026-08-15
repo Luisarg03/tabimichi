@@ -8,6 +8,8 @@ import { GET as settingsGET, POST as settingsPOST } from "@/app/api/settings/rou
 import { GET as geocodeGET } from "@/app/api/geocode/route";
 import { GET as photoGET } from "@/app/api/photo/route";
 import { GET as photosGET } from "@/app/api/photos/route";
+import { GET as logsGET } from "@/app/api/logs/route";
+import { logEntry } from "@/lib/logger";
 import { upsertPlace } from "@/lib/db";
 import { clearWeatherCache } from "@/lib/weather";
 import { setPhotoDir } from "@/lib/photos";
@@ -155,6 +157,18 @@ describe("/api/recommend", () => {
     // café closed at 21:00 → only the late bar survives
     expect(body.places.map((p: { id: string }) => p.id)).toEqual(["g_p2"]);
     expect(body.places[0].openNow).toBe(true);
+  });
+});
+
+describe("/api/logs", () => {
+  it("returns persisted entries newest-first", async () => {
+    logEntry({ type: "recommend", lat: 36.6, scored: 8 });
+    logEntry({ type: "recommend", lat: 34.7, scored: 0, emptyReason: "all_closed" });
+    const res = await logsGET(new NextRequest("http://localhost/api/logs?tail=10"));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.entries).toHaveLength(2);
+    expect(body.entries[0].emptyReason).toBe("all_closed"); // newest first
   });
 });
 

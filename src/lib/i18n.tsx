@@ -80,6 +80,8 @@ const es: Dict = {
     like: "Me gusta",
     dislike: "No me gusta",
     voted: "¡Anotado!",
+    guideButton: "🧠 Preguntale al guía",
+    guideRegenerate: "🔁 Regenerar resumen del guía",
   },
   profile: { title: "Tus gustos" },
   sim: {
@@ -214,6 +216,8 @@ const en: Dict = {
     like: "Like",
     dislike: "Dislike",
     voted: "Got it!",
+    guideButton: "🧠 Ask the guide",
+    guideRegenerate: "🔁 Regenerate guide summary",
   },
   profile: { title: "Your tastes" },
   sim: {
