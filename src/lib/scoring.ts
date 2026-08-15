@@ -10,6 +10,8 @@ export interface ScoreContext {
   mode?: TransportMode;
   /** hard max distance (km); results beyond it are dropped */
   maxDistKm?: number;
+  /** M3: learned tag weights from 👍/👎 feedback, e.g. { onsen: 2, food: -1 } */
+  profile?: Record<string, number>;
 }
 
 function isIndoor(tag: string): boolean {
@@ -101,6 +103,29 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
       reasons.push({ key: "openNow" });
     } else if (p.openNow === false) {
       score -= 20;
+    }
+
+    // --- M3: profile affinity (learned tag weights from 👍/👎) ---
+    const profile = ctx.profile;
+    if (profile) {
+      let affinity = 0;
+      let bestTag: string | undefined;
+      let bestWeight = 0;
+      for (const tag of p.tags) {
+        const w = profile[tag] ?? 0;
+        if (w !== 0) {
+          affinity += w;
+          if (Math.abs(w) > Math.abs(bestWeight)) {
+            bestTag = tag;
+            bestWeight = w;
+          }
+        }
+      }
+      affinity = Math.max(-12, Math.min(12, affinity));
+      score += affinity;
+      if (affinity > 0 && bestTag) {
+        reasons.push({ key: "profileLiked", params: { typeId: bestTag } });
+      }
     }
 
     out.push({

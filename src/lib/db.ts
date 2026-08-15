@@ -40,8 +40,30 @@ function getDb(): DatabaseSync {
       liked INTEGER NOT NULL,
       created_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS profile_weights (
+      tag TEXT PRIMARY KEY,
+      weight INTEGER NOT NULL
+    );
   `);
   return db;
+}
+
+/** Map a SQLite row to a Place. */
+function rowToPlace(r: Record<string, unknown>): Place {
+  return {
+    id: String(r.id),
+    source: r.source as Place["source"],
+    name: String(r.name),
+    lat: Number(r.lat),
+    lng: Number(r.lng),
+    tags: JSON.parse(String(r.tags)) as string[],
+    rating: r.rating == null ? undefined : Number(r.rating),
+    priceLevel: r.price_level == null ? undefined : Number(r.price_level),
+    openNow: r.open_now == null ? undefined : Boolean(r.open_now),
+    address: r.address ? String(r.address) : undefined,
+    photoRef: r.photo_ref ? String(r.photo_ref) : undefined,
+    url: r.url ? String(r.url) : undefined,
+  };
 }
 
 export function upsertPlace(p: Place): void {
@@ -85,20 +107,16 @@ export function cachedNear(lat: number, lng: number, radiusKm: number): Place[] 
        ORDER BY fetched_at DESC LIMIT 200`
     )
     .all(lat - deg, lat + deg, lng - deg, lng + deg) as Array<Record<string, unknown>>;
-  return rows.map((r) => ({
-    id: String(r.id),
-    source: r.source as Place["source"],
-    name: String(r.name),
-    lat: Number(r.lat),
-    lng: Number(r.lng),
-    tags: JSON.parse(String(r.tags)) as string[],
-    rating: r.rating == null ? undefined : Number(r.rating),
-    priceLevel: r.price_level == null ? undefined : Number(r.price_level),
-    openNow: r.open_now == null ? undefined : Boolean(r.open_now),
-    address: r.address ? String(r.address) : undefined,
-    photoRef: r.photo_ref ? String(r.photo_ref) : undefined,
-    url: r.url ? String(r.url) : undefined,
-  }));
+  return rows.map(rowToPlace);
+}
+
+/** One cached place by id (used by the feedback/profile flow). */
+export function placeById(id: string): Place | null {
+  const d = getDb();
+  const r = d.prepare("SELECT * FROM places WHERE id = ?").get(id) as
+    | Record<string, unknown>
+    | undefined;
+  return r ? rowToPlace(r) : null;
 }
 
 /**
@@ -125,24 +143,56 @@ export function freshNearby(
     )
     .all(lat - deg, lat + deg, lng - deg, lng + deg, since) as Array<Record<string, unknown>>;
 
-  const places = rows.map((r) => ({
-    id: String(r.id),
-    source: r.source as Place["source"],
-    name: String(r.name),
-    lat: Number(r.lat),
-    lng: Number(r.lng),
-    tags: JSON.parse(String(r.tags)) as string[],
-    rating: r.rating == null ? undefined : Number(r.rating),
-    priceLevel: r.price_level == null ? undefined : Number(r.price_level),
-    openNow: r.open_now == null ? undefined : Boolean(r.open_now),
-    address: r.address ? String(r.address) : undefined,
-    photoRef: r.photo_ref ? String(r.photo_ref) : undefined,
-    url: r.url ? String(r.url) : undefined,
-  }));
+  const places = rows.map(rowToPlace);
 
   // every requested type must have at least one fresh cached place
   for (const type of types) {
     if (!places.some((p) => p.tags.includes(type))) return null;
   }
   return places;
+}
+
+// ---------------------------------------------------------------------------
+// M3: user profile (tag weights) from 👍/👎 feedback
+// ---------------------------------------------------------------------------
+
+/** Current tag weights: { onsen: 2, food: -1, … } — clamped to [-5, 5]. */
+export function getProfile(): Record<string, number> {
+  const d = getDb();
+  const rows = d.prepare("SELECT tag, weight FROM profile_weights").all() as Array<{
+    tag: string;
+    weight: number;
+  }>;
+  const out: Record<string, number> = {};
+  for (const r of rows) out[r.tag] = r.weight;
+  return out;
+}
+
+/**
+ * Record a 👍/👎 on a place and update the profile: each tag of the place
+ * gets +1 (like) or −1 (dislike), clamped to [-5, 5].
+ * `tags` are the tags the user actually saw on the card (preferred);
+ * falls back to the cached place when not provided.
+ */
+export function applyFeedback(
+  placeId: string,
+  liked: boolean,
+  tags?: string[]
+): Record<string, number> {
+  const d = getDb();
+  d.prepare(
+    "INSERT INTO feedback (place_id, liked, created_at) VALUES (?, ?, ?)"
+  ).run(placeId, liked ? 1 : 0, new Date().toISOString());
+
+  const placeTags = tags && tags.length > 0 ? tags : placeById(placeId)?.tags;
+  if (placeTags && placeTags.length > 0) {
+    const delta = liked ? 1 : -1;
+    const upsert = d.prepare(
+      `INSERT INTO profile_weights (tag, weight) VALUES (?, ?)
+       ON CONFLICT(tag) DO UPDATE SET
+         weight = MAX(-5, MIN(5, profile_weights.weight + excluded.weight))`
+    );
+    for (const tag of placeTags) upsert.run(tag, delta);
+  }
+  return getProfile();
 }

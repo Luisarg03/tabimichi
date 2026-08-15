@@ -50,7 +50,9 @@ export async function discover(opts: DiscoverOptions): Promise<{ places: Place[]
   const typeIds = experienceTypes.map((t) => t.id);
   const fresh = freshNearby(lat, lng, radiusKm, typeIds, 15 * 60 * 1000);
   if (fresh && fresh.length > 0) {
-    return { places: fresh, source: "cache" };
+    // only return places that match the requested types
+    const matched = fresh.filter((p) => p.tags.some((t) => typeIds.includes(t)));
+    if (matched.length > 0) return { places: matched, source: "cache" };
   }
 
   if (config.googlePlacesApiKey) {

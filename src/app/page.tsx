@@ -8,7 +8,8 @@ import RecommendationCard from "@/components/RecommendationCard";
 import WeatherCard from "@/components/WeatherCard";
 import LocaleToggle from "@/components/LocaleToggle";
 import { useI18n } from "@/lib/i18n";
-import type { RecommendResult, ScoredPlace } from "@/lib/types";
+import type { PlaceProfile, RecommendResult, ScoredPlace } from "@/lib/types";
+import { EXPERIENCE_TYPE_MAP } from "@/lib/places/taxonomy";
 
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
 
@@ -27,6 +28,8 @@ export default function HomePage() {
   const [error, setError] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [guideState, setGuideState] = useState<"idle" | "thinking" | "done">("idle");
+  const [votes, setVotes] = useState<Record<string, "like" | "dislike">>({});
+  const [profile, setProfile] = useState<PlaceProfile | null>(null);
 
   useEffect(() => {
     try {
@@ -34,6 +37,27 @@ export default function HomePage() {
       if (raw) setLocation(JSON.parse(raw) as SavedLocation);
     } catch {
       // ignore
+    }
+    fetch("/api/feedback")
+      .then((r) => r.json())
+      .then((d) => setProfile(d.profile as PlaceProfile))
+      .catch(() => {});
+  }, []);
+
+  const handleFeedback = useCallback(async (placeId: string, liked: boolean, tags?: string[]) => {
+    setVotes((v) => ({ ...v, [placeId]: liked ? "like" : "dislike" }));
+    try {
+      const res = await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ placeId, liked, tags }),
+      });
+      if (res.ok) {
+        const d = (await res.json()) as { profile: PlaceProfile };
+        setProfile(d.profile);
+      }
+    } catch {
+      // optimistic vote stays; profile updates on next action
     }
   }, []);
 
@@ -205,19 +229,39 @@ export default function HomePage() {
                       {t("status.empty")}
                     </div>
                   ) : (
-                    <div className="space-y-3">
-                      {result.places.map((p: ScoredPlace) => (
-                        <RecommendationCard
-                          key={p.id}
-                          place={p}
-                          origin={{ lat: location!.lat, lng: location!.lng }}
-                          mode={mode}
-                          narratedBy={result.narratedBy}
-                          selected={selectedId === p.id}
-                          onSelect={setSelectedId}
-                        />
-                      ))}
-                    </div>
+                    <>
+                      {profile && Object.keys(profile).some((k) => profile[k] !== 0) && (
+                        <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-2.5 text-xs text-slate-600">
+                          <span className="font-medium text-emerald-700">{t("profile.title")}: </span>
+                          {Object.entries(profile)
+                            .filter(([, w]) => w !== 0)
+                            .map(([tag, w]) => (
+                              <span key={tag} className="mr-2 inline-flex items-center gap-1">
+                                {EXPERIENCE_TYPE_MAP[tag]?.emoji ?? ""}
+                                {t(`panel.type.${tag}`)}
+                                <span className={w > 0 ? "text-emerald-600" : "text-rose-500"}>
+                                  {w > 0 ? `+${w}` : w}
+                                </span>
+                              </span>
+                            ))}
+                        </div>
+                      )}
+                      <div className="space-y-3">
+                        {result.places.map((p: ScoredPlace) => (
+                          <RecommendationCard
+                            key={p.id}
+                            place={p}
+                            origin={{ lat: location!.lat, lng: location!.lng }}
+                            mode={mode}
+                            narratedBy={result.narratedBy}
+                            selected={selectedId === p.id}
+                            voted={votes[p.id] ?? null}
+                            onSelect={setSelectedId}
+                            onFeedback={handleFeedback}
+                          />
+                        ))}
+                      </div>
+                    </>
                   )}
                 </>
               )}

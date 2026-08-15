@@ -74,7 +74,12 @@ const es: Dict = {
     why: "El guía dice",
     summaryTitle: "Resumen del día",
     narrator: { free: "capa gratuita", paid: "capa paga" },
+    voteQuestion: "¿Te gusta esta idea?",
+    like: "Me gusta",
+    dislike: "No me gusta",
+    voted: "¡Anotado!",
   },
+  profile: { title: "Tus gustos" },
   reasons: {
     weatherRainIndoor: "Hoy llueve — ideal para {type}",
     weatherRainOutdoor: "Hoy llueve — mejor evitar {type} al aire libre",
@@ -85,6 +90,7 @@ const es: Dict = {
     distanceGood: "A {min} min en {mode} de donde estás",
     highRated: "Muy bien valorado ({r}★)",
     openNow: "Abierto ahora",
+    profileLiked: "Coincide con tu perfil ({type})",
   },
   status: {
     discovering: "Buscando lugares…",
@@ -183,7 +189,12 @@ const en: Dict = {
     why: "The guide says",
     summaryTitle: "Day summary",
     narrator: { free: "free tier", paid: "paid tier" },
+    voteQuestion: "Do you like this idea?",
+    like: "Like",
+    dislike: "Dislike",
+    voted: "Got it!",
   },
+  profile: { title: "Your tastes" },
   reasons: {
     weatherRainIndoor: "Rainy today — great for {type}",
     weatherRainOutdoor: "Rainy today — better to skip {type} outdoors",
@@ -194,6 +205,7 @@ const en: Dict = {
     distanceGood: "{min} min by {mode} from where you are",
     highRated: "Highly rated ({r}★)",
     openNow: "Open now",
+    profileLiked: "Matches your profile ({type})",
   },
   status: {
     discovering: "Looking for places…",
