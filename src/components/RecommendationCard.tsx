@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Reason, ScoredPlace } from "@/lib/types";
 import { EXPERIENCE_TYPE_MAP } from "@/lib/places/taxonomy";
 import { useI18n } from "@/lib/i18n";
@@ -67,11 +67,15 @@ export default function RecommendationCard({
         ? [place.photoRef]
         : [];
   const [activeIdx, setActiveIdx] = useState(0);
+  const touchX = useRef<number | null>(null);
 
   // reset the gallery when the card shows a different place
   useEffect(() => {
     setActiveIdx(0);
   }, [place.id]);
+
+  const prevPhoto = () => setActiveIdx((i) => (i - 1 + photoRefs.length) % photoRefs.length);
+  const nextPhoto = () => setActiveIdx((i) => (i + 1) % photoRefs.length);
 
   return (
     <button
@@ -83,30 +87,57 @@ export default function RecommendationCard({
       }`}
     >
       {photoRefs.length > 0 && (
-        <div className="relative -mx-4 -mt-4 mb-3 overflow-hidden bg-slate-100">
+        <div
+          className="relative -mx-4 -mt-4 mb-3 overflow-hidden bg-slate-100"
+          onTouchStart={(e) => {
+            touchX.current = e.touches[0].clientX;
+          }}
+          onTouchEnd={(e) => {
+            const dx = e.changedTouches[0].clientX - (touchX.current ?? 0);
+            touchX.current = null;
+            if (Math.abs(dx) > 40) {
+              e.stopPropagation();
+              dx > 0 ? prevPhoto() : nextPhoto();
+            }
+          }}
+        >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={photoUrl(photoRefs[activeIdx]!, place.id)}
             alt={place.name}
             loading="lazy"
-            className="h-36 w-full object-cover"
+            className="h-40 w-full object-cover"
           />
           {photoRefs.length > 1 && (
-            <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-1.5">
-              {photoRefs.map((_, i) => (
-                <span
-                  key={i}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setActiveIdx(i);
-                  }}
-                  className={`h-1.5 rounded-full transition-all ${
-                    i === activeIdx ? "w-5 bg-white" : "w-1.5 bg-white/60"
-                  }`}
-                  style={{ cursor: "pointer" }}
-                />
-              ))}
-            </div>
+            <>
+              {/* prev / next arrows — bigger hit areas than dots */}
+              <span
+                onClick={(e) => {
+                  e.stopPropagation();
+                  prevPhoto();
+                }}
+                className="absolute left-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-xl text-white backdrop-blur-sm transition-colors hover:bg-black/65"
+                style={{ cursor: "pointer" }}
+                title="←"
+              >
+                ‹
+              </span>
+              <span
+                onClick={(e) => {
+                  e.stopPropagation();
+                  nextPhoto();
+                }}
+                className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-xl text-white backdrop-blur-sm transition-colors hover:bg-black/65"
+                style={{ cursor: "pointer" }}
+                title="→"
+              >
+                ›
+              </span>
+              {/* counter */}
+              <span className="absolute bottom-2 right-2 rounded-full bg-black/50 px-2 py-0.5 text-xs font-medium text-white backdrop-blur-sm">
+                {activeIdx + 1}/{photoRefs.length}
+              </span>
+            </>
           )}
         </div>
       )}
