@@ -124,10 +124,15 @@ npm run test:e2e  # smoke against a LIVE server (npm start first)
 - **E2E** (`scripts/smoke-e2e.mjs`): real server, real network — recommend
   (real + simulated hours), geocode, photo proxy, feedback, narrate.
 
-Every recommend call also emits a structured line to the server stdout
-(`[tabi] recommend {…}`: coords, budget, mode, simulation flag, source,
-candidates/scored counts, empty reason, latency) and API errors log with
-stack traces — check the server console to debug any issue.
+Every recommend/narrate call is **persisted** as JSON Lines in
+`data/logs/requests.jsonl` (coords, budget, mode, simulation flag, source,
+candidates/scored counts, empty reason, latency, top results) and API errors
+are logged with stack traces. The console line `[tabi] recommend` mirrors the
+short form, and `GET /api/logs?tail=N` returns the recent entries.
+
+The **guide is on-demand**: after a discovery the cards show immediately and
+a button ("Preguntale al guía") triggers the LLM summary + per-place "why";
+it can be regenerated anytime. No automatic LLM cost per search.
 
 Empty results are classified so the UI explains *why*: `all_closed` (e.g.
 searching at 3 AM in Japan), `too_far` (beyond your time/transport) or

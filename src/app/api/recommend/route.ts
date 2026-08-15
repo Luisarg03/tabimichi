@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { recommend } from "@/lib/recommend";
+import { logEntry } from "@/lib/logger";
 import type { RecommendInput } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -40,6 +41,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(result);
   } catch (e) {
     console.error("[tabi] /api/recommend failed:", e);
+    logEntry({ type: "error", route: "recommend", error: String(e) });
     return NextResponse.json({ error: String(e) }, { status: 502 });
   }
 }

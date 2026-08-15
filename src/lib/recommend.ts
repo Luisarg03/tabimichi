@@ -8,6 +8,7 @@ import { getConfig } from "./settings";
 import { googlePlaceDetails } from "./places/google";
 import { isOpenAt, type OpenPeriod } from "./open-hours";
 import { jstHourStamp } from "./jst";
+import { logEntry } from "./logger";
 
 type Candidate = Place & { periods?: OpenPeriod[] };
 
@@ -82,23 +83,32 @@ export async function recommend(input: RecommendInput): Promise<RecommendResult>
   const top = scored.slice(0, 8);
   const emptyReason = emptyReasonFor(candidates, top.length);
 
-  console.log(
-    "[tabi] recommend",
-    JSON.stringify({
-      at: new Date().toISOString(),
-      lat: input.lat,
-      lng: input.lng,
-      budget: input.budget,
-      types: input.types,
-      mode,
-      sim: simulated !== null,
-      source,
-      candidates: candidates.length,
-      scored: top.length,
-      emptyReason,
-      ms: Math.round(performance.now() - startedAt),
-    })
-  );
+  const summary = {
+    lat: input.lat,
+    lng: input.lng,
+    budget: input.budget,
+    types: input.types,
+    mode,
+    sim: simulated !== null,
+    source,
+    candidates: candidates.length,
+    scored: top.length,
+    emptyReason,
+    ms: Math.round(performance.now() - startedAt),
+  };
+  console.log("[tabi] recommend", JSON.stringify(summary));
+  logEntry({
+    type: "recommend",
+    ...summary,
+    top: top.map((p) => ({
+      id: p.id,
+      name: p.name,
+      score: p.score,
+      distanceKm: p.distanceKm,
+      travelMin: p.travelMin,
+      openNow: p.openNow,
+    })),
+  });
 
   return {
     weather,
