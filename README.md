@@ -1,13 +1,26 @@
 # Tabimichi 旅道 — Discover what to do today
 
+[![Next.js](https://img.shields.io/badge/Next.js%2016-000000?style=for-the-badge&logo=nextdotjs&logoColor=white)](https://nextjs.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![React](https://img.shields.io/badge/React%2019-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS%20v4-38BDF8?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
+[![Leaflet](https://img.shields.io/badge/Leaflet-199900?style=for-the-badge&logo=leaflet&logoColor=white)](https://leafletjs.com)
+[![SQLite](https://img.shields.io/badge/node%3Asqlite-003B57?style=for-the-badge&logo=sqlite&logoColor=white)](https://nodejs.org)
+[![Vitest](https://img.shields.io/badge/Vitest-6E9F18?style=for-the-badge&logo=vitest&logoColor=white)](https://vitest.dev)
+[![Google Places](https://img.shields.io/badge/Google%20Places-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://developers.google.com/maps/documentation/places/web-service)
+[![OpenStreetMap](https://img.shields.io/badge/Overpass-7EBC6F?style=for-the-badge&logo=openstreetmap&logoColor=white)](https://overpass-api.de)
+[![Open-Meteo](https://img.shields.io/badge/Open--Meteo-FF6B35?style=for-the-badge)](https://open-meteo.com)
+[![DeepSeek](https://img.shields.io/badge/DeepSeek-4D6BFE?style=for-the-badge&logo=deepseek&logoColor=white)](https://deepseek.com)
+[![DeepSeek Harness](https://img.shields.io/badge/Built%20with%20DeepSeek%20Harness-7C3AED?style=for-the-badge)](https://github.com/deepseek-ai/DeepSeek-Harness)
+
 Tabimichi (旅道, "the road of the journey") is a local discovery app: tell it **where you are** and **how much time you
 have**, and it recommends nearby places to explore — ranked by weather, distance,
 time budget and your mood. It's a personal travel guide, not a hardcoded
 itinerary: every recommendation is discovered live from real data sources.
 
-> Status: **M1 (MVP)** — discovery + weather + scoring + map, running locally on
-> desktop. LLM narrative (M2), feedback profile (M3) and mobile PWA (M5) are
-> next.
+> Status: **M3 done** — discovery + weather + scoring + map + LLM narrative +
+> feedback profile, running locally. M4 (taste onboarding + season layer) and
+> M5 (PWA/mobile) are next.
 
 ## Quick start
 
@@ -100,6 +113,14 @@ gracefully with a clear "data unavailable" message.
 - **Leaflet + react-leaflet** with OpenStreetMap tiles (free, no key)
 - **node:sqlite** — zero-dependency local cache
 - **i18n** ES / EN (built-in dictionaries)
+- **DeepSeek Harness** — the agentic development environment this project was
+  designed and built in, end to end
+
+## License
+
+**Proprietary.** The repository is public for viewing, but all rights are
+reserved — the code may not be copied, modified, redistributed or used without
+written permission. See [LICENSE](LICENSE).
 
 ## Testing
 
