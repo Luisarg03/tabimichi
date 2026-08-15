@@ -4,19 +4,31 @@ import path from "node:path";
 import type { Place } from "./types";
 
 /**
- * SQLite cache of discovered places + (later) user profile & feedback.
+ * SQLite cache of discovered places + user profile & feedback.
  * Uses node:sqlite (built into Node >= 22.5) — no native deps.
+ *
+ * Testability: the data dir comes from `TABI_DATA_DIR` (env) and can be
+ * swapped at runtime with `setDataDir()` — tests use temp dirs and can
+ * reset the connection pool between cases.
  */
 
-const DATA_DIR = path.join(process.cwd(), "data");
-const DB_PATH = path.join(DATA_DIR, "tabi.db");
+let dataDir = process.env.TABI_DATA_DIR ?? path.join(process.cwd(), "data");
 
-let db: DatabaseSync | null = null;
+/** Point the store at another directory (tests) and drop open handles. */
+export function setDataDir(dir: string): void {
+  dataDir = dir;
+  for (const d of dbs.values()) d.close();
+  dbs.clear();
+}
+
+const dbs = new Map<string, DatabaseSync>();
 
 function getDb(): DatabaseSync {
-  if (db) return db;
-  mkdirSync(DATA_DIR, { recursive: true });
-  db = new DatabaseSync(DB_PATH);
+  const existing = dbs.get(dataDir);
+  if (existing) return existing;
+  mkdirSync(dataDir, { recursive: true });
+  const db = new DatabaseSync(path.join(dataDir, "tabi.db"));
+  dbs.set(dataDir, db);
   db.exec(`
     CREATE TABLE IF NOT EXISTS places (
       id TEXT PRIMARY KEY,

@@ -4,6 +4,11 @@ import type { WeatherInfo, WeatherCondition } from "./types";
 const cache = new Map<string, { at: number; data: WeatherInfo }>();
 const WEATHER_TTL_MS = 10 * 60 * 1000;
 
+/** Testability: drop cached forecasts. */
+export function clearWeatherCache(): void {
+  cache.clear();
+}
+
 export async function getWeather(lat: number, lng: number): Promise<WeatherInfo> {
   const key = `${lat.toFixed(2)},${lng.toFixed(2)}`;
   const hit = cache.get(key);

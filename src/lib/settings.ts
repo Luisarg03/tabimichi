@@ -15,7 +15,15 @@ export interface AppConfig {
   overpassEndpoint: string; // custom Overpass instance (e.g. self-hosted osm3s)
 }
 
-const CONFIG_PATH = path.join(process.cwd(), "data", "config.json");
+let configPath = path.join(
+  process.env.TABI_DATA_DIR ?? path.join(process.cwd(), "data"),
+  "config.json"
+);
+
+/** Testability: point the config file elsewhere (or restore the default). */
+export function setConfigPath(p: string): void {
+  configPath = p;
+}
 
 export const ENV_KEYS: Record<keyof AppConfig, string> = {
   googlePlacesApiKey: "GOOGLE_PLACES_API_KEY",
@@ -35,8 +43,8 @@ const DEFAULT_CONFIG: AppConfig = {
 
 function readFile(): AppConfig {
   try {
-    if (existsSync(CONFIG_PATH)) {
-      const raw = JSON.parse(readFileSync(CONFIG_PATH, "utf8"));
+    if (existsSync(configPath)) {
+      const raw = JSON.parse(readFileSync(configPath, "utf8"));
       return { ...DEFAULT_CONFIG, ...raw };
     }
   } catch {
@@ -59,8 +67,8 @@ export function getConfig(): AppConfig {
 /** Persist provided keys (empty string clears). Env overrides still win at read time. */
 export function setConfig(partial: Partial<AppConfig>): AppConfig {
   const next = { ...readFile(), ...partial };
-  mkdirSync(path.dirname(CONFIG_PATH), { recursive: true });
-  writeFileSync(CONFIG_PATH, JSON.stringify(next, null, 2), "utf8");
+  mkdirSync(path.dirname(configPath), { recursive: true });
+  writeFileSync(configPath, JSON.stringify(next, null, 2), "utf8");
   return next;
 }
 
