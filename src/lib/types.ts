@@ -16,6 +16,8 @@ export interface Place {
   /** normalized experience tags, e.g. ["onsen", "viewpoint"] */
   tags: string[];
   rating?: number;
+  /** how many Google users rated it — popularity panorama (display only) */
+  userRatingsTotal?: number;
   priceLevel?: number;
   openNow?: boolean | null;
   address?: string;

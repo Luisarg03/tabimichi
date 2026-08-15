@@ -37,6 +37,8 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
     // hard filters: beyond the discovery radius, or too far for the budget (25% slack)
     if (ctx.maxDistKm !== undefined && distanceKm > ctx.maxDistKm) continue;
     if (t > budgetMin * 1.25) continue;
+    // hard filter: never recommend places that are closed right now
+    if (p.openNow === false) continue;
 
     let score = 50;
     const reasons: Reason[] = [];
@@ -101,8 +103,6 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
     if (p.openNow === true) {
       score += 6;
       reasons.push({ key: "openNow" });
-    } else if (p.openNow === false) {
-      score -= 20;
     }
 
     // --- M3: profile affinity (learned tag weights from 👍/👎) ---

@@ -66,8 +66,13 @@ Repeated queries hit the freshness caches:
   5xx, fall back to the next layer. The model writes a "why go today" for the
   top picks in the app's language; the rules still score, the LLM only
   narrates. Cards show which layer narrated. No provider → rule reasons only.
+- **Photos & popularity** — Google photos served through a local proxy with
+  on-disk cache (`data/photos/`, key never exposed); cards show rating +
+  review count (`user_ratings_total`) as a popularity panorama.
+- **Closed-now filter** — places known to be closed at query time are excluded
+  (nearby search uses `opennow`), so recommendations are always reachable.
 - **Storage** — `node:sqlite` (built into Node ≥ 22.5, no native deps):
-  place cache + (later) user profile & feedback.
+  place cache + user profile & feedback.
 
 ## Settings / API keys
 

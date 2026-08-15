@@ -25,6 +25,12 @@ const MODE_EMOJI: Record<string, string> = {
   car: "🚗",
 };
 
+function fmtCount(n: number): string {
+  if (n >= 10000) return `${Math.round(n / 1000)}k`;
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
+  return String(n);
+}
+
 export default function RecommendationCard({
   place,
   origin,
@@ -57,12 +63,23 @@ export default function RecommendationCard({
   return (
     <button
       onClick={() => onSelect(place.id)}
-      className={`w-full text-left rounded-xl border p-4 transition-colors ${
+      className={`w-full overflow-hidden text-left rounded-xl border p-4 transition-colors ${
         selected
           ? "border-sky-400 bg-sky-50"
           : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
       }`}
     >
+      {place.photoRef && (
+        <div className="relative -mx-4 -mt-4 mb-3 h-36 overflow-hidden bg-slate-100">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={`/api/photo?ref=${encodeURIComponent(place.photoRef)}&id=${encodeURIComponent(place.id)}`}
+            alt={place.name}
+            loading="lazy"
+            className="h-full w-full object-cover"
+          />
+        </div>
+      )}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="font-semibold text-slate-900 truncate">{place.name}</h3>
@@ -91,7 +108,14 @@ export default function RecommendationCard({
         <span>
           {MODE_EMOJI[mode] ?? "🚃"} {t("card.travel", { min: place.travelMin })}
         </span>
-        {place.rating !== undefined && <span>⭐ {t("card.rating", { r: place.rating.toFixed(1) })}</span>}
+        {place.rating !== undefined && (
+          <span>
+            ⭐ {t("card.rating", { r: place.rating.toFixed(1) })}
+            {place.userRatingsTotal !== undefined && (
+              <span className="text-slate-400"> {t("card.reviews", { n: fmtCount(place.userRatingsTotal) })}</span>
+            )}
+          </span>
+        )}
         {place.priceLevel !== undefined && <span>💰 {t("card.price", { n: place.priceLevel })}</span>}
         {place.openNow === true && <span className="text-emerald-600">● {t("card.open")}</span>}
         {place.openNow === false && <span className="text-rose-600">● {t("card.closed")}</span>}

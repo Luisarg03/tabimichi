@@ -45,6 +45,12 @@ function getDb(): DatabaseSync {
       weight INTEGER NOT NULL
     );
   `);
+  // lightweight migration: add popularity column to existing databases
+  try {
+    db.exec("ALTER TABLE places ADD COLUMN user_ratings_total INTEGER");
+  } catch {
+    // column already exists
+  }
   return db;
 }
 
@@ -58,6 +64,7 @@ function rowToPlace(r: Record<string, unknown>): Place {
     lng: Number(r.lng),
     tags: JSON.parse(String(r.tags)) as string[],
     rating: r.rating == null ? undefined : Number(r.rating),
+    userRatingsTotal: r.user_ratings_total == null ? undefined : Number(r.user_ratings_total),
     priceLevel: r.price_level == null ? undefined : Number(r.price_level),
     openNow: r.open_now == null ? undefined : Boolean(r.open_now),
     address: r.address ? String(r.address) : undefined,
@@ -69,11 +76,12 @@ function rowToPlace(r: Record<string, unknown>): Place {
 export function upsertPlace(p: Place): void {
   const d = getDb();
   d.prepare(
-    `INSERT INTO places (id, source, name, lat, lng, tags, rating, price_level, open_now, address, photo_ref, url, fetched_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO places (id, source, name, lat, lng, tags, rating, user_ratings_total, price_level, open_now, address, photo_ref, url, fetched_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        name=excluded.name, lat=excluded.lat, lng=excluded.lng, tags=excluded.tags,
-       rating=excluded.rating, price_level=excluded.price_level, open_now=excluded.open_now,
+       rating=excluded.rating, user_ratings_total=excluded.user_ratings_total,
+       price_level=excluded.price_level, open_now=excluded.open_now,
        address=excluded.address, photo_ref=excluded.photo_ref, url=excluded.url, fetched_at=excluded.fetched_at`
   ).run(
     p.id,
@@ -83,6 +91,7 @@ export function upsertPlace(p: Place): void {
     p.lng,
     JSON.stringify(p.tags),
     p.rating ?? null,
+    p.userRatingsTotal ?? null,
     p.priceLevel ?? null,
     p.openNow === null || p.openNow === undefined ? null : p.openNow ? 1 : 0,
     p.address ?? null,

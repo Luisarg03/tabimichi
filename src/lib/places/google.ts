@@ -8,6 +8,7 @@ interface GoogleResult {
   vicinity?: string;
   geometry: { location: { lat: number; lng: number } };
   rating?: number;
+  user_ratings_total?: number;
   price_level?: number;
   business_status?: string;
   opening_hours?: { open_now?: boolean };
@@ -67,6 +68,8 @@ async function nearbySearch(
     location: `${lat.toFixed(5)},${lng.toFixed(5)}`,
     radius: String(Math.min(radiusM, 50000)),
     type: gtype,
+    // only currently-open places (also excludes places without hours data)
+    opennow: "true",
     language: lang === "es" ? "es" : "en",
     key: apiKey,
   });
@@ -82,6 +85,7 @@ function toPlace(r: GoogleResult, type: ExperienceType): Place {
     lng: r.geometry.location.lng,
     tags: [type.id],
     rating: r.rating,
+    userRatingsTotal: r.user_ratings_total,
     priceLevel: r.price_level,
     openNow: r.opening_hours?.open_now ?? null,
     address: r.formatted_address ?? r.vicinity,
