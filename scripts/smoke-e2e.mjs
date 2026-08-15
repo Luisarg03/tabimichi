@@ -35,7 +35,8 @@ async function main() {
   });
   check("200", r.status === 200, `status ${r.status}`);
   check("places > 0", (r.json?.places ?? []).length > 0);
-  check("no closed places", r.json?.places.every((p) => p.openNow !== false));
+  // soft closed filter in real mode: at least one open, closed ones carry a badge
+  check("at least one place open", (r.json?.places ?? []).some((p) => p.openNow !== false));
   check("weather present", Boolean(r.json?.weather?.tempC !== undefined));
 
   // 2. simulated times — 03:00 should filter harder than 15:00

@@ -104,7 +104,10 @@ const es: Dict = {
     highRated: "Muy bien valorado ({r}★)",
     popular: "Muy visitado ({n} reseñas)",
     openNow: "Abierto ahora",
+    closedNow: "Cerrado ahora",
     profileLiked: "Coincide con tu perfil ({type})",
+    chain: "Cadena conocida",
+    hotel: "Es un alojamiento, no una atracción",
   },
   status: {
     discovering: "Buscando lugares…",
@@ -240,7 +243,10 @@ const en: Dict = {
     highRated: "Highly rated ({r}★)",
     popular: "Very popular ({n} reviews)",
     openNow: "Open now",
+    closedNow: "Closed now",
     profileLiked: "Matches your profile ({type})",
+    chain: "Known chain",
+    hotel: "Accommodation, not an attraction",
   },
   status: {
     discovering: "Looking for places…",

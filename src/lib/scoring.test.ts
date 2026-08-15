@@ -56,6 +56,17 @@ describe("scorePlaces — hard filters", () => {
     const out = scorePlaces([closed, open, unknown], ctx());
     expect(out.map((p) => p.id)).toEqual([open.id, unknown.id]);
   });
+
+  it("soft mode keeps closed places but sinks them with a reason", () => {
+    const closed = place({ openNow: false, rating: 4.6, userRatingsTotal: 500 });
+    const open = place({ openNow: true, rating: 4.6, userRatingsTotal: 500 });
+    const out = scorePlaces([closed, open], ctx({ softClosed: true }));
+    expect(out.map((p) => p.id)).toEqual([open.id, closed.id]);
+    const closedOut = out.find((p) => p.id === closed.id)!;
+    const openOut = out.find((p) => p.id === open.id)!;
+    expect(closedOut.reasons.some((r) => r.key === "closedNow")).toBe(true);
+    expect(closedOut.score).toBeLessThan(openOut.score);
+  });
 });
 
 describe("scorePlaces — travel bands", () => {
@@ -120,6 +131,42 @@ describe("scorePlaces — rating & reviews", () => {
     const plain = place({ rating: 4.0 });
     const out = scorePlaces([plain], ctx());
     expect(out[0].reasons.some((r) => r.key === "popular")).toBe(false);
+  });
+});
+
+describe("scorePlaces — noise penalties (chains & hotels)", () => {
+  it("penalizes known chains with a reason", () => {
+    const chain = place({ name: "Sukiya", tags: ["food"], rating: 4.0, userRatingsTotal: 1000, openNow: true });
+    const local = place({ name: "Izakaya Tanaka", tags: ["food"], rating: 4.0, userRatingsTotal: 1000, openNow: true });
+    const out = scorePlaces([chain, local], ctx());
+    const byId = Object.fromEntries(out.map((p) => [p.id, p]));
+    expect(byId[chain.id].reasons.some((r) => r.key === "chain")).toBe(true);
+    expect(byId[chain.id].score).toBeLessThan(byId[local.id].score);
+  });
+
+  it("penalizes hotels but not ryokan-onsen", () => {
+    const hotel = place({ name: "Marunouchi Hotel", tags: ["food"], rating: 4.2, userRatingsTotal: 300, openNow: true });
+    const ryokan = place({ name: "Ryokan Sanga", tags: ["onsen"], rating: 4.6, userRatingsTotal: 200, openNow: true });
+    const out = scorePlaces([hotel, ryokan], ctx());
+    const byId = Object.fromEntries(out.map((p) => [p.id, p]));
+    expect(byId[hotel.id].reasons.some((r) => r.key === "hotel")).toBe(true);
+    expect(byId[ryokan.id].reasons.some((r) => r.key === "hotel")).toBe(false);
+  });
+
+  it("a highly rated local gem beats a mediocre chain at the same distance", () => {
+    const gem = place({ name: "Kanda Shinoda", tags: ["food"], rating: 4.7, userRatingsTotal: 50, openNow: true });
+    const chain = place({ name: "McDonald's", tags: ["food"], rating: 3.9, userRatingsTotal: 5000, openNow: true });
+    const out = scorePlaces([chain, gem], ctx());
+    expect(out[0].id).toBe(gem.id);
+    expect(out[0].score - out[1].score).toBeGreaterThanOrEqual(10);
+  });
+
+  it("penalizes mediocre ratings", () => {
+    const meh = place({ rating: 3.2, userRatingsTotal: 100, openNow: true });
+    const ok = place({ rating: 4.2, userRatingsTotal: 100, openNow: true });
+    const out = scorePlaces([meh, ok], ctx());
+    const byId = Object.fromEntries(out.map((p) => [p.id, p]));
+    expect(byId[ok.id].score).toBeGreaterThan(byId[meh.id].score + 10);
   });
 });
 

@@ -48,7 +48,7 @@ describe("googleSearch", () => {
     expect(places[0].tags).toEqual(["temple"]);
   });
 
-  it("asks for strictbounds and opennow in real mode", async () => {
+  it("asks for strictbounds and never sends opennow (we filter closed places in scoring)", async () => {
     let urls: string[] = [];
     mockFetch([
       {
@@ -62,23 +62,30 @@ describe("googleSearch", () => {
     await googleSearch(KEY, resolveTypes(["museum"])[0], 36.65, 138.19, 5000, "es");
     expect(urls.length).toBe(2); // text + nearby
     expect(urls.some((u) => u.includes("strictbounds=true"))).toBe(true);
-    expect(urls.some((u) => u.includes("opennow=true"))).toBe(true);
+    expect(urls.some((u) => u.includes("opennow=true"))).toBe(false);
   });
 
-  it("omits opennow in simulation mode", async () => {
+  it("keeps all candidates in real mode too (closed places are filtered later)", async () => {
     let urls: string[] = [];
     mockFetch([
       {
         match: (u) => u.includes("textsearch") || u.includes("nearbysearch"),
         response: (u) => {
           urls.push(u);
-          return jsonResponse({ status: "ZERO_RESULTS", results: [] });
+          return jsonResponse({
+            status: "OK",
+            results: [
+              googleResult("open", "Abierto", { opening_hours: { open_now: true } }),
+              googleResult("closed", "Cerrado", { opening_hours: { open_now: false } }),
+              googleResult("nohours", "Sin horario", {}),
+            ],
+          });
         },
       },
     ]);
-    await googleSearch(KEY, resolveTypes(["museum"])[0], 36.65, 138.19, 5000, "es", true);
-    expect(urls.length).toBe(2);
-    expect(urls.some((u) => u.includes("opennow=true"))).toBe(false);
+    const places = await googleSearch(KEY, resolveTypes(["museum"])[0], 36.65, 138.19, 5000, "es");
+    expect(places).toHaveLength(3);
+    expect(places.map((p) => p.openNow)).toEqual([true, false, null]);
   });
 
   it("filters out closed businesses", async () => {
@@ -101,6 +108,77 @@ describe("googleSearch", () => {
     ]);
     const places = await googleSearch(KEY, resolveTypes(["food"])[0], 36.65, 138.19, 5000, "es");
     expect(places.map((p) => p.id)).toEqual(["g_open"]);
+  });
+
+  it("paginates nearby search via next_page_token", async () => {
+    const urls: string[] = [];
+    mockFetch([
+      {
+        match: urlContains("textsearch"),
+        response: () => jsonResponse({ status: "ZERO_RESULTS", results: [] }),
+      },
+      {
+        match: (u) => u.includes("nearbysearch") && !u.includes("pagetoken"),
+        response: (u) => {
+          urls.push(u);
+          return jsonResponse({
+            status: "OK",
+            results: [googleResult("p1", "Place A")],
+            next_page_token: "tok1",
+          });
+        },
+      },
+      {
+        match: (u) => u.includes("nearbysearch") && u.includes("pagetoken=tok1"),
+        response: (u) => {
+          urls.push(u);
+          return jsonResponse({ status: "OK", results: [googleResult("p2", "Place B")] });
+        },
+      },
+    ]);
+    const places = await googleSearch(KEY, resolveTypes(["museum"])[0], 36.65, 138.19, 5000, "es");
+    expect(places.map((p) => p.id)).toEqual(["g_p1", "g_p2"]);
+    expect(urls.some((u) => u.includes("pagetoken=tok1"))).toBe(true);
+  });
+
+  it("drops hotels (lodging) from food results but keeps ryokan-onsen", async () => {
+    mockFetch([
+      {
+        match: urlContains("textsearch"),
+        response: () =>
+          jsonResponse({
+            status: "OK",
+            results: [
+              googleResult("hotel", "Marunouchi Hotel Pomme", { types: ["lodging", "restaurant", "cafe"] }),
+              googleResult("ramen", "Ramen Ichiban", { types: ["restaurant"] }),
+            ],
+          }),
+      },
+      {
+        match: urlContains("nearbysearch"),
+        response: () => jsonResponse({ status: "ZERO_RESULTS", results: [] }),
+      },
+    ]);
+    const food = await googleSearch(KEY, resolveTypes(["food"])[0], 36.65, 138.19, 5000, "es");
+    expect(food.map((p) => p.id)).toEqual(["g_ramen"]);
+
+    // onsen keeps hotels with spa (ryokan)
+    mockFetch([
+      {
+        match: urlContains("textsearch"),
+        response: () =>
+          jsonResponse({
+            status: "OK",
+            results: [googleResult("ryokan", "Ryokan Sanga", { types: ["lodging", "spa"] })],
+          }),
+      },
+      {
+        match: urlContains("nearbysearch"),
+        response: () => jsonResponse({ status: "ZERO_RESULTS", results: [] }),
+      },
+    ]);
+    const onsen = await googleSearch(KEY, resolveTypes(["onsen"])[0], 36.65, 138.19, 5000, "es");
+    expect(onsen.map((p) => p.id)).toEqual(["g_ryokan"]);
   });
 });
 

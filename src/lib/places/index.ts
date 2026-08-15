@@ -3,7 +3,7 @@ import { getConfig } from "../settings";
 import { cachePlaces, cachedNear, freshNearby } from "../db";
 import { haversineKm } from "../geo";
 import { resolveTypes, type ExperienceType } from "./taxonomy";
-import { googleSearch } from "./google";
+import { googleSearchAll } from "./google";
 import { geoapifySearch } from "./geoapify";
 import { overpassSearch, setOverpassEndpoint } from "./overpass";
 
@@ -40,7 +40,7 @@ function dedupe(places: Place[]): Place[] {
  * The first source that returns places wins. Results are cached.
  */
 export async function discover(opts: DiscoverOptions): Promise<{ places: Place[]; source: SourceNote }> {
-  const { lat, lng, radiusKm, types, lang = "es", simulate = false } = opts;
+  const { lat, lng, radiusKm, types, lang = "es" } = opts;
   const radiusM = Math.round(radiusKm * 1000);
   const experienceTypes = resolveTypes(types);
   const config = getConfig();
@@ -60,14 +60,15 @@ export async function discover(opts: DiscoverOptions): Promise<{ places: Place[]
 
   if (config.googlePlacesApiKey) {
     try {
-      const results = await Promise.allSettled(
-        experienceTypes.map((t: ExperienceType) =>
-          googleSearch(config.googlePlacesApiKey!, t, lat, lng, radiusM, lang, simulate)
-        )
+      // concurrency-limited so the burst never trips Google's QPS cap
+      places = await googleSearchAll(
+        config.googlePlacesApiKey!,
+        experienceTypes,
+        lat,
+        lng,
+        radiusM,
+        lang
       );
-      places = results
-        .filter((r) => r.status === "fulfilled")
-        .flatMap((r) => (r as PromiseFulfilledResult<Place[]>).value);
       if (places.length > 0) source = "google";
     } catch {
       // fall through

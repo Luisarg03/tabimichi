@@ -13,6 +13,35 @@ import { logEntry, newTraceId } from "./logger";
 type Candidate = Place & { periods?: OpenPeriod[] };
 
 /**
+ * Spread the top picks across experience types so a generic "discover" shows
+ * variety (a park, a museum, a shrine, food...) instead of 10 similar places.
+ * Within each type, score order is preserved; the global best still comes first.
+ * Single-type searches are unaffected (one bucket).
+ */
+export function diversify<T extends { tags: string[] }>(scored: T[], limit: number): T[] {
+  const byTag = new Map<string, T[]>();
+  for (const p of scored) {
+    const tag = p.tags[0] ?? "other";
+    if (!byTag.has(tag)) byTag.set(tag, []);
+    byTag.get(tag)!.push(p);
+  }
+  const out: T[] = [];
+  const keys = [...byTag.keys()];
+  while (out.length < limit) {
+    let added = false;
+    for (const k of keys) {
+      const list = byTag.get(k)!;
+      if (list.length === 0) continue;
+      out.push(list.shift()!);
+      added = true;
+      if (out.length >= limit) break;
+    }
+    if (!added) break;
+  }
+  return out;
+}
+
+/**
  * End-to-end recommendation pipeline — fast path only (rules).
  * Weather and discovery run in parallel; the LLM narrative is a separate
  * async phase (/api/narrate) so the user sees results immediately.
@@ -79,11 +108,18 @@ export async function recommend(input: RecommendInput): Promise<RecommendResult>
     mode,
     // Google Places only biases by radius, so hard-drop results beyond it (50% slack)
     maxDistKm: radiusKm * 1.5,
+    // real mode: closed places stay as candidates with a badge + penalty
+    // (simulation keeps the hard filter so the simulator is precise)
+    softClosed: !simulated,
     profile,
     stats,
   });
 
-  const top = scored.slice(0, 8);
+  // diversify keeps the SET varied (no 6 parks out of 10); sorting after
+  // keeps the displayed order clean — best score first, ties by travel time
+  const top = diversify(scored, 10).sort(
+    (a, b) => b.score - a.score || a.travelMin - b.travelMin
+  );
   const emptyReason = emptyReasonFor(candidates, top.length);
 
   const traceId = newTraceId();
