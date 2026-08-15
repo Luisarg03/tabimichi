@@ -21,6 +21,7 @@ interface SavedLocation {
 export default function HomePage() {
   const { t } = useI18n();
   const [location, setLocation] = useState<SavedLocation | null>(null);
+  const [mode, setMode] = useState<string>("transit");
   const [result, setResult] = useState<RecommendResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
@@ -43,6 +44,7 @@ export default function HomePage() {
     try {
       const loc = { lat: payload.lat, lng: payload.lng, label: payload.label };
       setLocation(loc);
+      setMode(payload.mode);
       try {
         localStorage.setItem("tabi.lastLocation", JSON.stringify(loc));
       } catch {
@@ -56,6 +58,8 @@ export default function HomePage() {
           lng: payload.lng,
           budget: payload.budget,
           types: payload.types,
+          mode: payload.mode,
+          narrate: true,
         }),
       });
       if (!res.ok) throw new Error("bad response");
@@ -129,6 +133,7 @@ export default function HomePage() {
                           key={p.id}
                           place={p}
                           origin={{ lat: location!.lat, lng: location!.lng }}
+                          mode={mode}
                           selected={selectedId === p.id}
                           onSelect={setSelectedId}
                         />

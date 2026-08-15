@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { LatLng, TimeBudget } from "@/lib/types";
+import type { LatLng, TimeBudget, TransportMode } from "@/lib/types";
 import { EXPERIENCE_TYPES } from "@/lib/places/taxonomy";
 import { useI18n } from "@/lib/i18n";
 
@@ -11,9 +11,15 @@ export interface DiscoverPayload {
   label: string;
   budget: TimeBudget;
   types: string[];
+  mode: TransportMode;
 }
 
 const BUDGETS: TimeBudget[] = ["lunch", "afternoon", "full_day"];
+const MODES: Array<{ id: TransportMode; emoji: string }> = [
+  { id: "walking", emoji: "🚶" },
+  { id: "transit", emoji: "🚃" },
+  { id: "car", emoji: "🚗" },
+];
 
 export default function DayPanel({
   initialLocation,
@@ -30,6 +36,7 @@ export default function DayPanel({
   const [location, setLocation] = useState(initialLocation ?? null);
   const [geocodeError, setGeocodeError] = useState(false);
   const [budget, setBudget] = useState<TimeBudget>("afternoon");
+  const [mode, setMode] = useState<TransportMode>("transit");
   const [types, setTypes] = useState<string[]>([]);
 
   async function geocode(q: string) {
@@ -63,7 +70,7 @@ export default function DayPanel({
 
   function submit() {
     if (!location) return;
-    onDiscover({ ...location, budget, types });
+    onDiscover({ ...location, budget, types, mode });
   }
 
   return (
@@ -114,6 +121,26 @@ export default function DayPanel({
               }`}
             >
               {t(`panel.budget.${b}`)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* transport mode */}
+      <div className="mt-4">
+        <span className="text-sm font-medium text-slate-700">{t("panel.modeLabel")}</span>
+        <div className="mt-1.5 grid grid-cols-3 gap-1.5">
+          {MODES.map((m) => (
+            <button
+              key={m.id}
+              onClick={() => setMode(m.id)}
+              className={`rounded-lg border px-2 py-1.5 text-sm font-medium transition-colors ${
+                mode === m.id
+                  ? "border-emerald-500 bg-emerald-500 text-white"
+                  : "border-slate-300 text-slate-700 hover:bg-slate-50"
+              }`}
+            >
+              {m.emoji} {t(`panel.mode.${m.id}`)}
             </button>
           ))}
         </div>

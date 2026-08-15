@@ -1,4 +1,4 @@
-import type { LatLng } from "./types";
+import type { LatLng, TransportMode } from "./types";
 
 /** Great-circle distance in km */
 export function haversineKm(a: LatLng, b: LatLng): number {
@@ -14,14 +14,20 @@ export function haversineKm(a: LatLng, b: LatLng): number {
 }
 
 /**
- * Rough travel-time estimate in minutes.
- * Walk under 3 km, otherwise assume local transit (~30 km/h average).
- * Heuristic only — refined later (M+).
+ * Rough travel-time estimate in minutes, by transport mode.
+ * Heuristics: walking 4.5 km/h (capped at 4h), transit ~28 km/h + 8 min
+ * wait overhead, car ~40 km/h + 2 min. Fine-tuned later (M+).
  */
-export function travelMin(distKm: number): number {
+export function travelMin(distKm: number, mode: TransportMode = "transit"): number {
   if (distKm <= 0.2) return Math.max(1, Math.round(distKm / 0.083)); // ~5 km/h walk for tiny distances
-  if (distKm < 3) return Math.round((distKm / 4.5) * 60); // walking 4.5 km/h
-  return Math.round((distKm / 30) * 60); // transit
+  switch (mode) {
+    case "walking":
+      return Math.min(Math.round((distKm / 4.5) * 60), 240);
+    case "car":
+      return Math.max(3, Math.round((distKm / 40) * 60 + 2));
+    default:
+      return Math.max(4, Math.round((distKm / 28) * 60 + 8));
+  }
 }
 
 /** Time budget (minutes) per TimeBudget id */
@@ -31,16 +37,20 @@ export const BUDGET_MIN: Record<string, number> = {
   full_day: 600,
 };
 
-/** Discovery radius (km) per TimeBudget id */
-export function radiusForBudget(budget: string): number {
-  switch (budget) {
-    case "lunch":
-      return 5;
-    case "afternoon":
-      return 12;
-    case "full_day":
-      return 35;
-    default:
-      return 8;
-  }
+/** Discovery radius (km) per TimeBudget id and transport mode. */
+export function radiusForBudget(budget: string, mode: TransportMode = "transit"): number {
+  const base = (() => {
+    switch (budget) {
+      case "lunch":
+        return 5;
+      case "afternoon":
+        return 12;
+      case "full_day":
+        return 35;
+      default:
+        return 8;
+    }
+  })();
+  const factor = mode === "walking" ? 0.4 : mode === "car" ? 2 : 1;
+  return Math.round(base * factor * 10) / 10;
 }

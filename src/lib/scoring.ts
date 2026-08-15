@@ -1,4 +1,4 @@
-import type { Place, Reason, ScoredPlace, WeatherInfo, LatLng } from "./types";
+import type { Place, Reason, ScoredPlace, WeatherInfo, LatLng, TransportMode } from "./types";
 import { haversineKm, travelMin } from "./geo";
 import { EXPERIENCE_TYPE_MAP } from "./places/taxonomy";
 
@@ -7,6 +7,7 @@ export interface ScoreContext {
   budgetMin: number;
   weather: WeatherInfo;
   now: Date;
+  mode?: TransportMode;
   /** hard max distance (km); results beyond it are dropped */
   maxDistKm?: number;
 }
@@ -29,7 +30,7 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
 
   for (const p of places) {
     const distanceKm = haversineKm(base, p);
-    const t = travelMin(distanceKm);
+    const t = travelMin(distanceKm, ctx.mode);
 
     // hard filters: beyond the discovery radius, or too far for the budget (25% slack)
     if (ctx.maxDistKm !== undefined && distanceKm > ctx.maxDistKm) continue;
@@ -41,7 +42,7 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
     // --- travel ---
     if (t <= budgetMin * 0.5) {
       score += 14;
-      reasons.push({ key: "distanceGood", params: { min: t } });
+      reasons.push({ key: "distanceGood", params: { min: t, modeId: ctx.mode ?? "transit" } });
     } else {
       score += 6;
     }
@@ -49,13 +50,14 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
     // --- weather fit ---
     const outdoorTags = p.tags.filter(isOutdoor);
     const indoorTags = p.tags.filter(isIndoor);
+    const onFoot = ctx.mode === "walking";
 
     if (weather.condition === "rain") {
       if (indoorTags.length > 0) {
         score += 12;
         reasons.push({ key: "weatherRainIndoor", params: { typeId: indoorTags[0] } });
       }
-      if (outdoorTags.length > 0) score -= 18;
+      if (outdoorTags.length > 0) score -= onFoot ? 28 : 18; // walking in rain hurts more
     } else if (weather.condition === "snow") {
       if (p.tags.includes("onsen")) {
         score += 15;
@@ -64,7 +66,7 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
         score += 8;
         reasons.push({ key: "weatherSnowIndoor", params: { typeId: indoorTags[0] } });
       }
-      if (outdoorTags.length > 0) score -= 10;
+      if (outdoorTags.length > 0) score -= onFoot ? 20 : 10;
     } else if (weather.condition === "clear" || weather.condition === "cloudy") {
       if (p.tags.includes("viewpoint") || p.tags.includes("trekking") || p.tags.includes("park")) {
         score += 10;
