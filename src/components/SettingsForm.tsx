@@ -7,10 +7,12 @@ interface Status {
   googlePlacesApiKey: boolean;
   opencodeApiKey: boolean;
   opencodeGoApiKey: boolean;
+  geoapifyApiKey: boolean;
+  overpassEndpoint: string;
 }
 
-const FIELDS: Array<{
-  key: keyof Status;
+const KEY_FIELDS: Array<{
+  key: "googlePlacesApiKey" | "opencodeApiKey" | "opencodeGoApiKey" | "geoapifyApiKey";
   labelKey: string;
   helpKey?: string;
   placeholder: string;
@@ -21,6 +23,7 @@ const FIELDS: Array<{
     helpKey: "settings.googleHelp",
     placeholder: "AIza…",
   },
+  { key: "geoapifyApiKey", labelKey: "settings.geoapify", helpKey: "settings.geoapifyHelp", placeholder: "API key (geoapify.com)" },
   { key: "opencodeApiKey", labelKey: "settings.opencodeZen", placeholder: "sk-…" },
   { key: "opencodeGoApiKey", labelKey: "settings.opencodeGo", placeholder: "sk-…" },
 ];
@@ -29,20 +32,24 @@ export default function SettingsForm() {
   const { t } = useI18n();
   const [status, setStatus] = useState<Status | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
+  const [endpoint, setEndpoint] = useState("");
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     fetch("/api/settings")
       .then((r) => r.json())
-      .then((s: Status) => setStatus(s))
+      .then((s: Status) => {
+        setStatus(s);
+        setEndpoint(s.overpassEndpoint ?? "");
+      })
       .catch(() => {});
   }, []);
 
   async function save() {
     setSaving(true);
-    const payload: Record<string, string> = {};
-    for (const f of FIELDS) if (values[f.key]) payload[f.key] = values[f.key];
+    const payload: Record<string, string> = { overpassEndpoint: endpoint.trim() };
+    for (const f of KEY_FIELDS) if (values[f.key]) payload[f.key] = values[f.key];
     try {
       const res = await fetch("/api/settings", {
         method: "POST",
@@ -62,7 +69,7 @@ export default function SettingsForm() {
     <div className="mx-auto max-w-xl space-y-5">
       <p className="text-sm text-slate-600">{t("settings.intro")}</p>
 
-      {FIELDS.map((f) => (
+      {KEY_FIELDS.map((f) => (
         <div key={f.key} className="rounded-xl border border-slate-200 bg-white p-4">
           <div className="flex items-center justify-between gap-2">
             <label className="text-sm font-medium text-slate-800">{t(f.labelKey)}</label>
@@ -86,6 +93,26 @@ export default function SettingsForm() {
           />
         </div>
       ))}
+
+      {/* custom Overpass endpoint (self-hosted osm3s) */}
+      <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <div className="flex items-center justify-between gap-2">
+          <label className="text-sm font-medium text-slate-800">{t("settings.overpass")}</label>
+          {status?.overpassEndpoint && (
+            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
+              {t("settings.connected")}
+            </span>
+          )}
+        </div>
+        <p className="mt-1 text-xs text-slate-500">{t("settings.overpassHelp")}</p>
+        <input
+          type="text"
+          value={endpoint}
+          onChange={(e) => setEndpoint(e.target.value)}
+          placeholder="http://localhost:8080/api/interpreter"
+          className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+        />
+      </div>
 
       <button
         onClick={save}

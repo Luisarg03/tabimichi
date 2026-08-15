@@ -36,6 +36,7 @@ const es: Dict = {
     needLocation: "Ingresá un lugar o usá tu ubicación",
     source: {
       google: "Datos: Google Places",
+      geoapify: "Datos: Geoapify",
       overpass: "Datos: OpenStreetMap",
       cache: "Datos: cache local",
       none: "Datos no disponibles: OpenStreetMap está saturado. Probá de nuevo en un momento o configurá Google Places en Ajustes.",
@@ -92,7 +93,13 @@ const es: Dict = {
       "Las API keys se guardan localmente en data/config.json y nunca salen de tu máquina. También podés usar variables de entorno (GOOGLE_PLACES_API_KEY, OPENCODE_API_KEY, OPENCODE_GO_API_KEY).",
     google: "Google Places API key (opcional)",
     googleHelp:
-      "Sin key usamos OpenStreetMap (gratis, sin registro). Con key obtenés ratings, horarios y fotos.",
+      "Sin key usamos OpenStreetMap (gratis, sin registro). Con key obtenés ratings, horarios y fotos. Crédito mensual $200 (~6.000 consultas) — gratis de facto para uso personal.",
+    geoapify: "Geoapify API key (gratis)",
+    geoapifyHelp:
+      "3.000 consultas/día gratis, sin tarjeta (geoapify.com). Data de OpenStreetMap con categorías curadas.",
+    overpass: "Overpass propio (osm3s) — endpoint",
+    overpassHelp:
+      "Opcional: apuntá a tu instancia local (Docker) para descubrimiento ilimitado y confiable, ej. http://localhost:8080/api/interpreter. Si queda vacío, usamos mirrors públicos.",
     opencodeZen: "OpenCode Zen API key (guía LLM — próxima fase)",
     opencodeGo: "OpenCode Go API key (próxima fase)",
     save: "Guardar",
@@ -132,6 +139,7 @@ const en: Dict = {
     needLocation: "Enter a place or use your location",
     source: {
       google: "Data: Google Places",
+      geoapify: "Data: Geoapify",
       overpass: "Data: OpenStreetMap",
       cache: "Data: local cache",
       none: "No data available: OpenStreetMap is overloaded. Try again in a moment or configure Google Places in Settings.",
@@ -188,7 +196,13 @@ const en: Dict = {
       "API keys are stored locally in data/config.json and never leave your machine. You can also use environment variables (GOOGLE_PLACES_API_KEY, OPENCODE_API_KEY, OPENCODE_GO_API_KEY).",
     google: "Google Places API key (optional)",
     googleHelp:
-      "Without a key we use OpenStreetMap (free, no signup). With a key you get ratings, hours and photos.",
+      "Without a key we use OpenStreetMap (free, no signup). With a key you get ratings, hours and photos. $200/month free credit (~6,000 calls) — effectively free for personal use.",
+    geoapify: "Geoapify API key (free)",
+    geoapifyHelp:
+      "3,000 requests/day free, no credit card (geoapify.com). OpenStreetMap data with curated categories.",
+    overpass: "Self-hosted Overpass (osm3s) — endpoint",
+    overpassHelp:
+      "Optional: point to your local instance (Docker) for unlimited, reliable discovery, e.g. http://localhost:8080/api/interpreter. Empty = public mirrors.",
     opencodeZen: "OpenCode Zen API key (LLM guide — next phase)",
     opencodeGo: "OpenCode Go API key (next phase)",
     save: "Save",
