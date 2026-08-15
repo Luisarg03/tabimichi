@@ -187,7 +187,7 @@ touch your real data or API keys.
 
 ```
 src/
-  app/            pages + API routes (/api/recommend, /weather, /places, /settings, /geocode)
+  app/            pages + API routes (/api/recommend, /narrate, /photos, /feedback, /settings, /geocode)
   components/     MapView, DayPanel, RecommendationCard, WeatherCard, SettingsForm…
   lib/
     i18n.tsx      ES/EN dictionaries + provider
