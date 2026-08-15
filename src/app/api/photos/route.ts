@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { placeById, upsertPlace, photosVerified, setPhotosVerified, photoHashesFor, rememberPhotoHash } from "@/lib/db";
-import { googlePlacePhotos, googlePhotoBytes } from "@/lib/places/google";
+import { googlePlaceDetails, googlePhotoBytes } from "@/lib/places/google";
 import { getConfig } from "@/lib/settings";
 import { photoCachePath, readCachedPhoto, writeCachedPhoto, sha1Hex } from "@/lib/photos";
 
@@ -44,8 +44,8 @@ export async function GET(req: NextRequest) {
     // pull more refs from Place Details
     const googleId = id.startsWith("g_") ? id.slice(2) : id;
     try {
-      const details = await googlePlacePhotos(key, googleId);
-      for (const r of details) if (!refs.includes(r)) refs.push(r);
+      const details = await googlePlaceDetails(key, googleId);
+      for (const r of details.photos) if (!refs.includes(r)) refs.push(r);
     } catch {
       // keep search refs
     }

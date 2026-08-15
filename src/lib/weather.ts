@@ -39,6 +39,7 @@ interface OpenMeteoResponse {
   };
   hourly: {
     time: string[];
+    temperature_2m: number[];
     precipitation_probability: number[];
     precipitation: number[];
     snowfall: number[];
@@ -62,7 +63,7 @@ async function fetchWeather(lat: number, lng: number): Promise<WeatherInfo> {
       current:
         "temperature_2m,apparent_temperature,precipitation,snowfall,weather_code,wind_speed_10m,is_day",
       hourly:
-        "precipitation_probability,precipitation,snowfall,weather_code",
+        "temperature_2m,precipitation_probability,precipitation,snowfall,weather_code",
       daily:
         "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max",
       timezone: "auto",
@@ -76,6 +77,7 @@ async function fetchWeather(lat: number, lng: number): Promise<WeatherInfo> {
   const { condition, label } = classifyWmo(data.current.weather_code);
   const hourly = data.hourly.time.map((t, i) => ({
     time: t,
+    tempC: data.hourly.temperature_2m[i] ?? 0,
     precipProb: data.hourly.precipitation_probability[i] ?? 0,
     precipMm: data.hourly.precipitation[i] ?? 0,
     snowCm: data.hourly.snowfall[i] ?? 0,
@@ -102,5 +104,25 @@ async function fetchWeather(lat: number, lng: number): Promise<WeatherInfo> {
     isNight: data.current.is_day === 0,
     hourly,
     daily,
+  };
+}
+
+/**
+ * Simulate weather at a given JST hour: pick the matching hourly forecast row
+ * (same day + hour, Japan wall-clock) and override condition/precip/temp.
+ * Falls back to the "current" values when outside the forecast range.
+ */
+export function weatherAt(weather: WeatherInfo, jstHourStamp: string): WeatherInfo {
+  const h = weather.hourly.find((x) => x.time.startsWith(jstHourStamp));
+  if (!h) return weather;
+  const { condition, label } = classifyWmo(h.code);
+  return {
+    ...weather,
+    tempC: h.tempC,
+    precipMm: h.precipMm,
+    snowCm: h.snowCm,
+    code: h.code,
+    label,
+    condition,
   };
 }

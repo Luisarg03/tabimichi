@@ -1,5 +1,6 @@
 import type { Place } from "../types";
 import type { ExperienceType } from "./taxonomy";
+import type { OpenPeriod } from "../open-hours";
 
 interface GoogleResult {
   place_id: string;
@@ -60,7 +61,8 @@ async function nearbySearch(
   lat: number,
   lng: number,
   radiusM: number,
-  lang: string
+  lang: string,
+  simulate: boolean
 ): Promise<GoogleResult[]> {
   const gtype = type.googleTypes?.[0];
   if (!gtype) return [];
@@ -68,11 +70,14 @@ async function nearbySearch(
     location: `${lat.toFixed(5)},${lng.toFixed(5)}`,
     radius: String(Math.min(radiusM, 50000)),
     type: gtype,
-    // only currently-open places (also excludes places without hours data)
-    opennow: "true",
     language: lang === "es" ? "es" : "en",
     key: apiKey,
   });
+  if (!simulate) {
+    // only currently-open places in real mode (also excludes places without hours);
+    // simulation evaluates opening hours locally, so keep all candidates
+    params.set("opennow", "true");
+  }
   return fetchResults(`https://maps.googleapis.com/maps/api/place/nearbysearch/json?${params}`);
 }
 
@@ -106,13 +111,14 @@ export async function googleSearch(
   lat: number,
   lng: number,
   radiusM: number,
-  lang: string
+  lang: string,
+  simulate = false
 ): Promise<Place[]> {
   if (!apiKey) throw new Error("no-google-key");
 
   const jobs: Array<Promise<GoogleResult[]>> = [textSearch(apiKey, type, lat, lng, radiusM, lang)];
   if ((type.googleTypes?.length ?? 0) > 0) {
-    jobs.push(nearbySearch(apiKey, type, lat, lng, radiusM, lang));
+    jobs.push(nearbySearch(apiKey, type, lat, lng, radiusM, lang, simulate));
   }
 
   const settled = await Promise.allSettled(jobs);
@@ -133,7 +139,10 @@ export async function googleSearch(
 
 interface DetailsResponse {
   status?: string;
-  result?: { photos?: Array<{ photo_reference: string }> };
+  result?: {
+    photos?: Array<{ photo_reference: string }>;
+    opening_hours?: { periods?: OpenPeriod[] };
+  };
 }
 
 /** Google photo bytes (follows the CDN redirect). Shared by proxy + enrichment. */
@@ -151,13 +160,16 @@ export async function googlePhotoBytes(
 }
 
 /**
- * Place Details photos: searches return only ~1 photo; details returns up to 10.
- * Used by the async enrichment phase (/api/photos), one call per place.
+ * Place Details: photos + structured opening periods in one call.
+ * Used by the photo enrichment phase and by time-simulation mode.
  */
-export async function googlePlacePhotos(apiKey: string, placeId: string): Promise<string[]> {
+export async function googlePlaceDetails(
+  apiKey: string,
+  placeId: string
+): Promise<{ photos: string[]; periods?: OpenPeriod[] }> {
   const params = new URLSearchParams({
     place_id: placeId,
-    fields: "photos",
+    fields: "photos,opening_hours",
     key: apiKey,
   });
   const res = await fetch(
@@ -167,5 +179,8 @@ export async function googlePlacePhotos(apiKey: string, placeId: string): Promis
   if (!res.ok) throw new Error(`details-http-${res.status}`);
   const data = (await res.json()) as DetailsResponse;
   if (data.status !== "OK" || !data.result) throw new Error(`details-status-${data.status}`);
-  return (data.result.photos ?? []).slice(0, 8).map((p) => p.photo_reference);
+  return {
+    photos: (data.result.photos ?? []).slice(0, 8).map((p) => p.photo_reference),
+    periods: data.result.opening_hours?.periods,
+  };
 }
