@@ -21,7 +21,10 @@ export interface Place {
   priceLevel?: number;
   openNow?: boolean | null;
   address?: string;
+  /** first photo reference (convenience) */
   photoRef?: string;
+  /** up to 5 photo references for the gallery */
+  photoRefs?: string[];
   url?: string;
 }
 

@@ -77,6 +77,7 @@ async function nearbySearch(
 }
 
 function toPlace(r: GoogleResult, type: ExperienceType): Place {
+  const photoRefs = (r.photos ?? []).slice(0, 5).map((p) => p.photo_reference);
   return {
     id: `g_${r.place_id}`,
     source: "google" as const,
@@ -89,7 +90,8 @@ function toPlace(r: GoogleResult, type: ExperienceType): Place {
     priceLevel: r.price_level,
     openNow: r.opening_hours?.open_now ?? null,
     address: r.formatted_address ?? r.vicinity,
-    photoRef: r.photos?.[0]?.photo_reference,
+    photoRef: photoRefs[0],
+    photoRefs,
     url: r.url,
   };
 }
@@ -127,4 +129,29 @@ export async function googleSearch(
       return true;
     })
     .map((r) => toPlace(r, type));
+}
+
+interface DetailsResponse {
+  status?: string;
+  result?: { photos?: Array<{ photo_reference: string }> };
+}
+
+/**
+ * Place Details photos: searches return only ~1 photo; details returns up to 10.
+ * Used by the async enrichment phase (/api/photos), one call per place.
+ */
+export async function googlePlacePhotos(apiKey: string, placeId: string): Promise<string[]> {
+  const params = new URLSearchParams({
+    place_id: placeId,
+    fields: "photos",
+    key: apiKey,
+  });
+  const res = await fetch(
+    `https://maps.googleapis.com/maps/api/place/details/json?${params}`,
+    { signal: AbortSignal.timeout(20000) }
+  );
+  if (!res.ok) throw new Error(`details-http-${res.status}`);
+  const data = (await res.json()) as DetailsResponse;
+  if (data.status !== "OK" || !data.result) throw new Error(`details-status-${data.status}`);
+  return (data.result.photos ?? []).slice(0, 8).map((p) => p.photo_reference);
 }

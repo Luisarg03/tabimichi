@@ -45,9 +45,14 @@ function getDb(): DatabaseSync {
       weight INTEGER NOT NULL
     );
   `);
-  // lightweight migration: add popularity column to existing databases
+  // lightweight migrations: popularity + gallery columns on existing databases
   try {
     db.exec("ALTER TABLE places ADD COLUMN user_ratings_total INTEGER");
+  } catch {
+    // column already exists
+  }
+  try {
+    db.exec("ALTER TABLE places ADD COLUMN photo_refs TEXT");
   } catch {
     // column already exists
   }
@@ -56,6 +61,13 @@ function getDb(): DatabaseSync {
 
 /** Map a SQLite row to a Place. */
 function rowToPlace(r: Record<string, unknown>): Place {
+  let photoRefs: string[] | undefined;
+  try {
+    const parsed = JSON.parse(String(r.photo_refs ?? "null"));
+    if (Array.isArray(parsed)) photoRefs = parsed as string[];
+  } catch {
+    // ignore
+  }
   return {
     id: String(r.id),
     source: r.source as Place["source"],
@@ -68,7 +80,8 @@ function rowToPlace(r: Record<string, unknown>): Place {
     priceLevel: r.price_level == null ? undefined : Number(r.price_level),
     openNow: r.open_now == null ? undefined : Boolean(r.open_now),
     address: r.address ? String(r.address) : undefined,
-    photoRef: r.photo_ref ? String(r.photo_ref) : undefined,
+    photoRef: photoRefs?.[0] ?? (r.photo_ref ? String(r.photo_ref) : undefined),
+    photoRefs,
     url: r.url ? String(r.url) : undefined,
   };
 }
@@ -76,13 +89,14 @@ function rowToPlace(r: Record<string, unknown>): Place {
 export function upsertPlace(p: Place): void {
   const d = getDb();
   d.prepare(
-    `INSERT INTO places (id, source, name, lat, lng, tags, rating, user_ratings_total, price_level, open_now, address, photo_ref, url, fetched_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO places (id, source, name, lat, lng, tags, rating, user_ratings_total, price_level, open_now, address, photo_ref, photo_refs, url, fetched_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        name=excluded.name, lat=excluded.lat, lng=excluded.lng, tags=excluded.tags,
        rating=excluded.rating, user_ratings_total=excluded.user_ratings_total,
        price_level=excluded.price_level, open_now=excluded.open_now,
-       address=excluded.address, photo_ref=excluded.photo_ref, url=excluded.url, fetched_at=excluded.fetched_at`
+       address=excluded.address, photo_ref=excluded.photo_ref, photo_refs=excluded.photo_refs,
+       url=excluded.url, fetched_at=excluded.fetched_at`
   ).run(
     p.id,
     p.source,
@@ -96,6 +110,7 @@ export function upsertPlace(p: Place): void {
     p.openNow === null || p.openNow === undefined ? null : p.openNow ? 1 : 0,
     p.address ?? null,
     p.photoRef ?? null,
+    p.photoRefs && p.photoRefs.length > 0 ? JSON.stringify(p.photoRefs) : null,
     p.url ?? null,
     new Date().toISOString()
   );

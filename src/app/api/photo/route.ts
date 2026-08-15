@@ -19,9 +19,11 @@ export async function GET(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id") ?? "photo";
   if (!ref) return NextResponse.json({ error: "ref required" }, { status: 400 });
 
-  // safe cache filename from the place id
+  // safe cache filename from the place id + a short ref fragment so each
+  // photo of a place gets its own cached file
   const safeId = id.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 80);
-  const cachePath = path.join(PHOTO_DIR, `${safeId}.jpg`);
+  const refPart = ref.replace(/[^a-zA-Z0-9]/g, "").slice(0, 16);
+  const cachePath = path.join(PHOTO_DIR, `${safeId}__${refPart}.jpg`);
 
   // serve from disk cache when fresh
   if (existsSync(cachePath)) {

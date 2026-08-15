@@ -58,7 +58,9 @@ Repeated queries hit the freshness caches:
   4. **local SQLite cache** (`data/tabi.db`) as last resort
   Results are always cached for resilience.
 - **Scoring** — rule-based "base fit" score (0–100): travel time vs. budget,
-  weather fit, rating, open-now status, hard distance cap.
+  weather fit, **Bayesian-shrunk rating** (a 4.5★ with 5 reviews ≈ 4.0),
+  **review volume** (capped popularity boost), open-now status, hard distance
+  cap, profile affinity (M3).
 - **LLM narrative (M2)** — `lib/llm/` two-layer provider registry, tried in
   order: **OpenCode Zen (free)** `deepseek-v4-flash-free` at
   `opencode.ai/zen/v1` → **OpenCode Go (paid)** `deepseek-v4-flash` at
@@ -66,9 +68,10 @@ Repeated queries hit the freshness caches:
   5xx, fall back to the next layer. The model writes a "why go today" for the
   top picks in the app's language; the rules still score, the LLM only
   narrates. Cards show which layer narrated. No provider → rule reasons only.
-- **Photos & popularity** — Google photos served through a local proxy with
-  on-disk cache (`data/photos/`, key never exposed); cards show rating +
-  review count (`user_ratings_total`) as a popularity panorama.
+- **Photos & popularity** — cards show a photo gallery (up to 8 per place via
+  Place Details, async enrichment after the fast response). Photos are served
+  through a local proxy with per-photo on-disk cache (`data/photos/`, key
+  never exposed). Cards show rating + review count as a popularity panorama.
 - **Closed-now filter** — places known to be closed at query time are excluded
   (nearby search uses `opennow`), so recommendations are always reachable.
 - **Storage** — `node:sqlite` (built into Node ≥ 22.5, no native deps):

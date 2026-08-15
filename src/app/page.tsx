@@ -96,6 +96,35 @@ export default function HomePage() {
         setResult(data);
         setLoading(false);
 
+        // photo enrichment (async, non-blocking): search APIs give ~1 photo,
+        // Place Details up to 8 — cards update when the refs arrive
+        if (data.places.length > 0) {
+          const topIds = data.places
+            .slice(0, 6)
+            .map((p) => p.id)
+            .join(",");
+          fetch(`/api/photos?ids=${encodeURIComponent(topIds)}`)
+            .then((r) => (r.ok ? r.json() : null))
+            .then((d) => {
+              const map = d?.photos as Record<string, string[]> | undefined;
+              if (!map) return;
+              setResult((prev) => {
+                if (!prev) return prev;
+                let changed = false;
+                const places = prev.places.map((p) => {
+                  const refs = map[p.id];
+                  if (refs && refs.length > (p.photoRefs?.length ?? 0)) {
+                    changed = true;
+                    return { ...p, photoRefs: refs, photoRef: refs[0] };
+                  }
+                  return p;
+                });
+                return changed ? { ...prev, places } : prev;
+              });
+            })
+            .catch(() => {});
+        }
+
         // phase 2 (async): LLM narrative — day summary + per-place why
         if (data.places.length > 0) {
           setGuideState("thinking");

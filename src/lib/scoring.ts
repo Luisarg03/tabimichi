@@ -1,6 +1,7 @@
 import type { Place, Reason, ScoredPlace, WeatherInfo, LatLng, TransportMode } from "./types";
 import { haversineKm, travelMin } from "./geo";
 import { EXPERIENCE_TYPE_MAP } from "./places/taxonomy";
+import { fmtCount } from "./format";
 
 export interface ScoreContext {
   base: LatLng;
@@ -90,13 +91,37 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
       reasons.push({ key: "weatherCold", params: { typeId: "onsen" } });
     }
 
-    // --- quality signals ---
+    // --- quality signals: rating shrunk by review count + volume ---
     if (p.rating !== undefined) {
-      if (p.rating >= 4.5) {
-        score += 12;
-        reasons.push({ key: "highRated", params: { r: p.rating.toFixed(1) } });
-      } else if (p.rating >= 4) {
+      const n = p.userRatingsTotal ?? 0;
+      // Bayesian shrinkage: a 4.5 with 5 reviews ≈ 4.0; with 2k reviews it holds.
+      // prior: 3.9 with 30 pseudo-reviews
+      const weighted = n > 0 ? (p.rating * n + 3.9 * 30) / (n + 30) : p.rating;
+
+      if (weighted >= 4.4) {
+        score += 14;
+        reasons.push({ key: "highRated", params: { r: weighted.toFixed(1) } });
+      } else if (weighted >= 4.0) {
+        score += 9;
+      } else if (weighted >= 3.5) {
+        score += 4;
+      }
+
+      // review volume: established places, capped so it never dominates
+      if (n >= 5000) {
         score += 6;
+        reasons.push({ key: "popular", params: { n: fmtCount(n) } });
+      } else if (n >= 1000) {
+        score += 5;
+        reasons.push({ key: "popular", params: { n: fmtCount(n) } });
+      } else if (n >= 300) {
+        score += 4;
+      } else if (n >= 100) {
+        score += 3;
+      } else if (n >= 30) {
+        score += 2;
+      } else if (n >= 5) {
+        score += 1;
       }
     }
 
