@@ -16,6 +16,8 @@ const es: Dict = {
     useMyLocation: "Usar mi ubicación",
     timeBudget: "Tiempo disponible",
     budget: { lunch: "Almuerzo", afternoon: "Tarde", full_day: "Día completo" },
+    modeLabel: "Cómo te movés",
+    mode: { walking: "Caminando", transit: "Tren/Bus", car: "Auto" },
     vibe: "Qué tengo ganas de hacer",
     type: {
       any: "Cualquier cosa",
@@ -69,6 +71,7 @@ const es: Dict = {
     price: "{n}/5",
     openInMaps: "Cómo llegar",
     reasonsTitle: "Por qué ahora",
+    why: "El guía dice",
   },
   reasons: {
     weatherRainIndoor: "Hoy llueve — ideal para {type}",
@@ -77,7 +80,7 @@ const es: Dict = {
     weatherSnowOnsen: "Nieve afuera, calor adentro — onsen perfecto",
     weatherGoodOutdoor: "Buen clima para {type}",
     weatherCold: "Día frío — {type} abrigado",
-    distanceGood: "A {min} min de donde estás",
+    distanceGood: "A {min} min en {mode} de donde estás",
     highRated: "Muy bien valorado ({r}★)",
     openNow: "Abierto ahora",
   },
@@ -119,6 +122,8 @@ const en: Dict = {
     useMyLocation: "Use my location",
     timeBudget: "Time available",
     budget: { lunch: "Lunch", afternoon: "Afternoon", full_day: "Full day" },
+    modeLabel: "How you get around",
+    mode: { walking: "Walking", transit: "Train/Bus", car: "Car" },
     vibe: "What am I in the mood for",
     type: {
       any: "Anything",
@@ -172,6 +177,7 @@ const en: Dict = {
     price: "{n}/5",
     openInMaps: "Directions",
     reasonsTitle: "Why now",
+    why: "The guide says",
   },
   reasons: {
     weatherRainIndoor: "Rainy today — great for {type}",
@@ -180,7 +186,7 @@ const en: Dict = {
     weatherSnowOnsen: "Snow outside, warmth inside — perfect onsen day",
     weatherGoodOutdoor: "Great weather for {type}",
     weatherCold: "Cold day — cozy {type}",
-    distanceGood: "{min} min from where you are",
+    distanceGood: "{min} min by {mode} from where you are",
     highRated: "Highly rated ({r}★)",
     openNow: "Open now",
   },

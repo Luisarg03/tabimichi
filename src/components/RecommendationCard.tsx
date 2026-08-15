@@ -11,18 +11,32 @@ function renderReason(r: Reason, t: ReturnType<typeof useI18n>["t"]): string {
     params.type = t(`panel.type.${typeId}`);
     delete params.typeId;
   }
+  const modeId = params.modeId as string | undefined;
+  if (modeId) {
+    params.mode = t(`panel.mode.${modeId}`);
+    delete params.modeId;
+  }
   return t(`reasons.${r.key}`, params);
 }
+
+const MODE_EMOJI: Record<string, string> = {
+  walking: "🚶",
+  transit: "🚃",
+  car: "🚗",
+};
 
 export default function RecommendationCard({
   place,
   origin,
+  mode,
   selected,
   onSelect,
 }: {
   place: ScoredPlace;
   /** the "where I am" point passed in the input — used as directions origin */
   origin: { lat: number; lng: number };
+  /** transport mode used for the recommendation */
+  mode: string;
   selected: boolean;
   onSelect: (id: string) => void;
 }) {
@@ -66,12 +80,23 @@ export default function RecommendationCard({
 
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-600">
         <span>📍 {t("card.distance", { km: place.distanceKm })}</span>
-        <span>⏱ {t("card.travel", { min: place.travelMin })}</span>
+        <span>
+          {MODE_EMOJI[mode] ?? "🚃"} {t("card.travel", { min: place.travelMin })}
+        </span>
         {place.rating !== undefined && <span>⭐ {t("card.rating", { r: place.rating.toFixed(1) })}</span>}
         {place.priceLevel !== undefined && <span>💰 {t("card.price", { n: place.priceLevel })}</span>}
         {place.openNow === true && <span className="text-emerald-600">● {t("card.open")}</span>}
         {place.openNow === false && <span className="text-rose-600">● {t("card.closed")}</span>}
       </div>
+
+      {place.why && (
+        <div className="mt-3 rounded-lg border border-sky-100 bg-sky-50 p-3 text-sm text-slate-800">
+          <div className="mb-1 text-xs font-medium uppercase tracking-wide text-sky-500">
+            {t("card.why")}
+          </div>
+          {place.why}
+        </div>
+      )}
 
       {place.reasons.length > 0 && (
         <div className="mt-3 border-t border-slate-100 pt-2">

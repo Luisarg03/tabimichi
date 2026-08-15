@@ -25,6 +25,9 @@ export interface Place {
 
 export type TimeBudget = "lunch" | "afternoon" | "full_day";
 
+/** How the user will get around — changes radius, times and reasons. */
+export type TransportMode = "walking" | "transit" | "car";
+
 export type WeatherCondition = "clear" | "cloudy" | "fog" | "rain" | "snow" | "storm";
 
 export interface WeatherInfo {
@@ -63,6 +66,8 @@ export interface ScoredPlace extends Place {
   distanceKm: number;
   travelMin: number;
   reasons: Reason[];
+  /** LLM narrative "why now" (M2) — optional, rule reasons are the fallback */
+  why?: string;
 }
 
 export interface RecommendInput {
@@ -71,6 +76,11 @@ export interface RecommendInput {
   budget: TimeBudget;
   types: string[]; // empty = any
   radiusKm?: number;
+  mode?: TransportMode;
+  /** ask the LLM (when a provider is configured) to narrate the top picks */
+  narrate?: boolean;
+  /** UI language for the narrative: "es" | "en" */
+  lang?: string;
 }
 
 export interface RecommendResult {
@@ -79,4 +89,6 @@ export interface RecommendResult {
   generatedAt: string;
   radiusKm: number;
   sourceNote: "google" | "geoapify" | "overpass" | "cache" | "none";
+  /** whether an LLM narrative was attached (provider configured) */
+  narrated: boolean;
 }

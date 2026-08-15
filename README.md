@@ -26,17 +26,22 @@ npm start          # http://localhost:3000
 ## How it works
 
 ```
-Where are you? + time budget + mood/type
+Where are you? + time budget + transport mode + mood/type
         ↓
   /api/recommend (pipeline)
         ↓
   Weather (Open-Meteo, free) ──┐
-  Discovery (Google Places │
-    → fallback OSM Overpass)   ├─→ rule-based scoring (fit score + why)
-  Time/distance (haversine) ───┘        ↓
-  Cards + map with "why now" reasons
+  Discovery (multi-source)     ├─→ rule-based scoring (fit score + why)
+  Time/distance by mode ───────┘        ↓
+  LLM narrative (lib/llm/) "why now"    ↓
+  Cards + map
 ```
 
+- **Transport mode** — 🚶 walking / 🚃 train-bus / 🚗 car changes everything:
+  the discovery radius (walking ~0.4×, car ~2×), travel-time heuristics
+  (4.5 km/h on foot, ~28 km/h + wait for transit, ~40 km/h by car) and the
+  reasons ("a 15 min en tren", "a 6 min en auto"). Walking under rain/snow
+  penalizes outdoor picks extra.
 - **Discovery** — multi-source, tried in priority order:
   1. **Google Places** (text + nearby search, strictbounds) when a key is configured
   2. **Geoapify** (free tier, 3k req/day) when a key is configured
@@ -44,8 +49,11 @@ Where are you? + time budget + mood/type
   4. **local SQLite cache** (`data/tabi.db`) as last resort
   Results are always cached for resilience.
 - **Scoring** — rule-based "base fit" score (0–100): travel time vs. budget,
-  weather fit, rating, open-now status, hard distance cap. The LLM (next phase)
-  narrates the *why*, it doesn't score.
+  weather fit, rating, open-now status, hard distance cap.
+- **LLM narrative (M2)** — `lib/llm/`: provider registry (OpenCode Zen/Go via
+  your API key, OpenAI-compatible), retry + provider fallback. The model writes
+  a "why go today" for the top picks in the app's language — the rules still
+  score, the LLM only narrates. No provider → rule reasons only.
 - **Storage** — `node:sqlite` (built into Node ≥ 22.5, no native deps):
   place cache + (later) user profile & feedback.
 
@@ -77,8 +85,8 @@ gracefully with a clear "data unavailable" message.
 
 | Milestone | Scope |
 |-----------|-------|
-| **M1 ✅** | Discovery (Google/Overpass), weather, scoring, map, i18n, settings |
-| M2 | `lib/llm/` connection module (provider registry, API key via Settings) + narrative "why" + conversational mode |
+| **M1 ✅** | Discovery (Google/Geoapify/Overpass), weather, scoring, map, i18n, settings |
+| **M2 ✅** | Transport mode factor (walking/transit/car) + `lib/llm/` narrative "why now" (retry + provider fallback) |
 | M3 | Feedback loop: 👍/👎 per card → tag profile → weighted scoring |
 | M4 | Taste onboarding quiz + general season layer (sakura/snow/festivals by location & date) |
 | M5 | PWA + mobile |
@@ -92,13 +100,14 @@ src/
   lib/
     i18n.tsx      ES/EN dictionaries + provider
     types.ts      shared types
-    geo.ts        haversine + time estimates
+    geo.ts        haversine + travel time by transport mode
     weather.ts    Open-Meteo client
-    scoring.ts    rule-based fit score + reasons
-    recommend.ts  end-to-end pipeline
+    scoring.ts    rule-based fit score + reasons (mode-aware)
+    recommend.ts  end-to-end pipeline (rules score → LLM narrates)
+    llm/          provider registry + OpenAI-compatible client + narrate()
     settings.ts   local key storage (data/config.json)
     db.ts         node:sqlite cache
-    places/       taxonomy + google.ts + overpass.ts + orchestrator
+    places/       taxonomy + google/geoapify/overpass adapters + orchestrator
 ```
 
 Built for a personal trip, but designed as a generic discovery tool — usable in
