@@ -124,6 +124,15 @@ npm run test:e2e  # smoke against a LIVE server (npm start first)
 - **E2E** (`scripts/smoke-e2e.mjs`): real server, real network — recommend
   (real + simulated hours), geocode, photo proxy, feedback, narrate.
 
+Every recommend call also emits a structured line to the server stdout
+(`[tabi] recommend {…}`: coords, budget, mode, simulation flag, source,
+candidates/scored counts, empty reason, latency) and API errors log with
+stack traces — check the server console to debug any issue.
+
+Empty results are classified so the UI explains *why*: `all_closed` (e.g.
+searching at 3 AM in Japan), `too_far` (beyond your time/transport) or
+`no_results` (sources returned nothing).
+
 Testability hooks: `TABI_DATA_DIR` env / `setDataDir()` / `setConfigPath()` /
 `setPhotoDir()` / `clearWeatherCache()` — tests run in temp dirs and never
 touch your real data or API keys.

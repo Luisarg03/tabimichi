@@ -1,4 +1,4 @@
-import type { Place, RecommendInput, RecommendResult, TransportMode } from "./types";
+import type { EmptyReason, Place, RecommendInput, RecommendResult, TransportMode } from "./types";
 import { getWeather, weatherAt } from "./weather";
 import { BUDGET_MIN, radiusForBudget } from "./geo";
 import { discover } from "./places";
@@ -22,6 +22,7 @@ type Candidate = Place & { periods?: OpenPeriod[] };
  * weather is taken from the hourly forecast at that hour.
  */
 export async function recommend(input: RecommendInput): Promise<RecommendResult> {
+  const startedAt = performance.now();
   const mode: TransportMode = input.mode ?? "transit";
   const budgetMin = BUDGET_MIN[input.budget] ?? 300;
   const radiusKm = input.radiusKm ?? radiusForBudget(input.budget, mode);
@@ -71,12 +72,47 @@ export async function recommend(input: RecommendInput): Promise<RecommendResult>
     profile: getProfile(),
   });
 
+  const top = scored.slice(0, 8);
+  const emptyReason = emptyReasonFor(candidates, top.length);
+
+  console.log(
+    "[tabi] recommend",
+    JSON.stringify({
+      at: new Date().toISOString(),
+      lat: input.lat,
+      lng: input.lng,
+      budget: input.budget,
+      types: input.types,
+      mode,
+      sim: simulated !== null,
+      source,
+      candidates: candidates.length,
+      scored: top.length,
+      emptyReason,
+      ms: Math.round(performance.now() - startedAt),
+    })
+  );
+
   return {
     weather,
-    places: scored.slice(0, 8),
+    places: top,
     generatedAt: new Date().toISOString(),
     radiusKm,
     sourceNote: source,
     narrated: false,
+    emptyReason,
   };
+}
+
+/**
+ * Classify an empty result so the UI can say *why*:
+ *  - no_results: sources returned nothing
+ *  - all_closed: candidates existed but every one is closed right now
+ *  - too_far: candidates exist but all fall outside distance/budget
+ */
+export function emptyReasonFor(candidates: Candidate[], scoredCount: number): EmptyReason | undefined {
+  if (candidates.length === 0) return "no_results";
+  if (scoredCount > 0) return undefined;
+  const closed = candidates.filter((p) => p.openNow === false).length;
+  return closed > 0 ? "all_closed" : "too_far";
 }
