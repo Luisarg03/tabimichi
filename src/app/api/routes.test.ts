@@ -9,6 +9,7 @@ import { GET as geocodeGET } from "@/app/api/geocode/route";
 import { GET as photoGET } from "@/app/api/photo/route";
 import { GET as photosGET } from "@/app/api/photos/route";
 import { GET as logsGET } from "@/app/api/logs/route";
+import { geocodeVariants } from "@/app/api/geocode/route";
 import { logEntry } from "@/lib/logger";
 import { upsertPlace } from "@/lib/db";
 import { clearWeatherCache } from "@/lib/weather";
@@ -201,6 +202,26 @@ describe("/api/settings", () => {
   });
 });
 
+describe("geocodeVariants", () => {
+  it("strips block numbers from street tokens", () => {
+    const v = geocodeVariants("Kitaishidocho-1373 Minaminagano, Nagano, 380-0826, Japón");
+    expect(v[0]).toBe("Kitaishidocho-1373 Minaminagano, Nagano, 380-0826, Japón");
+    expect(v[1]).toBe("Kitaishidocho Minaminagano, Nagano, 380-0826, Japón");
+  });
+
+  it("falls back to the rest of the address, the zip, and the tail", () => {
+    const v = geocodeVariants("Kitaishidocho-1373, Nagano, 380-0826, Japón");
+    expect(v).toContain("Nagano, 380-0826, Japón"); // rest
+    expect(v).toContain("380-0826, Japan"); // zip
+    expect(v).toContain("380-0826, Japón"); // last two
+  });
+
+  it("dedupes variants", () => {
+    const v = geocodeVariants("Nagano, 380-0826, Japan");
+    expect(new Set(v).size).toBe(v.length);
+  });
+});
+
 describe("/api/geocode", () => {
   it("returns coordinates from Nominatim", async () => {
     mockFetch([
@@ -220,6 +241,29 @@ describe("/api/geocode", () => {
     mockFetch([{ match: urlContains("nominatim"), response: () => jsonResponse([]) }]);
     const res = await geocodeGET(new NextRequest("http://localhost/api/geocode?q=xyz"));
     expect(res.status).toBe(404);
+  });
+
+  it("falls back to a stripped variant when the raw query fails", async () => {
+    let calls = 0;
+    mockFetch([
+      {
+        match: urlContains("nominatim"),
+        response: () => {
+          calls++;
+          // first variant (raw address with block number) fails, next resolves
+          return calls === 1
+            ? jsonResponse([])
+            : jsonResponse([{ lat: "36.6462", lon: "138.1848", display_name: "北石堂町, 長野市, 長野県, 日本", name: "北石堂町" }]);
+        },
+      },
+    ]);
+    const res = await geocodeGET(
+      new NextRequest("http://localhost/api/geocode?q=" + encodeURIComponent("Kitaishidocho-1373 Minaminagano, Nagano, 380-0826, Japón"))
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.lat).toBe(36.6462);
+    expect(calls).toBeGreaterThan(1); // tried more than the raw query
   });
 });
 
