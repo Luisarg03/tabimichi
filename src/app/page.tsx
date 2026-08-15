@@ -128,6 +128,7 @@ export default function HomePage() {
                         <RecommendationCard
                           key={p.id}
                           place={p}
+                          origin={{ lat: location!.lat, lng: location!.lng }}
                           selected={selectedId === p.id}
                           onSelect={setSelectedId}
                         />

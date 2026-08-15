@@ -45,7 +45,8 @@ export const EXPERIENCE_TYPES: ExperienceType[] = [
     id: "temple",
     labelKey: "temple",
     googleQuery: "temple shrine",
-    googleTypes: ["hindu_temple", "church"],
+    // no googleTypes: nearby types like church/hindu_temple add noise in Japan;
+    // text search covers temples/shrines well
     overpass: [
       { key: "historic", value: "temple" },
       { key: "historic", value: "shrine" },

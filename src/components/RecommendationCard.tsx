@@ -16,15 +16,21 @@ function renderReason(r: Reason, t: ReturnType<typeof useI18n>["t"]): string {
 
 export default function RecommendationCard({
   place,
+  origin,
   selected,
   onSelect,
 }: {
   place: ScoredPlace;
+  /** the "where I am" point passed in the input — used as directions origin */
+  origin: { lat: number; lng: number };
   selected: boolean;
   onSelect: (id: string) => void;
 }) {
   const { t } = useI18n();
-  const dirsUrl = `https://www.google.com/maps/dir/?api=1&destination=${place.lat},${place.lng}`;
+  const dirsUrl =
+    `https://www.google.com/maps/dir/?api=1` +
+    `&origin=${origin.lat.toFixed(6)},${origin.lng.toFixed(6)}` +
+    `&destination=${place.lat.toFixed(6)},${place.lng.toFixed(6)}`;
 
   return (
     <button
