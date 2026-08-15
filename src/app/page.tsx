@@ -19,13 +19,14 @@ interface SavedLocation {
 }
 
 export default function HomePage() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [location, setLocation] = useState<SavedLocation | null>(null);
   const [mode, setMode] = useState<string>("transit");
   const [result, setResult] = useState<RecommendResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [guideState, setGuideState] = useState<"idle" | "thinking" | "done">("idle");
 
   useEffect(() => {
     try {
@@ -36,41 +37,98 @@ export default function HomePage() {
     }
   }, []);
 
-  const handleDiscover = useCallback(async (payload: DiscoverPayload) => {
-    setLoading(true);
-    setError(false);
-    setResult(null);
-    setSelectedId(null);
-    try {
-      const loc = { lat: payload.lat, lng: payload.lng, label: payload.label };
-      setLocation(loc);
-      setMode(payload.mode);
+  const handleDiscover = useCallback(
+    async (payload: DiscoverPayload) => {
+      setLoading(true);
+      setError(false);
+      setResult(null);
+      setSelectedId(null);
+      setGuideState("idle");
       try {
-        localStorage.setItem("tabi.lastLocation", JSON.stringify(loc));
+        const loc = { lat: payload.lat, lng: payload.lng, label: payload.label };
+        setLocation(loc);
+        setMode(payload.mode);
+        try {
+          localStorage.setItem("tabi.lastLocation", JSON.stringify(loc));
+        } catch {
+          // ignore
+        }
+
+        // phase 1 (fast): rules pipeline — weather, discovery, scoring
+        const res = await fetch("/api/recommend", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            lat: payload.lat,
+            lng: payload.lng,
+            budget: payload.budget,
+            types: payload.types,
+            mode: payload.mode,
+            lang: locale,
+          }),
+        });
+        if (!res.ok) throw new Error("bad response");
+        const data = (await res.json()) as RecommendResult;
+        setResult(data);
+        setLoading(false);
+
+        // phase 2 (async): LLM narrative — day summary + per-place why
+        if (data.places.length > 0) {
+          setGuideState("thinking");
+          try {
+            const narrRes = await fetch("/api/narrate", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                lat: payload.lat,
+                lng: payload.lng,
+                budget: payload.budget,
+                mode: payload.mode,
+                types: payload.types,
+                lang: locale,
+                places: data.places.map((p) => ({
+                  id: p.id,
+                  name: p.name,
+                  distanceKm: p.distanceKm,
+                  travelMin: p.travelMin,
+                  rating: p.rating,
+                  tags: p.tags,
+                })),
+              }),
+            });
+            if (narrRes.ok) {
+              const narr = (await narrRes.json()) as {
+                summary?: string;
+                narratives?: Record<string, string>;
+                narratedBy?: string;
+              };
+              setResult((prev) => {
+                if (!prev) return prev;
+                const narrMap = narr.narratives ?? {};
+                return {
+                  ...prev,
+                  narrated: true,
+                  narratedBy: narr.narratedBy,
+                  summary: narr.summary,
+                  places: prev.places.map((p) =>
+                    narrMap[p.id] ? { ...p, why: narrMap[p.id] } : p
+                  ),
+                };
+              });
+            }
+          } catch {
+            // guide unavailable — cards with rule reasons remain
+          } finally {
+            setGuideState("done");
+          }
+        }
       } catch {
-        // ignore
+        setError(true);
+        setLoading(false);
       }
-      const res = await fetch("/api/recommend", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          lat: payload.lat,
-          lng: payload.lng,
-          budget: payload.budget,
-          types: payload.types,
-          mode: payload.mode,
-          narrate: true,
-        }),
-      });
-      if (!res.ok) throw new Error("bad response");
-      const data = (await res.json()) as RecommendResult;
-      setResult(data);
-    } catch {
-      setError(true);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    },
+    [locale]
+  );
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
@@ -122,6 +180,11 @@ export default function HomePage() {
               ) : (
                 <>
                   <div className="text-xs text-slate-400">{t(`panel.source.${result.sourceNote}`)}</div>
+                  {guideState === "thinking" && !result.summary && (
+                    <div className="rounded-xl border border-sky-100 bg-sky-50 p-4 text-sm text-slate-500">
+                      <span className="inline-block animate-pulse">🧠 {t("status.guideThinking")}</span>
+                    </div>
+                  )}
                   {result.summary && (
                     <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-slate-800">
                       <div className="mb-1 flex items-center justify-between">

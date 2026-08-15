@@ -100,3 +100,49 @@ export function cachedNear(lat: number, lng: number, radiusKm: number): Place[] 
     url: r.url ? String(r.url) : undefined,
   }));
 }
+
+/**
+ * Fresh-cache check for discovery: places fetched within maxAgeMs near a point,
+ * filtered to those whose tags cover every requested type. Returns null when
+ * coverage is incomplete — the caller should hit live sources instead.
+ */
+export function freshNearby(
+  lat: number,
+  lng: number,
+  radiusKm: number,
+  types: string[],
+  maxAgeMs: number
+): Place[] | null {
+  const d = getDb();
+  const deg = radiusKm / 111;
+  const since = new Date(Date.now() - maxAgeMs).toISOString();
+  const rows = d
+    .prepare(
+      `SELECT * FROM places
+       WHERE lat BETWEEN ? AND ? AND lng BETWEEN ? AND ?
+         AND fetched_at >= ?
+       ORDER BY fetched_at DESC LIMIT 300`
+    )
+    .all(lat - deg, lat + deg, lng - deg, lng + deg, since) as Array<Record<string, unknown>>;
+
+  const places = rows.map((r) => ({
+    id: String(r.id),
+    source: r.source as Place["source"],
+    name: String(r.name),
+    lat: Number(r.lat),
+    lng: Number(r.lng),
+    tags: JSON.parse(String(r.tags)) as string[],
+    rating: r.rating == null ? undefined : Number(r.rating),
+    priceLevel: r.price_level == null ? undefined : Number(r.price_level),
+    openNow: r.open_now == null ? undefined : Boolean(r.open_now),
+    address: r.address ? String(r.address) : undefined,
+    photoRef: r.photo_ref ? String(r.photo_ref) : undefined,
+    url: r.url ? String(r.url) : undefined,
+  }));
+
+  // every requested type must have at least one fresh cached place
+  for (const type of types) {
+    if (!places.some((p) => p.tags.includes(type))) return null;
+  }
+  return places;
+}

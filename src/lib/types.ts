@@ -77,10 +77,24 @@ export interface RecommendInput {
   types: string[]; // empty = any
   radiusKm?: number;
   mode?: TransportMode;
-  /** ask the LLM (when a provider is configured) to narrate the top picks */
-  narrate?: boolean;
-  /** UI language for the narrative: "es" | "en" */
+  /** UI language for discovery: "es" | "en" */
   lang?: string;
+}
+
+/** Input for the async LLM narrative phase (/api/narrate). */
+export interface NarratePlaceInput {
+  id: string;
+  name: string;
+  distanceKm: number;
+  travelMin: number;
+  rating?: number;
+  tags: string[];
+}
+
+export interface NarrateResponse {
+  summary?: string;
+  narratives: Record<string, string>;
+  narratedBy?: string;
 }
 
 export interface RecommendResult {

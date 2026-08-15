@@ -21,6 +21,9 @@ const MIRRORS = [
   "https://overpass.kumi.systems/api/interpreter",
 ];
 
+/** hard ceiling for the whole Overpass attempt — never let the fallback hang */
+const TOTAL_BUDGET_MS = 30000;
+
 /**
  * Optional custom Overpass instance (e.g. self-hosted osm3s in Docker).
  * When set, it is tried first; public mirrors remain as fallback.
@@ -125,10 +128,12 @@ export async function overpassSearch(
 
   const query = buildQuery(valid, lat, lng, radiusM);
   let lastErr: unknown = null;
+  const startedAt = Date.now();
 
   const endpoints = customEndpoint ? [customEndpoint, ...MIRRORS] : MIRRORS;
 
   for (const endpoint of endpoints) {
+    if (Date.now() - startedAt > TOTAL_BUDGET_MS) break;
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const res = await fetchWithTimeout(

@@ -1,5 +1,18 @@
 import type { WeatherInfo, WeatherCondition } from "./types";
 
+/** In-memory weather cache: same area (≈1km) reuses the forecast for 10 min. */
+const cache = new Map<string, { at: number; data: WeatherInfo }>();
+const WEATHER_TTL_MS = 10 * 60 * 1000;
+
+export async function getWeather(lat: number, lng: number): Promise<WeatherInfo> {
+  const key = `${lat.toFixed(2)},${lng.toFixed(2)}`;
+  const hit = cache.get(key);
+  if (hit && Date.now() - hit.at < WEATHER_TTL_MS) return hit.data;
+  const data = await fetchWeather(lat, lng);
+  cache.set(key, { at: Date.now(), data });
+  return data;
+}
+
 /** Map a WMO weather code to a coarse condition + human label key. */
 export function classifyWmo(code: number): { condition: WeatherCondition; label: string } {
   if (code === 0) return { condition: "clear", label: "clear" };
@@ -40,7 +53,7 @@ interface OpenMeteoResponse {
   };
 }
 
-export async function getWeather(lat: number, lng: number): Promise<WeatherInfo> {
+async function fetchWeather(lat: number, lng: number): Promise<WeatherInfo> {
   const url =
     "https://api.open-meteo.com/v1/forecast?" +
     new URLSearchParams({

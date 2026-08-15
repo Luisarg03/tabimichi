@@ -28,14 +28,23 @@ npm start          # http://localhost:3000
 ```
 Where are you? + time budget + transport mode + mood/type
         ↓
-  /api/recommend (pipeline)
+  /api/recommend  (fast path ~1s: weather ∥ discovery, rule scoring)
         ↓
-  Weather (Open-Meteo, free) ──┐
-  Discovery (multi-source)     ├─→ rule-based scoring (fit score + why)
-  Time/distance by mode ───────┘        ↓
-  LLM narrative (lib/llm/) "why now"    ↓
-  Cards + map
+  Cards + map instantly       ←──  then, async:
+        ↓                           /api/narrate (LLM, ~5-10s)
+  "El guía está escribiendo…"       day summary + per-place "why"
+        ↓
+  Summary + narratives fill in
 ```
+
+**Latency design (two phases):** the rules pipeline (weather + discovery +
+scoring) responds in ~1s and renders the cards; the LLM narrative runs as a
+separate async call and fills in the day summary + per-place "why" when ready.
+Repeated queries hit the freshness caches:
+
+- **Weather cache** (in-memory, 10 min TTL per ~1 km area)
+- **Discovery cache** (SQLite, 15 min TTL, only when every requested type is covered)
+- **Overpass hard budget** (30 s ceiling so the fallback can never hang a request)
 
 - **Transport mode** — 🚶 walking / 🚃 train-bus / 🚗 car changes everything:
   the discovery radius (walking ~0.4×, car ~2×), travel-time heuristics

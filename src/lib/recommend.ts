@@ -3,21 +3,27 @@ import { getWeather } from "./weather";
 import { BUDGET_MIN, radiusForBudget } from "./geo";
 import { discover } from "./places";
 import { scorePlaces } from "./scoring";
-import { narrateTop } from "./llm";
 
-/** End-to-end recommendation pipeline (rules score, LLM narrates). */
+/**
+ * End-to-end recommendation pipeline — fast path only (rules).
+ * Weather and discovery run in parallel; the LLM narrative is a separate
+ * async phase (/api/narrate) so the user sees results immediately.
+ */
 export async function recommend(input: RecommendInput): Promise<RecommendResult> {
   const mode: TransportMode = input.mode ?? "transit";
-  const weather = await getWeather(input.lat, input.lng);
   const budgetMin = BUDGET_MIN[input.budget] ?? 300;
   const radiusKm = input.radiusKm ?? radiusForBudget(input.budget, mode);
 
-  const { places, source } = await discover({
-    lat: input.lat,
-    lng: input.lng,
-    radiusKm,
-    types: input.types,
-  });
+  const [weather, { places, source }] = await Promise.all([
+    getWeather(input.lat, input.lng),
+    discover({
+      lat: input.lat,
+      lng: input.lng,
+      radiusKm,
+      types: input.types,
+      lang: input.lang,
+    }),
+  ]);
 
   const scored = scorePlaces(places, {
     base: { lat: input.lat, lng: input.lng },
@@ -29,39 +35,12 @@ export async function recommend(input: RecommendInput): Promise<RecommendResult>
     maxDistKm: radiusKm * 1.5,
   });
 
-  const top = scored.slice(0, 8);
-  let narrated = false;
-  let narratedBy: string | undefined;
-  let summary: string | undefined;
-
-  if (input.narrate && top.length > 0) {
-    const { narratives, summary: daySummary, provider } = await narrateTop({
-      places: top,
-      weather,
-      budget: input.budget,
-      mode,
-      lang: input.lang ?? "es",
-      types: input.types,
-    });
-    if (narratives.size > 0 || daySummary) {
-      narrated = true;
-      narratedBy = provider;
-      summary = daySummary;
-      for (const p of top) {
-        const why = narratives.get(p.id);
-        if (why) p.why = why;
-      }
-    }
-  }
-
   return {
     weather,
-    places: top,
+    places: scored.slice(0, 8),
     generatedAt: new Date().toISOString(),
     radiusKm,
     sourceNote: source,
-    narrated,
-    narratedBy,
-    summary,
+    narrated: false,
   };
 }
