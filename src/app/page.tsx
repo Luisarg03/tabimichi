@@ -1,67 +1,167 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useCallback, useEffect, useState } from "react";
+import dynamic from "next/dynamic";
+import Link from "next/link";
+import DayPanel, { type DiscoverPayload } from "@/components/DayPanel";
+import RecommendationCard from "@/components/RecommendationCard";
+import WeatherCard from "@/components/WeatherCard";
+import LocaleToggle from "@/components/LocaleToggle";
+import { useI18n } from "@/lib/i18n";
+import type { RecommendResult, ScoredPlace } from "@/lib/types";
+
+const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
+
+interface SavedLocation {
+  lat: number;
+  lng: number;
+  label: string;
+}
+
+export default function HomePage() {
+  const { t } = useI18n();
+  const [location, setLocation] = useState<SavedLocation | null>(null);
+  const [result, setResult] = useState<RecommendResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("tabi.lastLocation");
+      if (raw) setLocation(JSON.parse(raw) as SavedLocation);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const handleDiscover = useCallback(async (payload: DiscoverPayload) => {
+    setLoading(true);
+    setError(false);
+    setResult(null);
+    setSelectedId(null);
+    try {
+      const loc = { lat: payload.lat, lng: payload.lng, label: payload.label };
+      setLocation(loc);
+      try {
+        localStorage.setItem("tabi.lastLocation", JSON.stringify(loc));
+      } catch {
+        // ignore
+      }
+      const res = await fetch("/api/recommend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lat: payload.lat,
+          lng: payload.lng,
+          budget: payload.budget,
+          types: payload.types,
+        }),
+      });
+      if (!res.ok) throw new Error("bad response");
+      const data = (await res.json()) as RecommendResult;
+      setResult(data);
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="mx-auto max-w-6xl px-4 py-6">
+      <header className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <span className="text-2xl">🗾</span>
+          <div>
+            <h1 className="text-xl font-bold text-slate-900">
+              {t("app.name")} <span className="font-normal text-slate-400">旅</span>
+            </h1>
+            <p className="text-xs text-slate-500">{t("app.tagline")}</p>
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+        <div className="flex items-center gap-2">
+          <LocaleToggle />
+          <Link
+            href="/settings"
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            ⚙️ {t("nav.settings")}
+          </Link>
+        </div>
+      </header>
+
+      <main className="mt-6 grid gap-6 lg:grid-cols-5">
+        {/* left: panel + weather + cards */}
+        <div className="space-y-4 lg:col-span-2">
+          <DayPanel initialLocation={location} loading={loading} onDiscover={handleDiscover} />
+
+          {loading && (
+            <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
+              <span className="inline-block animate-pulse">⏳ {t("status.discovering")}</span>
+            </div>
+          )}
+
+          {error && (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+              {t("status.error")}
+            </div>
+          )}
+
+          {result && !loading && (
+            <>
+              <WeatherCard weather={result.weather} />
+              {result.sourceNote === "none" ? (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                  {t(`panel.source.${result.sourceNote}`)}
+                </div>
+              ) : (
+                <>
+                  <div className="text-xs text-slate-400">{t(`panel.source.${result.sourceNote}`)}</div>
+                  {result.places.length === 0 ? (
+                    <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
+                      {t("status.empty")}
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {result.places.map((p: ScoredPlace) => (
+                        <RecommendationCard
+                          key={p.id}
+                          place={p}
+                          selected={selectedId === p.id}
+                          onSelect={setSelectedId}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </>
+          )}
+
+          {!result && !loading && !error && (
+            <div className="rounded-xl border border-dashed border-slate-300 bg-white/60 p-8 text-center text-sm text-slate-400">
+              {t("app.tagline")} 🌸
+            </div>
+          )}
+        </div>
+
+        {/* right: map */}
+        <div className="lg:col-span-3">
+          <div className="sticky top-4 h-72 overflow-hidden rounded-2xl border border-slate-200 shadow-sm lg:h-[calc(100vh-6rem)]">
+            {location ? (
+              <MapView
+                center={{ lat: location.lat, lng: location.lng }}
+                places={result?.places ?? []}
+                selectedId={selectedId}
+                onSelect={setSelectedId}
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center bg-slate-50 text-sm text-slate-400">
+                {t("map.nearby")}
+              </div>
+            )}
+          </div>
         </div>
       </main>
     </div>
