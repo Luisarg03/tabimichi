@@ -5,6 +5,7 @@ import type { Reason, ScoredPlace } from "@/lib/types";
 import { EXPERIENCE_TYPE_MAP } from "@/lib/places/taxonomy";
 import { useI18n } from "@/lib/i18n";
 import { fmtCount } from "@/lib/format";
+import { dirsUrl as dirsUrlFor, placeUrl as placeUrlFor, placeQueryFor } from "@/lib/maps-urls";
 
 function renderReason(r: Reason, t: ReturnType<typeof useI18n>["t"]): string {
   const params = { ...r.params };
@@ -55,21 +56,12 @@ export default function RecommendationCard({
   onFeedback?: (placeId: string, liked: boolean, tags?: string[]) => void;
 }) {
   const { t } = useI18n();
-  const travelMode = mode === "car" ? "driving" : mode; // walking | transit | driving
   // Google-sourced places have their place_id in the id (g_ prefix) → link to
   // the actual place (photos/reviews) instead of bare coordinates
   const googlePlaceId = place.id.startsWith("g_") ? place.id.slice(2) : null;
-  const placeQuery = googlePlaceId
-    ? `place_id:${googlePlaceId}`
-    : `${place.lat.toFixed(6)},${place.lng.toFixed(6)}`;
-  const dirsUrl =
-    `https://www.google.com/maps/dir/?api=1` +
-    `&origin=${origin.lat.toFixed(6)},${origin.lng.toFixed(6)}` +
-    `&destination=${encodeURIComponent(placeQuery)}` +
-    `&travelmode=${travelMode}`;
-  const mapsUrl = googlePlaceId
-    ? `https://www.google.com/maps/place/?q=place_id:${googlePlaceId}`
-    : `https://www.google.com/maps/search/?api=1&query=${place.lat.toFixed(6)},${place.lng.toFixed(6)}`;
+  const query = placeQueryFor(googlePlaceId, place.lat, place.lng);
+  const dirsUrl = dirsUrlFor({ lat: origin.lat, lng: origin.lng }, query, mode);
+  const mapsUrl = placeUrlFor(query);
 
   const photoRefs =
     place.photoRefs && place.photoRefs.length > 0
