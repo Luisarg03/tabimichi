@@ -50,10 +50,13 @@ Where are you? + time budget + transport mode + mood/type
   Results are always cached for resilience.
 - **Scoring** — rule-based "base fit" score (0–100): travel time vs. budget,
   weather fit, rating, open-now status, hard distance cap.
-- **LLM narrative (M2)** — `lib/llm/`: provider registry (OpenCode Zen/Go via
-  your API key, OpenAI-compatible), retry + provider fallback. The model writes
-  a "why go today" for the top picks in the app's language — the rules still
-  score, the LLM only narrates. No provider → rule reasons only.
+- **LLM narrative (M2)** — `lib/llm/` two-layer provider registry, tried in
+  order: **OpenCode Zen (free)** `deepseek-v4-flash-free` at
+  `opencode.ai/zen/v1` → **OpenCode Go (paid)** `deepseek-v4-flash` at
+  `opencode.ai/zen/go/v1`. Fail-fast on rate limits (429), retry on transient
+  5xx, fall back to the next layer. The model writes a "why go today" for the
+  top picks in the app's language; the rules still score, the LLM only
+  narrates. Cards show which layer narrated. No provider → rule reasons only.
 - **Storage** — `node:sqlite` (built into Node ≥ 22.5, no native deps):
   place cache + (later) user profile & feedback.
 

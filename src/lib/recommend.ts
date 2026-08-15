@@ -31,9 +31,10 @@ export async function recommend(input: RecommendInput): Promise<RecommendResult>
 
   const top = scored.slice(0, 8);
   let narrated = false;
+  let narratedBy: string | undefined;
 
   if (input.narrate && top.length > 0) {
-    const map = await narrateTop({
+    const { narratives, provider } = await narrateTop({
       places: top,
       weather,
       budget: input.budget,
@@ -41,10 +42,11 @@ export async function recommend(input: RecommendInput): Promise<RecommendResult>
       lang: input.lang ?? "es",
       types: input.types,
     });
-    if (map.size > 0) {
+    if (narratives.size > 0) {
       narrated = true;
+      narratedBy = provider;
       for (const p of top) {
-        const why = map.get(p.id);
+        const why = narratives.get(p.id);
         if (why) p.why = why;
       }
     }
@@ -57,5 +59,6 @@ export async function recommend(input: RecommendInput): Promise<RecommendResult>
     radiusKm,
     sourceNote: source,
     narrated,
+    narratedBy,
   };
 }

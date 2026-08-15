@@ -81,21 +81,23 @@ async function narrateWith(provider: LlmProvider, opts: NarrateOpts): Promise<Ma
 /**
  * LLM narrative layer (M2): the model narrates *why now* for the top picks.
  * The rules still score; the LLM only writes the story. Tries providers in
- * priority order (each with internal retries). Never throws — on total
- * failure the app falls back to rule-based reasons.
+ * priority order (free zen first, paid go second; each with internal retries).
+ * Never throws — on total failure the app falls back to rule-based reasons.
  */
-export async function narrateTop(opts: NarrateOpts): Promise<Map<string, string>> {
+export async function narrateTop(
+  opts: NarrateOpts
+): Promise<{ narratives: Map<string, string>; provider?: string }> {
   const providers = activeProviders();
-  if (providers.length === 0) return new Map();
-  if (opts.places.length === 0) return new Map();
+  if (providers.length === 0) return { narratives: new Map() };
+  if (opts.places.length === 0) return { narratives: new Map() };
 
   for (const provider of providers) {
     try {
-      const map = await narrateWith(provider, opts);
-      if (map.size > 0) return map;
+      const narratives = await narrateWith(provider, opts);
+      if (narratives.size > 0) return { narratives, provider: provider.id };
     } catch {
       // try next provider
     }
   }
-  return new Map();
+  return { narratives: new Map() };
 }

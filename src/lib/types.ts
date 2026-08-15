@@ -91,4 +91,6 @@ export interface RecommendResult {
   sourceNote: "google" | "geoapify" | "overpass" | "cache" | "none";
   /** whether an LLM narrative was attached (provider configured) */
   narrated: boolean;
+  /** which provider tier narrated: "opencode-zen" (free) | "opencode-go" (paid) */
+  narratedBy?: string;
 }
