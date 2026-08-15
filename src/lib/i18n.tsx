@@ -131,7 +131,12 @@ const es: Dict = {
     connected: "Conectado",
     notConnected: "No configurado",
   },
-  map: { nearby: "Cerca de tu zona" },
+  map: {
+    nearby: "Cerca de tu zona",
+    youAreHere: "Estás acá",
+    approx: "Ubicación aproximada (dirección buscada)",
+    exact: "Ubicación exacta (GPS)",
+  },
 };
 
 const en: Dict = {
@@ -258,7 +263,12 @@ const en: Dict = {
     connected: "Connected",
     notConnected: "Not configured",
   },
-  map: { nearby: "Near your area" },
+  map: {
+    nearby: "Near your area",
+    youAreHere: "You are here",
+    approx: "Approximate position (searched address)",
+    exact: "Exact position (GPS)",
+  },
 };
 
 const DICTS: Record<Locale, Dict> = { es, en };

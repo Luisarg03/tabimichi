@@ -18,6 +18,7 @@ interface SavedLocation {
   lat: number;
   lng: number;
   label: string;
+  gps?: boolean;
 }
 
 export default function HomePage() {
@@ -72,7 +73,7 @@ export default function HomePage() {
       setSelectedId(null);
       setGuideState("idle");
       try {
-        const loc = { lat: payload.lat, lng: payload.lng, label: payload.label };
+        const loc = { lat: payload.lat, lng: payload.lng, label: payload.label, gps: payload.gps === true };
         setLocation(loc);
         setMode(payload.mode);
         try {
@@ -359,6 +360,7 @@ export default function HomePage() {
                 center={{ lat: location.lat, lng: location.lng }}
                 places={result?.places ?? []}
                 selectedId={selectedId}
+                userApproximate={location.gps !== true}
                 onSelect={setSelectedId}
               />
             ) : (

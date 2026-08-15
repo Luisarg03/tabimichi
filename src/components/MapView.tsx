@@ -41,6 +41,18 @@ function selectedIcon(place: ScoredPlace): L.DivIcon {
   });
 }
 
+/** "You are here" marker: filled blue dot with a static halo (vs the
+ *  pulsing ring used for the selected recommendation). */
+function userIcon(): L.DivIcon {
+  return L.divIcon({
+    className: "",
+    html: `<div style="position:relative;width:18px;height:18px;border-radius:9999px;background:#2563eb;border:3px solid #fff;box-shadow:0 1px 6px rgba(37,99,235,.7)"></div>
+           <div style="position:absolute;top:50%;left:50%;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:9999px;background:rgba(37,99,235,.25)"></div>`,
+    iconSize: [18, 18],
+    iconAnchor: [9, 9],
+  });
+}
+
 function FlyTo({ center, zoom }: { center: LatLng; zoom: number }) {
   const map = useMap();
   useEffect(() => {
@@ -64,11 +76,14 @@ export default function MapView({
   center,
   places,
   selectedId,
+  userApproximate = false,
   onSelect,
 }: {
   center: LatLng;
   places: ScoredPlace[];
   selectedId?: string | null;
+  /** true when the position comes from a searched address (geocoded, not GPS) */
+  userApproximate?: boolean;
   onSelect: (id: string) => void;
 }) {
   const { t } = useI18n();
@@ -87,6 +102,19 @@ export default function MapView({
       />
       <FlyTo center={center} zoom={13} />
       <FlyToSelected place={selected} />
+
+      {/* you are here — visual reference of the input position */}
+      <Marker position={[center.lat, center.lng]} icon={userIcon()} zIndexOffset={500}>
+        <Popup>
+          <div className="text-sm">
+            <div className="font-semibold">📍 {t("map.youAreHere")}</div>
+            <div className="text-gray-600">
+              {userApproximate ? t("map.approx") : t("map.exact")}
+            </div>
+          </div>
+        </Popup>
+      </Marker>
+
       {places.map((p) => (
         <Marker
           key={p.id}
