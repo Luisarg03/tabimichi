@@ -8,7 +8,7 @@ export type Locale = "es" | "en";
 type Dict = Record<string, unknown>;
 
 const es: Dict = {
-  app: { name: "Tabi", tagline: "Descubrí qué hacer hoy, cerca tuyo" },
+  app: { name: "Tabimichi 旅道", tagline: "Descubrí qué hacer hoy, cerca tuyo" },
   nav: { settings: "Ajustes", back: "Volver" },
   panel: {
     where: "¿Dónde estás?",
@@ -147,7 +147,7 @@ const es: Dict = {
 };
 
 const en: Dict = {
-  app: { name: "Tabi", tagline: "Discover what to do today, nearby" },
+  app: { name: "Tabimichi 旅道", tagline: "Discover what to do today, nearby" },
   nav: { settings: "Settings", back: "Back" },
   panel: {
     where: "Where are you?",

@@ -1,6 +1,6 @@
-# Tabi 旅 — Discover what to do today
+# Tabimichi 旅道 — Discover what to do today
 
-Tabi is a local discovery app: tell it **where you are** and **how much time you
+Tabimichi (旅道, "the road of the journey") is a local discovery app: tell it **where you are** and **how much time you
 have**, and it recommends nearby places to explore — ranked by weather, distance,
 time budget and your mood. It's a personal travel guide, not a hardcoded
 itinerary: every recommendation is discovered live from real data sources.

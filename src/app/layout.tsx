@@ -3,9 +3,9 @@ import { I18nProvider } from "@/lib/i18n";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Tabi 旅 — Discover what to do today",
+  title: "Tabimichi 旅道 — Discover what to do today",
   description:
-    "Local discovery app: tell it where you are and how much time you have, and it recommends nearby places based on weather, time and your mood.",
+    'Tabimichi (旅道, "the road of the journey") is a local discovery app: tell it where you are and how much time you have, and it recommends nearby places based on weather, time and your mood.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
