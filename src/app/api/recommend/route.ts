@@ -39,6 +39,7 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json(result);
   } catch (e) {
+    console.error("[tabi] /api/recommend failed:", e);
     return NextResponse.json({ error: String(e) }, { status: 502 });
   }
 }

@@ -303,7 +303,11 @@ export default function HomePage() {
                   )}
                   {result.places.length === 0 ? (
                     <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
-                      {t("status.empty")}
+                      {result.emptyReason === "all_closed"
+                        ? t("status.emptyClosed")
+                        : result.emptyReason === "too_far"
+                          ? t("status.emptyFar")
+                          : t("status.empty")}
                     </div>
                   ) : (
                     <>

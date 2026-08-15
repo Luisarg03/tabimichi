@@ -108,6 +108,9 @@ export interface NarrateResponse {
 /** User profile: learned tag weights from 👍/👎 feedback (M3). */
 export type PlaceProfile = Record<string, number>;
 
+/** Why the recommendation list came back empty — drives the UI message. */
+export type EmptyReason = "no_results" | "all_closed" | "too_far";
+
 export interface RecommendResult {
   weather: WeatherInfo;
   places: ScoredPlace[];
@@ -120,4 +123,6 @@ export interface RecommendResult {
   narratedBy?: string;
   /** LLM day-plan summary (2-3 sentences) */
   summary?: string;
+  /** why places came back empty, when they did */
+  emptyReason?: EmptyReason;
 }
