@@ -28,3 +28,22 @@ body {
   border-radius: 10px !important;
   overflow: hidden;
 }
+
+/* M3: pulsing ring for the selected map marker */
+@keyframes tabi-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  70% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+.tabi-pulse-ring {
+  animation: tabi-pulse 1.5s ease-out infinite;
+}

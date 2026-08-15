@@ -99,7 +99,7 @@ gracefully with a clear "data unavailable" message.
 |-----------|-------|
 | **M1 ✅** | Discovery (Google/Geoapify/Overpass), weather, scoring, map, i18n, settings |
 | **M2 ✅** | Transport mode factor (walking/transit/car) + `lib/llm/` narrative "why now" (retry + provider fallback) |
-| M3 | Feedback loop: 👍/👎 per card → tag profile → weighted scoring |
+| **M3 ✅** | Feedback loop: 👍/👎 per card → tag profile → weighted scoring + reactive map selection |
 | M4 | Taste onboarding quiz + general season layer (sakura/snow/festivals by location & date) |
 | M5 | PWA + mobile |
 

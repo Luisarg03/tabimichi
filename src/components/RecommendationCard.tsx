@@ -31,7 +31,9 @@ export default function RecommendationCard({
   mode,
   narratedBy,
   selected,
+  voted,
   onSelect,
+  onFeedback,
 }: {
   place: ScoredPlace;
   /** the "where I am" point passed in the input — used as directions origin */
@@ -41,7 +43,10 @@ export default function RecommendationCard({
   /** which LLM layer narrated: "opencode-zen" (free) | "opencode-go" (paid) */
   narratedBy?: string;
   selected: boolean;
+  /** M3: this place's current vote, if any */
+  voted?: "like" | "dislike" | null;
   onSelect: (id: string) => void;
+  onFeedback?: (placeId: string, liked: boolean, tags?: string[]) => void;
 }) {
   const { t } = useI18n();
   const dirsUrl =
@@ -138,6 +143,39 @@ export default function RecommendationCard({
           {t("card.openInMaps")} ↗
         </a>
       </div>
+
+      {/* M3: 👍/👎 feedback — learns the user's tastes */}
+      {onFeedback && (
+        <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3">
+          <span className="text-xs text-slate-500">{t("card.voteQuestion")}</span>
+          {voted ? (
+            <span className="text-xs font-medium text-emerald-600">✓ {t("card.voted")}</span>
+          ) : (
+            <div className="flex gap-1.5">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onFeedback(place.id, true, place.tags);
+                }}
+                className="rounded-lg border border-slate-300 px-2.5 py-1 text-sm hover:bg-emerald-50 hover:border-emerald-300"
+                title={t("card.like")}
+              >
+                👍
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onFeedback(place.id, false, place.tags);
+                }}
+                className="rounded-lg border border-slate-300 px-2.5 py-1 text-sm hover:bg-rose-50 hover:border-rose-300"
+                title={t("card.dislike")}
+              >
+                👎
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </button>
   );
 }

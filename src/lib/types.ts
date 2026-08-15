@@ -97,6 +97,9 @@ export interface NarrateResponse {
   narratedBy?: string;
 }
 
+/** User profile: learned tag weights from 👍/👎 feedback (M3). */
+export type PlaceProfile = Record<string, number>;
+
 export interface RecommendResult {
   weather: WeatherInfo;
   places: ScoredPlace[];

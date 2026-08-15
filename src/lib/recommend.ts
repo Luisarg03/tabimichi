@@ -3,6 +3,7 @@ import { getWeather } from "./weather";
 import { BUDGET_MIN, radiusForBudget } from "./geo";
 import { discover } from "./places";
 import { scorePlaces } from "./scoring";
+import { getProfile } from "./db";
 
 /**
  * End-to-end recommendation pipeline — fast path only (rules).
@@ -33,6 +34,7 @@ export async function recommend(input: RecommendInput): Promise<RecommendResult>
     mode,
     // Google Places only biases by radius, so hard-drop results beyond it (50% slack)
     maxDistKm: radiusKm * 1.5,
+    profile: getProfile(),
   });
 
   return {
