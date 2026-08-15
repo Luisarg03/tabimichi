@@ -203,6 +203,26 @@ describe("discover — source chain", () => {
     expect(places).toHaveLength(1);
   });
 
+  it("drops world-famous places that text search leaks beyond the radius", async () => {
+    mockFetch([
+      {
+        match: urlContains("googleapis.com"),
+        response: () =>
+          jsonResponse({
+            status: "OK",
+            results: [
+              // local (within 5km)
+              { place_id: "local1", name: "Parque Local", geometry: { location: { lat: 36.65, lng: 138.19 } } },
+              // San Diego (≈9,000 km away) — must never become a candidate
+              { place_id: "far1", name: "San Diego View Point", geometry: { location: { lat: 32.71, lng: -117.16 } } },
+            ],
+          }),
+      },
+    ]);
+    const { places } = await discover({ lat: 36.65, lng: 138.19, radiusKm: 5, types: ["park"] });
+    expect(places.map((p) => p.id)).toEqual(["g_local1"]);
+  });
+
   it("falls back to geoapify when google fails", async () => {
     mockFetch([
       { match: urlContains("googleapis.com"), response: () => jsonResponse({}, 500) },

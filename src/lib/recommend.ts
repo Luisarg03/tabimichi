@@ -1,6 +1,6 @@
 import type { EmptyReason, Place, RecommendInput, RecommendResult, TransportMode } from "./types";
 import { getWeather, weatherAt } from "./weather";
-import { BUDGET_MIN, radiusForBudget } from "./geo";
+import { BUDGET_MIN, radiusForBudget, haversineKm } from "./geo";
 import { discover } from "./places";
 import { scorePlaces } from "./scoring";
 import { getProfile } from "./db";
@@ -42,12 +42,18 @@ export async function recommend(input: RecommendInput): Promise<RecommendResult>
 
   const weather = simulated ? weatherAt(weatherRaw, jstHourStamp(simulated)) : weatherRaw;
 
-  // simulation: evaluate open/closed locally at the simulated instant
+  // simulation: evaluate open/closed locally at the simulated instant.
+  // Enrich the NEAREST candidates first (details calls are limited) and merge
+  // the results back — never discard candidates outside the enriched slice.
   let candidates: Candidate[] = places;
   if (simulated) {
     const config = getConfig();
+    const base = { lat: input.lat, lng: input.lng };
+    const byDistance = [...places].sort(
+      (a, b) => haversineKm(base, a) - haversineKm(base, b)
+    );
     const enriched = await Promise.all(
-      places.slice(0, 10).map(async (p): Promise<Candidate> => {
+      byDistance.slice(0, 10).map(async (p): Promise<Candidate> => {
         if (p.source !== "google") return { ...p, openNow: null }; // hours unknown
         const gid = p.id.startsWith("g_") ? p.id.slice(2) : p.id;
         try {
@@ -58,7 +64,8 @@ export async function recommend(input: RecommendInput): Promise<RecommendResult>
         }
       })
     );
-    candidates = enriched;
+    const enrichedById = new Map(enriched.map((p) => [p.id, p]));
+    candidates = places.map((p) => enrichedById.get(p.id) ?? { ...p, openNow: null });
   }
 
   const scored = scorePlaces(candidates, {
