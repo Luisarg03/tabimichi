@@ -39,12 +39,19 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
     let score = 50;
     const reasons: Reason[] = [];
 
-    // --- travel ---
-    if (t <= budgetMin * 0.5) {
-      score += 14;
+    // --- travel (graduated by minutes so close wins over far) ---
+    if (t <= 10) {
+      score += 16;
       reasons.push({ key: "distanceGood", params: { min: t, modeId: ctx.mode ?? "transit" } });
+    } else if (t <= 20) {
+      score += 13;
+      reasons.push({ key: "distanceGood", params: { min: t, modeId: ctx.mode ?? "transit" } });
+    } else if (t <= 35) {
+      score += 10;
+    } else if (t <= 60) {
+      score += 7;
     } else {
-      score += 6;
+      score += 4;
     }
 
     // --- weather fit ---

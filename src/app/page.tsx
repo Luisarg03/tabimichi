@@ -122,6 +122,21 @@ export default function HomePage() {
               ) : (
                 <>
                   <div className="text-xs text-slate-400">{t(`panel.source.${result.sourceNote}`)}</div>
+                  {result.summary && (
+                    <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-slate-800">
+                      <div className="mb-1 flex items-center justify-between">
+                        <span className="text-xs font-medium uppercase tracking-wide text-sky-500">
+                          {t("card.summaryTitle")}
+                        </span>
+                        {result.narratedBy && (
+                          <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-medium text-sky-600">
+                            {result.narratedBy === "opencode-go" ? t("card.narrator.paid") : t("card.narrator.free")}
+                          </span>
+                        )}
+                      </div>
+                      {result.summary}
+                    </div>
+                  )}
                   {result.places.length === 0 ? (
                     <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
                       {t("status.empty")}

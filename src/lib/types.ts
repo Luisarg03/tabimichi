@@ -93,4 +93,6 @@ export interface RecommendResult {
   narrated: boolean;
   /** which provider tier narrated: "opencode-zen" (free) | "opencode-go" (paid) */
   narratedBy?: string;
+  /** LLM day-plan summary (2-3 sentences) */
+  summary?: string;
 }
