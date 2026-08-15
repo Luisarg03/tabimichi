@@ -1,36 +1,103 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Tabi 旅 — Discover what to do today
 
-## Getting Started
+Tabi is a local discovery app: tell it **where you are** and **how much time you
+have**, and it recommends nearby places to explore — ranked by weather, distance,
+time budget and your mood. It's a personal travel guide, not a hardcoded
+itinerary: every recommendation is discovered live from real data sources.
 
-First, run the development server:
+> Status: **M1 (MVP)** — discovery + weather + scoring + map, running locally on
+> desktop. LLM narrative (M2), feedback profile (M3) and mobile PWA (M5) are
+> next.
+
+## Quick start
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev        # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Production:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm run build
+npm start          # http://localhost:3000
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## How it works
 
-## Learn More
+```
+Where are you? + time budget + mood/type
+        ↓
+  /api/recommend (pipeline)
+        ↓
+  Weather (Open-Meteo, free) ──┐
+  Discovery (Google Places │
+    → fallback OSM Overpass)   ├─→ rule-based scoring (fit score + why)
+  Time/distance (haversine) ───┘        ↓
+  Cards + map with "why now" reasons
+```
 
-To learn more about Next.js, take a look at the following resources:
+- **Weather** — [Open-Meteo](https://open-meteo.com): free, no API key, hourly
+  forecast (rain, snow, wind, probability). Rain boosts indoor types (onsen,
+  museum, food…), clear skies boost viewpoints/parks/hiking.
+- **Discovery** — Google Places Text Search when an API key is configured;
+  otherwise OpenStreetMap via Overpass (mirror failover + retries, best-effort).
+  Results are cached in SQLite (`data/tabi.db`).
+- **Scoring** — rule-based "base fit" score (0–100): travel time vs. budget,
+  weather fit, rating, open-now status. The LLM (next phase) narrates the *why*,
+  it doesn't score.
+- **Storage** — `node:sqlite` (built into Node ≥ 22.5, no native deps):
+  place cache + (later) user profile & feedback.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Settings / API keys
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Open **⚙️ Ajustes** in the app or edit `data/config.json` directly (gitignored).
+Keys never leave your machine; environment variables override the file.
 
-## Deploy on Vercel
+| Key | Env var | Purpose |
+|-----|---------|---------|
+| Google Places | `GOOGLE_PLACES_API_KEY` | Rich discovery: ratings, hours, photos (needs Google billing). |
+| OpenCode Zen | `OPENCODE_API_KEY` | LLM guide — next phase (M2). |
+| OpenCode Go | `OPENCODE_GO_API_KEY` | LLM guide — next phase (M2). |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Without a Google key the app works with OpenStreetMap (free). Note: public
+Overpass instances are shared and can be slow or overloaded; the app degrades
+gracefully (local cache, or a clear "data unavailable" message).
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Tech stack
+
+- **Next.js 16** (App Router) + TypeScript + Tailwind CSS v4
+- **Leaflet + react-leaflet** with OpenStreetMap tiles (free, no key)
+- **node:sqlite** — zero-dependency local cache
+- **i18n** ES / EN (built-in dictionaries)
+
+## Roadmap
+
+| Milestone | Scope |
+|-----------|-------|
+| **M1 ✅** | Discovery (Google/Overpass), weather, scoring, map, i18n, settings |
+| M2 | `lib/llm/` connection module (provider registry, API key via Settings) + narrative "why" + conversational mode |
+| M3 | Feedback loop: 👍/👎 per card → tag profile → weighted scoring |
+| M4 | Taste onboarding quiz + general season layer (sakura/snow/festivals by location & date) |
+| M5 | PWA + mobile |
+
+## Project layout
+
+```
+src/
+  app/            pages + API routes (/api/recommend, /weather, /places, /settings, /geocode)
+  components/     MapView, DayPanel, RecommendationCard, WeatherCard, SettingsForm…
+  lib/
+    i18n.tsx      ES/EN dictionaries + provider
+    types.ts      shared types
+    geo.ts        haversine + time estimates
+    weather.ts    Open-Meteo client
+    scoring.ts    rule-based fit score + reasons
+    recommend.ts  end-to-end pipeline
+    settings.ts   local key storage (data/config.json)
+    db.ts         node:sqlite cache
+    places/       taxonomy + google.ts + overpass.ts + orchestrator
+```
+
+Built for a personal trip, but designed as a generic discovery tool — usable in
+any city, on any trip.

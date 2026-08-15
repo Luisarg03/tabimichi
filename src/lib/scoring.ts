@@ -1,0 +1,105 @@
+import type { Place, Reason, ScoredPlace, WeatherInfo, LatLng } from "./types";
+import { haversineKm, travelMin } from "./geo";
+import { EXPERIENCE_TYPE_MAP } from "./places/taxonomy";
+
+export interface ScoreContext {
+  base: LatLng;
+  budgetMin: number;
+  weather: WeatherInfo;
+  now: Date;
+}
+
+function isIndoor(tag: string): boolean {
+  return Boolean(EXPERIENCE_TYPE_MAP[tag]?.indoor);
+}
+
+function isOutdoor(tag: string): boolean {
+  return Boolean(EXPERIENCE_TYPE_MAP[tag]?.outdoor);
+}
+
+/**
+ * Rule-based "base fit" score (0-100) + human-readable reasons.
+ * The LLM (next phase) will narrate, not score.
+ */
+export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
+  const { base, budgetMin, weather } = ctx;
+  const out: ScoredPlace[] = [];
+
+  for (const p of places) {
+    const distanceKm = haversineKm(base, p);
+    const t = travelMin(distanceKm);
+
+    // hard filter: too far for the time budget (25% slack)
+    if (t > budgetMin * 1.25) continue;
+
+    let score = 50;
+    const reasons: Reason[] = [];
+
+    // --- travel ---
+    if (t <= budgetMin * 0.5) {
+      score += 14;
+      reasons.push({ key: "distanceGood", params: { min: t } });
+    } else {
+      score += 6;
+    }
+
+    // --- weather fit ---
+    const outdoorTags = p.tags.filter(isOutdoor);
+    const indoorTags = p.tags.filter(isIndoor);
+
+    if (weather.condition === "rain") {
+      if (indoorTags.length > 0) {
+        score += 12;
+        reasons.push({ key: "weatherRainIndoor", params: { typeId: indoorTags[0] } });
+      }
+      if (outdoorTags.length > 0) score -= 18;
+    } else if (weather.condition === "snow") {
+      if (p.tags.includes("onsen")) {
+        score += 15;
+        reasons.push({ key: "weatherSnowOnsen" });
+      } else if (indoorTags.length > 0) {
+        score += 8;
+        reasons.push({ key: "weatherSnowIndoor", params: { typeId: indoorTags[0] } });
+      }
+      if (outdoorTags.length > 0) score -= 10;
+    } else if (weather.condition === "clear" || weather.condition === "cloudy") {
+      if (p.tags.includes("viewpoint") || p.tags.includes("trekking") || p.tags.includes("park")) {
+        score += 10;
+        reasons.push({ key: "weatherGoodOutdoor", params: { typeId: p.tags[0] } });
+      }
+    }
+
+    if (weather.tempC <= 5 && p.tags.includes("onsen")) {
+      score += 10;
+      reasons.push({ key: "weatherCold", params: { typeId: "onsen" } });
+    }
+
+    // --- quality signals ---
+    if (p.rating !== undefined) {
+      if (p.rating >= 4.5) {
+        score += 12;
+        reasons.push({ key: "highRated", params: { r: p.rating.toFixed(1) } });
+      } else if (p.rating >= 4) {
+        score += 6;
+      }
+    }
+
+    if (p.openNow === true) {
+      score += 6;
+      reasons.push({ key: "openNow" });
+    } else if (p.openNow === false) {
+      score -= 20;
+    }
+
+    out.push({
+      ...p,
+      score: Math.max(0, Math.min(100, Math.round(score))),
+      distanceKm: Math.round(distanceKm * 10) / 10,
+      travelMin: t,
+      reasons,
+    });
+  }
+
+  out.sort((a, b) => b.score - a.score || a.travelMin - b.travelMin);
+  return out;
+}
