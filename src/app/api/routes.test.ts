@@ -211,6 +211,7 @@ describe("geocodeVariants", () => {
 
   it("falls back to the rest of the address, the zip, and the tail", () => {
     const v = geocodeVariants("Kitaishidocho-1373, Nagano, 380-0826, Japón");
+    expect(v).toContain("Kitaishidocho, Nagano, 380-0826, Japón"); // street + rest
     expect(v).toContain("Nagano, 380-0826, Japón"); // rest
     expect(v).toContain("380-0826, Japan"); // zip
     expect(v).toContain("380-0826, Japón"); // last two

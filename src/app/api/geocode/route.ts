@@ -25,6 +25,14 @@ export function geocodeVariants(q: string): string[] {
     .trim();
   if (stripped && stripped !== q) out.push(stripped);
 
+  // 1b) leading street name + the rest (drops district words that confuse
+  //     Nominatim): "Kitaishidocho, Nagano, 380-0826, Japón"
+  const streetMatch = q.match(/^([A-Za-z\u3040-\u30ff\u4e00-\u9fff]+)[^,]*,\s*(.+)$/);
+  if (streetMatch) {
+    const streetVariant = `${streetMatch[1]}, ${streetMatch[2]}`;
+    if (!out.includes(streetVariant)) out.push(streetVariant);
+  }
+
   // 2) drop the street segment (first comma part): "Nagano, 380-0826, Japón"
   const rest = q.split(",").slice(1).join(",").trim();
   if (rest) out.push(rest);
