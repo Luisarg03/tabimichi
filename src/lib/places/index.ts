@@ -2,7 +2,7 @@ import type { Place } from "../types";
 import { getConfig } from "../settings";
 import { cachePlaces, cachedNear, freshNearby } from "../db";
 import { haversineKm } from "../geo";
-import { resolveTypes, type ExperienceType } from "./taxonomy";
+import { resolveTypes } from "./taxonomy";
 import { googleSearchAll } from "./google";
 import { geoapifySearch } from "./geoapify";
 import { overpassSearch, setOverpassEndpoint } from "./overpass";
@@ -13,8 +13,6 @@ export interface DiscoverOptions {
   radiusKm: number;
   types: string[]; // empty = any
   lang?: string;
-  /** time-simulation mode: keep closed places in candidates (no opennow filter) */
-  simulate?: boolean;
 }
 
 export type SourceNote = "google" | "geoapify" | "overpass" | "cache" | "none";

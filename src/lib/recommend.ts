@@ -66,7 +66,6 @@ export async function recommend(input: RecommendInput): Promise<RecommendResult>
       radiusKm,
       types: input.types,
       lang: input.lang,
-      simulate: simulated !== null,
     }),
   ]);
 

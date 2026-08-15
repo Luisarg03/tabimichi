@@ -49,12 +49,3 @@ export function activeProviders(): LlmProvider[] {
   if (cfg.opencodeGoApiKey) out.push({ ...GO, apiKey: cfg.opencodeGoApiKey });
   return out;
 }
-
-export function defaultProvider(): LlmProvider | null {
-  return activeProviders()[0] ?? null;
-}
-
-/** Whether any LLM provider is configured. */
-export function hasLlm(): boolean {
-  return activeProviders().length > 0;
-}

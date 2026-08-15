@@ -87,6 +87,9 @@ async function narrateWith(
         ],
         maxTokens: 1200,
         temperature: 0.5,
+        // the outer loop already retries — don't nest a second 5xx retry chain
+        // (chatComplete default would make up to 6 HTTP attempts per provider)
+        retries: 1,
       });
       const parsed = extractJson(raw);
       const arr = parsed?.narratives;

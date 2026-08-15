@@ -36,12 +36,6 @@ export function setOverpassEndpoint(endpoint: string): void {
 
 const TIMEOUT_MS = 40000;
 
-function fetchWithTimeout(url: string, init: RequestInit, ms: number): Promise<Response> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), ms);
-  return fetch(url, { ...init, signal: ctrl.signal }).finally(() => clearTimeout(timer));
-}
-
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Build one Overpass QL query covering every tag spec of every type. */
@@ -136,19 +130,16 @@ export async function overpassSearch(
     if (Date.now() - startedAt > TOTAL_BUDGET_MS) break;
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        const res = await fetchWithTimeout(
-          endpoint,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/x-www-form-urlencoded",
-              // Overpass rejects requests without a recognizable User-Agent (406)
-              "User-Agent": "tabi-local/0.1 (personal travel discovery app)",
-            },
-            body: new URLSearchParams({ data: query }),
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            // Overpass rejects requests without a recognizable User-Agent (406)
+            "User-Agent": "tabi-local/0.1 (personal travel discovery app)",
           },
-          TIMEOUT_MS
-        );
+          body: new URLSearchParams({ data: query }),
+          signal: AbortSignal.timeout(TIMEOUT_MS),
+        });
         if (!res.ok) throw new Error(`overpass-http-${res.status}`);
         const data = (await res.json()) as OverpassResponse;
 
