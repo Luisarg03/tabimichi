@@ -134,6 +134,7 @@ export default function HomePage() {
                           place={p}
                           origin={{ lat: location!.lat, lng: location!.lng }}
                           mode={mode}
+                          narratedBy={result.narratedBy}
                           selected={selectedId === p.id}
                           onSelect={setSelectedId}
                         />

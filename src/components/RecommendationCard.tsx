@@ -29,6 +29,7 @@ export default function RecommendationCard({
   place,
   origin,
   mode,
+  narratedBy,
   selected,
   onSelect,
 }: {
@@ -37,6 +38,8 @@ export default function RecommendationCard({
   origin: { lat: number; lng: number };
   /** transport mode used for the recommendation */
   mode: string;
+  /** which LLM layer narrated: "opencode-zen" (free) | "opencode-go" (paid) */
+  narratedBy?: string;
   selected: boolean;
   onSelect: (id: string) => void;
 }) {
@@ -91,8 +94,15 @@ export default function RecommendationCard({
 
       {place.why && (
         <div className="mt-3 rounded-lg border border-sky-100 bg-sky-50 p-3 text-sm text-slate-800">
-          <div className="mb-1 text-xs font-medium uppercase tracking-wide text-sky-500">
-            {t("card.why")}
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-xs font-medium uppercase tracking-wide text-sky-500">
+              {t("card.why")}
+            </span>
+            {narratedBy && (
+              <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-medium text-sky-600">
+                {narratedBy === "opencode-go" ? t("card.narrator.paid") : t("card.narrator.free")}
+              </span>
+            )}
           </div>
           {place.why}
         </div>
