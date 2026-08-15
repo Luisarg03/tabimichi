@@ -171,6 +171,16 @@ describe("/api/logs", () => {
     expect(body.entries).toHaveLength(2);
     expect(body.entries[0].emptyReason).toBe("all_closed"); // newest first
   });
+
+  it("filters entries by traceId", async () => {
+    logEntry({ type: "recommend", traceId: "tr_a", scored: 8 });
+    logEntry({ type: "narrate", traceId: "tr_a", provider: "opencode-go" });
+    logEntry({ type: "recommend", traceId: "tr_b", scored: 0 });
+    const res = await logsGET(new NextRequest("http://localhost/api/logs?tail=20&trace=tr_a"));
+    const body = await res.json();
+    expect(body.entries).toHaveLength(2);
+    expect(body.entries.every((e: { traceId: string }) => e.traceId === "tr_a")).toBe(true);
+  });
 });
 
 describe("/api/feedback", () => {

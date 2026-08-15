@@ -8,7 +8,7 @@ import { getConfig } from "./settings";
 import { googlePlaceDetails } from "./places/google";
 import { isOpenAt, type OpenPeriod } from "./open-hours";
 import { jstHourStamp } from "./jst";
-import { logEntry } from "./logger";
+import { logEntry, newTraceId } from "./logger";
 
 type Candidate = Place & { periods?: OpenPeriod[] };
 
@@ -69,6 +69,8 @@ export async function recommend(input: RecommendInput): Promise<RecommendResult>
     candidates = places.map((p) => enrichedById.get(p.id) ?? { ...p, openNow: null });
   }
 
+  const profile = getProfile();
+  const stats = { closed: 0, tooFar: 0 };
   const scored = scorePlaces(candidates, {
     base: { lat: input.lat, lng: input.lng },
     budgetMin,
@@ -77,13 +79,16 @@ export async function recommend(input: RecommendInput): Promise<RecommendResult>
     mode,
     // Google Places only biases by radius, so hard-drop results beyond it (50% slack)
     maxDistKm: radiusKm * 1.5,
-    profile: getProfile(),
+    profile,
+    stats,
   });
 
   const top = scored.slice(0, 8);
   const emptyReason = emptyReasonFor(candidates, top.length);
 
+  const traceId = newTraceId();
   const summary = {
+    traceId,
     lat: input.lat,
     lng: input.lng,
     budget: input.budget,
@@ -92,8 +97,12 @@ export async function recommend(input: RecommendInput): Promise<RecommendResult>
     sim: simulated !== null,
     source,
     candidates: candidates.length,
+    filters: { closed: stats.closed, tooFar: stats.tooFar },
     scored: top.length,
     emptyReason,
+    weather: { condition: weather.condition, tempC: weather.tempC, precipMm: weather.precipMm },
+    profile,
+    radiusKm,
     ms: Math.round(performance.now() - startedAt),
   };
   console.log("[tabi] recommend", JSON.stringify(summary));
@@ -107,6 +116,7 @@ export async function recommend(input: RecommendInput): Promise<RecommendResult>
       distanceKm: p.distanceKm,
       travelMin: p.travelMin,
       openNow: p.openNow,
+      reasons: p.reasons.map((r) => r.key),
     })),
   });
 
@@ -118,6 +128,7 @@ export async function recommend(input: RecommendInput): Promise<RecommendResult>
     sourceNote: source,
     narrated: false,
     emptyReason,
+    traceId,
   };
 }
 

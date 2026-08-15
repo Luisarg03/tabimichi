@@ -124,11 +124,21 @@ npm run test:e2e  # smoke against a LIVE server (npm start first)
 - **E2E** (`scripts/smoke-e2e.mjs`): real server, real network — recommend
   (real + simulated hours), geocode, photo proxy, feedback, narrate.
 
-Every recommend/narrate call is **persisted** as JSON Lines in
-`data/logs/requests.jsonl` (coords, budget, mode, simulation flag, source,
-candidates/scored counts, empty reason, latency, top results) and API errors
-are logged with stack traces. The console line `[tabi] recommend` mirrors the
-short form, and `GET /api/logs?tail=N` returns the recent entries.
+Every request is **traced end-to-end** and persisted as JSON Lines in
+`data/logs/requests.jsonl`. Each recommend generates a `traceId` that
+correlates all its phases (recommend → narrate → photos), and every entry
+carries the full picture for development evaluation:
+
+- inputs (coords, budget, types, mode, simulation flag)
+- discovery source + candidate count
+- **filter breakdown** (how many candidates were dropped as closed / too far)
+- scored results with scores, distances and reason keys
+- weather used, the user's profile weights at that moment, latency
+- narrate outcome (provider tier, narrative count, summary) and photo
+  enrichment, linked by the same traceId
+
+`GET /api/logs?tail=N` returns recent entries; `&trace=tr_…` filters one
+request's full journey. API errors log with stack traces.
 
 The **guide is on-demand**: after a discovery the cards show immediately and
 a button ("Preguntale al guía") triggers the LLM summary + per-place "why";

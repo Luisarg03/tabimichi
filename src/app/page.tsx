@@ -41,6 +41,7 @@ export default function HomePage() {
     types: string[];
     mode: string;
     now?: string;
+    traceId?: string;
   } | null>(null);
   const lastPlacesRef = useRef<
     Array<{ id: string; name: string; distanceKm: number; travelMin: number; rating?: number; tags: string[] }> | null
@@ -126,7 +127,7 @@ export default function HomePage() {
             .slice(0, 6)
             .map((p) => p.id)
             .join(",");
-          fetch(`/api/photos?ids=${encodeURIComponent(topIds)}`)
+          fetch(`/api/photos?ids=${encodeURIComponent(topIds)}${data.traceId ? `&trace=${data.traceId}` : ""}`)
             .then((r) => (r.ok ? r.json() : null))
             .then((d) => {
               const map = d?.photos as Record<string, string[]> | undefined;
@@ -156,6 +157,7 @@ export default function HomePage() {
             types: payload.types,
             mode: payload.mode,
             now,
+            traceId: data.traceId,
           };
           lastPlacesRef.current = data.places.map((p) => ({
             id: p.id,

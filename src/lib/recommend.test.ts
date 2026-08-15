@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { emptyReasonFor, recommend } from "@/lib/recommend";
 import { clearWeatherCache } from "@/lib/weather";
+import { readLogTail } from "@/lib/logger";
 import { mockFetch, jsonResponse, urlContains, isolatedStore } from "@/test-utils/helpers";
 
 const KEY = "AIza-test";
@@ -92,6 +93,17 @@ describe("recommend — pipeline outcomes", () => {
     const r = await recommend({ lat: 36.65, lng: 138.19, budget: "afternoon", types: ["park"], mode: "walking" });
     expect(r.places.map((p) => p.id)).toEqual(["g_p1"]);
     expect(r.emptyReason).toBeUndefined();
+    expect(r.traceId).toMatch(/^tr_/);
+
+    // the persisted log carries the full trace: filters breakdown + reasons
+    const entry = readLogTail(1)[0] as Record<string, unknown>;
+    expect(entry.type).toBe("recommend");
+    expect(entry.traceId).toBe(r.traceId);
+    expect((entry.filters as { closed: number }).closed).toBe(1); // p2 closed
+    expect(entry.candidates).toBe(2);
+    expect(entry.scored).toBe(1);
+    const top = entry.top as Array<{ name: string; reasons: string[] }>;
+    expect(top[0].reasons).toContain("distanceGood");
   });
 
   it("reports all_closed when simulation closes every candidate", async () => {

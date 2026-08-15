@@ -125,4 +125,6 @@ export interface RecommendResult {
   summary?: string;
   /** why places came back empty, when they did */
   emptyReason?: EmptyReason;
+  /** dev trace id correlating this request with its narrate/photos phases */
+  traceId?: string;
 }
