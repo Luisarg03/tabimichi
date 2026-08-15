@@ -88,6 +88,7 @@ const es: Dict = {
   },
   status: {
     discovering: "Buscando lugares…",
+    guideThinking: "El guía está escribiendo el resumen…",
     error: "No se pudo obtener datos. Probá de nuevo.",
     empty: "No encontramos lugares con esos filtros. Probá otra zona o tipo.",
     geocodeError: "No encontramos ese lugar.",
@@ -196,6 +197,7 @@ const en: Dict = {
   },
   status: {
     discovering: "Looking for places…",
+    guideThinking: "The guide is writing the summary…",
     error: "Could not fetch data. Try again.",
     empty: "No places found with these filters. Try another area or type.",
     geocodeError: "Could not find that place.",

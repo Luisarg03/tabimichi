@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid json" }, { status: 400 });
   }
 
-  const { lat, lng, budget, types = [], radiusKm, mode, narrate, lang } = body ?? {};
+  const { lat, lng, budget, types = [], radiusKm, mode, lang } = body ?? {};
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
     return NextResponse.json({ error: "lat/lng required" }, { status: 400 });
   }
@@ -31,7 +31,6 @@ export async function POST(req: NextRequest) {
       types,
       radiusKm,
       mode,
-      narrate: narrate === true,
       lang: lang === "en" ? "en" : "es",
     });
     return NextResponse.json(result);

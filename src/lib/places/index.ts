@@ -1,6 +1,6 @@
 import type { Place } from "../types";
 import { getConfig } from "../settings";
-import { cachePlaces, cachedNear } from "../db";
+import { cachePlaces, cachedNear, freshNearby } from "../db";
 import { resolveTypes, type ExperienceType } from "./taxonomy";
 import { googleSearch } from "./google";
 import { geoapifySearch } from "./geoapify";
@@ -45,6 +45,13 @@ export async function discover(opts: DiscoverOptions): Promise<{ places: Place[]
   let source: SourceNote = "none";
 
   if (config.overpassEndpoint) setOverpassEndpoint(config.overpassEndpoint);
+
+  // fast path: reuse a fresh local cache covering every requested type
+  const typeIds = experienceTypes.map((t) => t.id);
+  const fresh = freshNearby(lat, lng, radiusKm, typeIds, 15 * 60 * 1000);
+  if (fresh && fresh.length > 0) {
+    return { places: fresh, source: "cache" };
+  }
 
   if (config.googlePlacesApiKey) {
     try {
