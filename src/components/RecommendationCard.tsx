@@ -1,8 +1,10 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import type { Reason, ScoredPlace } from "@/lib/types";
 import { EXPERIENCE_TYPE_MAP } from "@/lib/places/taxonomy";
 import { useI18n } from "@/lib/i18n";
+import { fmtCount } from "@/lib/format";
 
 function renderReason(r: Reason, t: ReturnType<typeof useI18n>["t"]): string {
   const params = { ...r.params };
@@ -25,10 +27,8 @@ const MODE_EMOJI: Record<string, string> = {
   car: "🚗",
 };
 
-function fmtCount(n: number): string {
-  if (n >= 10000) return `${Math.round(n / 1000)}k`;
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
-  return String(n);
+function photoUrl(ref: string, id: string): string {
+  return `/api/photo?ref=${encodeURIComponent(ref)}&id=${encodeURIComponent(id)}`;
 }
 
 export default function RecommendationCard({
@@ -60,6 +60,19 @@ export default function RecommendationCard({
     `&origin=${origin.lat.toFixed(6)},${origin.lng.toFixed(6)}` +
     `&destination=${place.lat.toFixed(6)},${place.lng.toFixed(6)}`;
 
+  const photoRefs =
+    place.photoRefs && place.photoRefs.length > 0
+      ? place.photoRefs
+      : place.photoRef
+        ? [place.photoRef]
+        : [];
+  const [activeIdx, setActiveIdx] = useState(0);
+
+  // reset the gallery when the card shows a different place
+  useEffect(() => {
+    setActiveIdx(0);
+  }, [place.id]);
+
   return (
     <button
       onClick={() => onSelect(place.id)}
@@ -69,15 +82,32 @@ export default function RecommendationCard({
           : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
       }`}
     >
-      {place.photoRef && (
-        <div className="relative -mx-4 -mt-4 mb-3 h-36 overflow-hidden bg-slate-100">
+      {photoRefs.length > 0 && (
+        <div className="relative -mx-4 -mt-4 mb-3 overflow-hidden bg-slate-100">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={`/api/photo?ref=${encodeURIComponent(place.photoRef)}&id=${encodeURIComponent(place.id)}`}
+            src={photoUrl(photoRefs[activeIdx]!, place.id)}
             alt={place.name}
             loading="lazy"
-            className="h-full w-full object-cover"
+            className="h-36 w-full object-cover"
           />
+          {photoRefs.length > 1 && (
+            <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-1.5">
+              {photoRefs.map((_, i) => (
+                <span
+                  key={i}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveIdx(i);
+                  }}
+                  className={`h-1.5 rounded-full transition-all ${
+                    i === activeIdx ? "w-5 bg-white" : "w-1.5 bg-white/60"
+                  }`}
+                  style={{ cursor: "pointer" }}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
       <div className="flex items-start justify-between gap-3">
