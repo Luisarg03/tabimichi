@@ -136,6 +136,20 @@ interface DetailsResponse {
   result?: { photos?: Array<{ photo_reference: string }> };
 }
 
+/** Google photo bytes (follows the CDN redirect). Shared by proxy + enrichment. */
+export async function googlePhotoBytes(
+  apiKey: string,
+  ref: string,
+  maxwidth = 600
+): Promise<Buffer> {
+  const url =
+    "https://maps.googleapis.com/maps/api/place/photo?" +
+    new URLSearchParams({ maxwidth: String(maxwidth), photo_reference: ref, key: apiKey });
+  const res = await fetch(url, { signal: AbortSignal.timeout(20000) });
+  if (!res.ok) throw new Error(`photo-http-${res.status}`);
+  return Buffer.from(await res.arrayBuffer());
+}
+
 /**
  * Place Details photos: searches return only ~1 photo; details returns up to 10.
  * Used by the async enrichment phase (/api/photos), one call per place.

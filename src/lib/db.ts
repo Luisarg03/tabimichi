@@ -44,6 +44,12 @@ function getDb(): DatabaseSync {
       tag TEXT PRIMARY KEY,
       weight INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS photo_hashes (
+      place_id TEXT NOT NULL,
+      ref TEXT NOT NULL,
+      hash TEXT NOT NULL,
+      PRIMARY KEY (place_id, ref)
+    );
   `);
   // lightweight migrations: popularity + gallery columns on existing databases
   try {
@@ -56,7 +62,43 @@ function getDb(): DatabaseSync {
   } catch {
     // column already exists
   }
+  try {
+    db.exec("ALTER TABLE places ADD COLUMN photos_verified INTEGER DEFAULT 0");
+  } catch {
+    // column already exists
+  }
   return db;
+}
+
+/** Photo dedupe bookkeeping (hashes of already-seen images per place). */
+export function photoHashesFor(placeId: string): Set<string> {
+  const d = getDb();
+  const rows = d
+    .prepare("SELECT hash FROM photo_hashes WHERE place_id = ?")
+    .all(placeId) as Array<{ hash: string }>;
+  return new Set(rows.map((r) => r.hash));
+}
+
+export function rememberPhotoHash(placeId: string, ref: string, hash: string): void {
+  const d = getDb();
+  d.prepare("INSERT OR REPLACE INTO photo_hashes (place_id, ref, hash) VALUES (?, ?, ?)").run(
+    placeId,
+    ref,
+    hash
+  );
+}
+
+export function photosVerified(id: string): boolean {
+  const d = getDb();
+  const r = d.prepare("SELECT photos_verified FROM places WHERE id = ?").get(id) as
+    | { photos_verified: number }
+    | undefined;
+  return r?.photos_verified === 1;
+}
+
+export function setPhotosVerified(id: string, verified: boolean): void {
+  const d = getDb();
+  d.prepare("UPDATE places SET photos_verified = ? WHERE id = ?").run(verified ? 1 : 0, id);
 }
 
 /** Map a SQLite row to a Place. */
