@@ -101,6 +101,33 @@ gracefully with a clear "data unavailable" message.
 - **node:sqlite** — zero-dependency local cache
 - **i18n** ES / EN (built-in dictionaries)
 
+## Testing
+
+Three layers, all hermetic except the last one:
+
+```bash
+npm test          # unit + integration (Vitest, fetch fully mocked, temp stores)
+npm test:watch    # TDD mode
+npm run test:e2e  # smoke against a LIVE server (npm start first)
+```
+
+- **Unit** (`src/lib/*.test.ts`): geo (modes/budgets), opening-hours (same-day,
+  overnight, 24h), JST simulation, weather classification + hour override,
+  scoring (travel bands, weather×mode, Bayesian rating, review volume, profile
+  affinity, hard filters), LLM (retry on 5xx, fail-fast on 4xx, provider
+  fallback, JSON parsing), place sources (Google/Geoapify/Overpass parsing +
+  the full fallback chain google → geoapify → overpass → cache), DB (upsert,
+  freshness, feedback clamping).
+- **Integration** (`src/app/api/routes.test.ts`): every API route exercised
+  with mocked fetch — recommend (incl. time-simulation filtering), feedback,
+  settings, geocode, photo proxy (disk cache), photo dedupe.
+- **E2E** (`scripts/smoke-e2e.mjs`): real server, real network — recommend
+  (real + simulated hours), geocode, photo proxy, feedback, narrate.
+
+Testability hooks: `TABI_DATA_DIR` env / `setDataDir()` / `setConfigPath()` /
+`setPhotoDir()` / `clearWeatherCache()` — tests run in temp dirs and never
+touch your real data or API keys.
+
 ## Roadmap
 
 | Milestone | Scope |

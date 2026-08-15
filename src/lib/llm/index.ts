@@ -23,7 +23,7 @@ const MODE_LABEL: Record<string, [string, string]> = {
   car: ["en auto", "by car"],
 };
 
-function extractJson(text: string): {
+export function extractJson(text: string): {
   summary?: string;
   narratives?: Array<{ id?: string; why?: string }>;
 } | null {
