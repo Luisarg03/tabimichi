@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getWeather } from "@/lib/weather";
+import { getWeather, weatherAt } from "@/lib/weather";
 import { narrateTop } from "@/lib/llm";
+import { jstHourStamp } from "@/lib/jst";
 import type { NarratePlaceInput, NarrateResponse } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -12,6 +13,8 @@ interface NarrateBody {
   mode: "walking" | "transit" | "car";
   types: string[];
   lang?: string;
+  /** ISO instant — the narration is evaluated at this simulated time */
+  now?: string;
   places: NarratePlaceInput[];
 }
 
@@ -27,7 +30,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid json" }, { status: 400 });
   }
 
-  const { lat, lng, budget, mode = "transit", types = [], lang = "es", places = [] } = body ?? {};
+  const { lat, lng, budget, mode = "transit", types = [], lang = "es", now, places = [] } = body ?? {};
   if (!Number.isFinite(lat) || !Number.isFinite(lng) || !Array.isArray(places) || places.length === 0) {
     return NextResponse.json({ error: "lat/lng + places required" }, { status: 400 });
   }
@@ -38,7 +41,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid mode" }, { status: 400 });
   }
 
-  const weather = await getWeather(lat, lng);
+  let weather = await getWeather(lat, lng);
+  const simulated = now ? new Date(now) : null;
+  if (simulated) weather = weatherAt(weather, jstHourStamp(simulated));
 
   const scored = places.map((p) => ({
     id: p.id,

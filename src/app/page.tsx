@@ -10,6 +10,7 @@ import LocaleToggle from "@/components/LocaleToggle";
 import { useI18n } from "@/lib/i18n";
 import type { PlaceProfile, RecommendResult, ScoredPlace } from "@/lib/types";
 import { EXPERIENCE_TYPE_MAP } from "@/lib/places/taxonomy";
+import { SIM_PRESETS, jstSimulatedDate } from "@/lib/jst";
 
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
 
@@ -30,6 +31,8 @@ export default function HomePage() {
   const [guideState, setGuideState] = useState<"idle" | "thinking" | "done">("idle");
   const [votes, setVotes] = useState<Record<string, "like" | "dislike">>({});
   const [profile, setProfile] = useState<PlaceProfile | null>(null);
+  /** time simulation: null = real now; else a SIM_PRESETS id (JST hour) */
+  const [simPreset, setSimPreset] = useState<string | null>(null);
 
   useEffect(() => {
     try {
@@ -78,6 +81,13 @@ export default function HomePage() {
           // ignore
         }
 
+        // time simulation: convert the preset to an ISO instant (JST hour)
+        let now: string | undefined;
+        if (simPreset) {
+          const preset = SIM_PRESETS.find((p) => p.id === simPreset);
+          if (preset) now = jstSimulatedDate(preset.hour).toISOString();
+        }
+
         // phase 1 (fast): rules pipeline — weather, discovery, scoring
         const res = await fetch("/api/recommend", {
           method: "POST",
@@ -89,6 +99,7 @@ export default function HomePage() {
             types: payload.types,
             mode: payload.mode,
             lang: locale,
+            now,
           }),
         });
         if (!res.ok) throw new Error("bad response");
@@ -139,6 +150,7 @@ export default function HomePage() {
                 mode: payload.mode,
                 types: payload.types,
                 lang: locale,
+                now,
                 places: data.places.map((p) => ({
                   id: p.id,
                   name: p.name,
@@ -180,11 +192,46 @@ export default function HomePage() {
         setLoading(false);
       }
     },
-    [locale]
+    [locale, simPreset]
   );
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
+      {/* time simulation (dev tool): evaluate results at different JST hours */}
+      <div className="mb-4 flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
+        <span className="px-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          🕐 {t("sim.label")}
+        </span>
+        <button
+          onClick={() => setSimPreset(null)}
+          className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+            simPreset === null
+              ? "bg-slate-900 text-white"
+              : "text-slate-600 hover:bg-slate-100"
+          }`}
+        >
+          {t("sim.now")}
+        </button>
+        {SIM_PRESETS.map((p) => (
+          <button
+            key={p.id}
+            onClick={() => setSimPreset(p.id)}
+            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+              simPreset === p.id
+                ? "bg-sky-600 text-white"
+                : "text-slate-600 hover:bg-slate-100"
+            }`}
+          >
+            {t(`sim.${p.labelKey}`)}
+          </button>
+        ))}
+        {simPreset && (
+          <span className="ml-auto text-xs text-slate-400">
+            {t("sim.active")}: {SIM_PRESETS.find((p) => p.id === simPreset)?.hour}:00 JST
+          </span>
+        )}
+      </div>
+
       <header className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <span className="text-2xl">🗾</span>

@@ -47,6 +47,7 @@ export interface WeatherInfo {
   isNight: boolean;
   hourly: Array<{
     time: string;
+    tempC: number;
     precipProb: number;
     precipMm: number;
     snowCm: number;
@@ -84,6 +85,8 @@ export interface RecommendInput {
   mode?: TransportMode;
   /** UI language for discovery: "es" | "en" */
   lang?: string;
+  /** ISO instant — when set, the pipeline simulates this time (JST evaluation) */
+  now?: string;
 }
 
 /** Input for the async LLM narrative phase (/api/narrate). */

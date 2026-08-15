@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid json" }, { status: 400 });
   }
 
-  const { lat, lng, budget, types = [], radiusKm, mode, lang } = body ?? {};
+  const { lat, lng, budget, types = [], radiusKm, mode, lang, now } = body ?? {};
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
     return NextResponse.json({ error: "lat/lng required" }, { status: 400 });
   }
@@ -21,6 +21,9 @@ export async function POST(req: NextRequest) {
   }
   if (mode !== undefined && !["walking", "transit", "car"].includes(mode)) {
     return NextResponse.json({ error: "invalid mode" }, { status: 400 });
+  }
+  if (now !== undefined && Number.isNaN(Date.parse(now))) {
+    return NextResponse.json({ error: "invalid now" }, { status: 400 });
   }
 
   try {
@@ -32,6 +35,7 @@ export async function POST(req: NextRequest) {
       radiusKm,
       mode,
       lang: lang === "en" ? "en" : "es",
+      now,
     });
     return NextResponse.json(result);
   } catch (e) {

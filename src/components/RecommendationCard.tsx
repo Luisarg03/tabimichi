@@ -55,10 +55,13 @@ export default function RecommendationCard({
   onFeedback?: (placeId: string, liked: boolean, tags?: string[]) => void;
 }) {
   const { t } = useI18n();
+  const travelMode = mode === "car" ? "driving" : mode; // walking | transit | driving
   const dirsUrl =
     `https://www.google.com/maps/dir/?api=1` +
     `&origin=${origin.lat.toFixed(6)},${origin.lng.toFixed(6)}` +
-    `&destination=${place.lat.toFixed(6)},${place.lng.toFixed(6)}`;
+    `&destination=${place.lat.toFixed(6)},${place.lng.toFixed(6)}` +
+    `&travelmode=${travelMode}`;
+  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${place.lat.toFixed(6)},${place.lng.toFixed(6)}`;
 
   const photoRefs =
     place.photoRefs && place.photoRefs.length > 0
@@ -218,15 +221,26 @@ export default function RecommendationCard({
         <span className="text-xs text-slate-400">
           {place.source === "google" ? "Google" : "OpenStreetMap"}
         </span>
-        <a
-          href={dirsUrl}
-          target="_blank"
-          rel="noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700"
-        >
-          {t("card.openInMaps")} ↗
-        </a>
+        <div className="flex items-center gap-1.5">
+          <a
+            href={mapsUrl}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            🗺️ {t("card.viewInMaps")}
+          </a>
+          <a
+            href={dirsUrl}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700"
+          >
+            {t("card.openInMaps")} ↗
+          </a>
+        </div>
       </div>
 
       {/* M3: 👍/👎 feedback — learns the user's tastes */}

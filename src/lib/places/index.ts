@@ -12,6 +12,8 @@ export interface DiscoverOptions {
   radiusKm: number;
   types: string[]; // empty = any
   lang?: string;
+  /** time-simulation mode: keep closed places in candidates (no opennow filter) */
+  simulate?: boolean;
 }
 
 export type SourceNote = "google" | "geoapify" | "overpass" | "cache" | "none";
@@ -37,7 +39,7 @@ function dedupe(places: Place[]): Place[] {
  * The first source that returns places wins. Results are cached.
  */
 export async function discover(opts: DiscoverOptions): Promise<{ places: Place[]; source: SourceNote }> {
-  const { lat, lng, radiusKm, types, lang = "es" } = opts;
+  const { lat, lng, radiusKm, types, lang = "es", simulate = false } = opts;
   const radiusM = Math.round(radiusKm * 1000);
   const experienceTypes = resolveTypes(types);
   const config = getConfig();
@@ -59,7 +61,7 @@ export async function discover(opts: DiscoverOptions): Promise<{ places: Place[]
     try {
       const results = await Promise.allSettled(
         experienceTypes.map((t: ExperienceType) =>
-          googleSearch(config.googlePlacesApiKey!, t, lat, lng, radiusM, lang)
+          googleSearch(config.googlePlacesApiKey!, t, lat, lng, radiusM, lang, simulate)
         )
       );
       places = results
