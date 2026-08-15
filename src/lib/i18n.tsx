@@ -72,6 +72,7 @@ const es: Dict = {
     openInMaps: "Cómo llegar",
     reasonsTitle: "Por qué ahora",
     why: "El guía dice",
+    summaryTitle: "Resumen del día",
     narrator: { free: "capa gratuita", paid: "capa paga" },
   },
   reasons: {
@@ -179,6 +180,7 @@ const en: Dict = {
     openInMaps: "Directions",
     reasonsTitle: "Why now",
     why: "The guide says",
+    summaryTitle: "Day summary",
     narrator: { free: "free tier", paid: "paid tier" },
   },
   reasons: {

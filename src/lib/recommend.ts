@@ -32,9 +32,10 @@ export async function recommend(input: RecommendInput): Promise<RecommendResult>
   const top = scored.slice(0, 8);
   let narrated = false;
   let narratedBy: string | undefined;
+  let summary: string | undefined;
 
   if (input.narrate && top.length > 0) {
-    const { narratives, provider } = await narrateTop({
+    const { narratives, summary: daySummary, provider } = await narrateTop({
       places: top,
       weather,
       budget: input.budget,
@@ -42,9 +43,10 @@ export async function recommend(input: RecommendInput): Promise<RecommendResult>
       lang: input.lang ?? "es",
       types: input.types,
     });
-    if (narratives.size > 0) {
+    if (narratives.size > 0 || daySummary) {
       narrated = true;
       narratedBy = provider;
+      summary = daySummary;
       for (const p of top) {
         const why = narratives.get(p.id);
         if (why) p.why = why;
@@ -60,5 +62,6 @@ export async function recommend(input: RecommendInput): Promise<RecommendResult>
     sourceNote: source,
     narrated,
     narratedBy,
+    summary,
   };
 }
