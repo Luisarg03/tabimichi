@@ -1,6 +1,7 @@
 import type { Place } from "../types";
 import { getConfig } from "../settings";
 import { cachePlaces, cachedNear, freshNearby } from "../db";
+import { haversineKm } from "../geo";
 import { resolveTypes, type ExperienceType } from "./taxonomy";
 import { googleSearch } from "./google";
 import { geoapifySearch } from "./geoapify";
@@ -99,6 +100,10 @@ export async function discover(opts: DiscoverOptions): Promise<{ places: Place[]
   }
 
   const deduped = dedupe(places);
-  if (deduped.length > 0) cachePlaces(deduped);
-  return { places: deduped, source };
+  // Google Text Search can leak world-famous places outside the radius even
+  // with strictbounds — hard-drop anything beyond 1.5× the discovery radius
+  // so global results never become candidates (or pollute the cache)
+  const bounded = deduped.filter((p) => haversineKm({ lat, lng }, p) <= radiusKm * 1.5);
+  if (bounded.length > 0) cachePlaces(bounded);
+  return { places: bounded, source };
 }
