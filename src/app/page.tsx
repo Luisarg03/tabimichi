@@ -214,198 +214,194 @@ export default function HomePage() {
     }
   }, [locale]);
 
+  // keep the selected card visible inside the floating results column
+  useEffect(() => {
+    if (!selectedId) return;
+    const el = document.getElementById(`card-${selectedId}`);
+    el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [selectedId]);
+
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6">
-      {/* time simulation (dev tool): evaluate results at different JST hours */}
-      <div className="mb-4 flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
-        <span className="px-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-          🕐 {t("sim.label")}
-        </span>
-        <button
-          onClick={() => setSimPreset(null)}
-          className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-            simPreset === null
-              ? "bg-slate-900 text-white"
-              : "text-slate-600 hover:bg-slate-100"
-          }`}
-        >
-          {t("sim.now")}
-        </button>
-        {SIM_PRESETS.map((p) => (
-          <button
-            key={p.id}
-            onClick={() => setSimPreset(p.id)}
-            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-              simPreset === p.id
-                ? "bg-sky-600 text-white"
-                : "text-slate-600 hover:bg-slate-100"
-            }`}
-          >
-            {t(`sim.${p.labelKey}`)}
-          </button>
-        ))}
-        {simPreset && (
-          <span className="ml-auto text-xs text-slate-400">
-            {t("sim.active")}: {SIM_PRESETS.find((p) => p.id === simPreset)?.hour}:00 JST
-          </span>
+    <div className="relative h-dvh w-full overflow-hidden">
+      {/* full-screen map background */}
+      <div className="absolute inset-0 z-0">
+        {location ? (
+          <MapView
+            center={{ lat: location.lat, lng: location.lng }}
+            places={result?.places ?? []}
+            selectedId={selectedId}
+            userApproximate={location.gps !== true}
+            onSelect={setSelectedId}
+          />
+        ) : (
+          <div className="flex h-full items-center justify-center bg-slate-100 text-sm text-slate-400">
+            {t("map.nearby")}
+          </div>
         )}
       </div>
 
-      <header className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <span className="text-2xl">🗾</span>
-          <div>
-            <h1 className="text-xl font-bold text-slate-900">
-              {t("app.name")} <span className="font-normal text-slate-400">旅</span>
-            </h1>
-            <p className="text-xs text-slate-500">{t("app.tagline")}</p>
+      {/* floating UI over the map (Google-Maps style) */}
+      <div className="pointer-events-none absolute inset-0 z-10">
+        <div className="pointer-events-auto flex h-full flex-col gap-2 p-2 sm:p-3">
+          {/* header row: brand + sim tabs + locale/settings */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white/95 px-3 py-2 shadow-sm backdrop-blur">
+              <span className="text-lg">🗾</span>
+              <span className="text-base font-bold text-slate-900">
+                {t("app.name")} <span className="font-normal text-slate-400">旅</span>
+              </span>
+            </div>
+            <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white/95 px-1.5 py-1 shadow-sm backdrop-blur">
+              <button
+                onClick={() => setSimPreset(null)}
+                title={t("sim.now")}
+                className={`rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
+                  simPreset === null ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                {t("sim.now")}
+              </button>
+              {SIM_PRESETS.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => setSimPreset(p.id)}
+                  className={`rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
+                    simPreset === p.id ? "bg-sky-600 text-white" : "text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  {t(`sim.${p.labelKey}`)}
+                </button>
+              ))}
+            </div>
+            <div className="ml-auto flex items-center gap-1.5">
+              <LocaleToggle />
+              <Link
+                href="/settings"
+                className="rounded-lg border border-slate-300 bg-white/95 px-2.5 py-1.5 text-sm font-medium text-slate-700 shadow-sm backdrop-blur hover:bg-slate-50"
+                title={t("nav.settings")}
+              >
+                ⚙️
+              </Link>
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <LocaleToggle />
-          <Link
-            href="/settings"
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            ⚙️ {t("nav.settings")}
-          </Link>
-        </div>
-      </header>
 
-      <main className="mt-6 grid gap-6 lg:grid-cols-5">
-        {/* left: panel + weather + cards */}
-        <div className="space-y-4 lg:col-span-2">
-          <DayPanel initialLocation={location} loading={loading} onDiscover={handleDiscover} />
+          {/* left column: search + results, floating over the map */}
+          <div className="flex h-[calc(100%-3.5rem)] w-full flex-col gap-2 md:w-[27rem]">
+            <DayPanel initialLocation={location} loading={loading} onDiscover={handleDiscover} />
 
-          {loading && (
-            <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
-              <span className="inline-block animate-pulse">⏳ {t("status.discovering")}</span>
-            </div>
-          )}
-
-          {error && (
-            <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
-              {t("status.error")}
-            </div>
-          )}
-
-          {result && !loading && (
-            <>
-              <WeatherCard weather={result.weather} />
-              {result.sourceNote === "none" ? (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-                  {t(`panel.source.${result.sourceNote}`)}
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+              {loading && (
+                <div className="rounded-xl border border-slate-200 bg-white/95 p-4 text-center text-sm text-slate-500 shadow-sm">
+                  <span className="inline-block animate-pulse">⏳ {t("status.discovering")}</span>
                 </div>
-              ) : (
+              )}
+
+              {error && (
+                <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 shadow-sm">
+                  {t("status.error")}
+                </div>
+              )}
+
+              {result && !loading && (
                 <>
-                  <div className="text-xs text-slate-400">{t(`panel.source.${result.sourceNote}`)}</div>
-                  {result.places.length > 0 && (
-                    <button
-                      onClick={narrateNow}
-                      disabled={guideState === "thinking"}
-                      className="w-full rounded-xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-sm font-medium text-sky-700 transition-colors hover:bg-sky-100 disabled:opacity-50"
-                    >
-                      {guideState === "thinking"
-                        ? t("status.guideThinking")
-                        : result.narrated
-                          ? t("card.guideRegenerate")
-                          : t("card.guideButton")}
-                    </button>
-                  )}
-                  {guideState === "thinking" && !result.summary && (
-                    <div className="rounded-xl border border-sky-100 bg-sky-50 p-4 text-sm text-slate-500">
-                      <span className="inline-block animate-pulse">🧠 {t("status.guideThinking")}</span>
-                    </div>
-                  )}
-                  {result.summary && (
-                    <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-slate-800">
-                      <div className="mb-1 flex items-center justify-between">
-                        <span className="text-xs font-medium uppercase tracking-wide text-sky-500">
-                          {t("card.summaryTitle")}
-                        </span>
-                        {result.narratedBy && (
-                          <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-medium text-sky-600">
-                            {result.narratedBy === "opencode-go" ? t("card.narrator.paid") : t("card.narrator.free")}
-                          </span>
-                        )}
-                      </div>
-                      {result.summary}
-                    </div>
-                  )}
-                  {result.places.length === 0 ? (
-                    <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
-                      {result.emptyReason === "all_closed"
-                        ? t("status.emptyClosed")
-                        : result.emptyReason === "too_far"
-                          ? t("status.emptyFar")
-                          : t("status.empty")}
+                  <WeatherCard weather={result.weather} />
+                  {result.sourceNote === "none" ? (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 shadow-sm">
+                      {t(`panel.source.${result.sourceNote}`)}
                     </div>
                   ) : (
                     <>
-                      {profile && Object.keys(profile).some((k) => profile[k] !== 0) && (
-                        <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-2.5 text-xs text-slate-600">
-                          <span className="font-medium text-emerald-700">{t("profile.title")}: </span>
-                          {Object.entries(profile)
-                            .filter(([, w]) => w !== 0)
-                            .map(([tag, w]) => (
-                              <span key={tag} className="mr-2 inline-flex items-center gap-1">
-                                {EXPERIENCE_TYPE_MAP[tag]?.emoji ?? ""}
-                                {t(`panel.type.${tag}`)}
-                                <span className={w > 0 ? "text-emerald-600" : "text-rose-500"}>
-                                  {w > 0 ? `+${w}` : w}
-                                </span>
-                              </span>
-                            ))}
+                      <div className="text-xs text-slate-500">{t(`panel.source.${result.sourceNote}`)}</div>
+                      {result.places.length > 0 && (
+                        <button
+                          onClick={narrateNow}
+                          disabled={guideState === "thinking"}
+                          className="w-full rounded-xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-sm font-medium text-sky-700 shadow-sm transition-colors hover:bg-sky-100 disabled:opacity-50"
+                        >
+                          {guideState === "thinking"
+                            ? t("status.guideThinking")
+                            : result.narrated
+                              ? t("card.guideRegenerate")
+                              : t("card.guideButton")}
+                        </button>
+                      )}
+                      {guideState === "thinking" && !result.summary && (
+                        <div className="rounded-xl border border-sky-100 bg-sky-50 p-4 text-sm text-slate-500 shadow-sm">
+                          <span className="inline-block animate-pulse">🧠 {t("status.guideThinking")}</span>
                         </div>
                       )}
-                      <div className="space-y-3">
-                        {result.places.map((p: ScoredPlace) => (
-                          <RecommendationCard
-                            key={p.id}
-                            place={p}
-                            origin={{ lat: location!.lat, lng: location!.lng }}
-                            mode={mode}
-                            narratedBy={result.narratedBy}
-                            selected={selectedId === p.id}
-                            voted={votes[p.id] ?? null}
-                            onSelect={setSelectedId}
-                            onFeedback={handleFeedback}
-                          />
-                        ))}
-                      </div>
+                      {result.summary && (
+                        <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-slate-800 shadow-sm">
+                          <div className="mb-1 flex items-center justify-between">
+                            <span className="text-xs font-medium uppercase tracking-wide text-sky-500">
+                              {t("card.summaryTitle")}
+                            </span>
+                            {result.narratedBy && (
+                              <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-medium text-sky-600">
+                                {result.narratedBy === "opencode-go" ? t("card.narrator.paid") : t("card.narrator.free")}
+                              </span>
+                            )}
+                          </div>
+                          {result.summary}
+                        </div>
+                      )}
+                      {result.places.length === 0 ? (
+                        <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500 shadow-sm">
+                          {result.emptyReason === "all_closed"
+                            ? t("status.emptyClosed")
+                            : result.emptyReason === "too_far"
+                              ? t("status.emptyFar")
+                              : t("status.empty")}
+                        </div>
+                      ) : (
+                        <>
+                          {profile && Object.keys(profile).some((k) => profile[k] !== 0) && (
+                            <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-2.5 text-xs text-slate-600 shadow-sm">
+                              <span className="font-medium text-emerald-700">{t("profile.title")}: </span>
+                              {Object.entries(profile)
+                                .filter(([, w]) => w !== 0)
+                                .map(([tag, w]) => (
+                                  <span key={tag} className="mr-2 inline-flex items-center gap-1">
+                                    {EXPERIENCE_TYPE_MAP[tag]?.emoji ?? ""}
+                                    {t(`panel.type.${tag}`)}
+                                    <span className={w > 0 ? "text-emerald-600" : "text-rose-500"}>
+                                      {w > 0 ? `+${w}` : w}
+                                    </span>
+                                  </span>
+                                ))}
+                            </div>
+                          )}
+                          <div className="space-y-2">
+                            {result.places.map((p: ScoredPlace) => (
+                              <RecommendationCard
+                                key={p.id}
+                                place={p}
+                                origin={{ lat: location!.lat, lng: location!.lng }}
+                                mode={mode}
+                                narratedBy={result.narratedBy}
+                                selected={selectedId === p.id}
+                                voted={votes[p.id] ?? null}
+                                onSelect={setSelectedId}
+                                onFeedback={handleFeedback}
+                              />
+                            ))}
+                          </div>
+                        </>
+                      )}
                     </>
                   )}
                 </>
               )}
-            </>
-          )}
 
-          {!result && !loading && !error && (
-            <div className="rounded-xl border border-dashed border-slate-300 bg-white/60 p-8 text-center text-sm text-slate-400">
-              {t("app.tagline")} 🌸
+              {!result && !loading && !error && (
+                <div className="rounded-xl border border-dashed border-slate-300 bg-white/70 p-6 text-center text-sm text-slate-400 shadow-sm backdrop-blur">
+                  {t("app.tagline")} 🌸
+                </div>
+              )}
             </div>
-          )}
-        </div>
-
-        {/* right: map */}
-        <div className="lg:col-span-3">
-          <div className="sticky top-4 h-72 overflow-hidden rounded-2xl border border-slate-200 shadow-sm lg:h-[calc(100vh-6rem)]">
-            {location ? (
-              <MapView
-                center={{ lat: location.lat, lng: location.lng }}
-                places={result?.places ?? []}
-                selectedId={selectedId}
-                userApproximate={location.gps !== true}
-                onSelect={setSelectedId}
-              />
-            ) : (
-              <div className="flex h-full items-center justify-center bg-slate-50 text-sm text-slate-400">
-                {t("map.nearby")}
-              </div>
-            )}
           </div>
         </div>
-      </main>
+      </div>
     </div>
   );
 }

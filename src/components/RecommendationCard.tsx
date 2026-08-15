@@ -82,6 +82,7 @@ export default function RecommendationCard({
 
   return (
     <button
+      id={`card-${place.id}`}
       onClick={() => onSelect(place.id)}
       className={`w-full overflow-hidden text-left rounded-xl border p-4 transition-colors ${
         selected
