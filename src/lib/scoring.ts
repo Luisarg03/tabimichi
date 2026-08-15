@@ -13,6 +13,8 @@ export interface ScoreContext {
   maxDistKm?: number;
   /** M3: learned tag weights from 👍/👎 feedback, e.g. { onsen: 2, food: -1 } */
   profile?: Record<string, number>;
+  /** dev tracing: counters of why candidates were dropped (mutated) */
+  stats?: { closed: number; tooFar: number };
 }
 
 function isIndoor(tag: string): boolean {
@@ -36,10 +38,19 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
     const t = travelMin(distanceKm, ctx.mode);
 
     // hard filters: beyond the discovery radius, or too far for the budget (25% slack)
-    if (ctx.maxDistKm !== undefined && distanceKm > ctx.maxDistKm) continue;
-    if (t > budgetMin * 1.25) continue;
+    if (ctx.maxDistKm !== undefined && distanceKm > ctx.maxDistKm) {
+      ctx.stats && ctx.stats.tooFar++;
+      continue;
+    }
+    if (t > budgetMin * 1.25) {
+      ctx.stats && ctx.stats.tooFar++;
+      continue;
+    }
     // hard filter: never recommend places that are closed right now
-    if (p.openNow === false) continue;
+    if (p.openNow === false) {
+      ctx.stats && ctx.stats.closed++;
+      continue;
+    }
 
     let score = 50;
     const reasons: Reason[] = [];

@@ -43,14 +43,28 @@ export function logEntry(entry: Record<string, unknown>): void {
   }
 }
 
-/** Last `n` entries (most recent first), for /api/logs. */
-export function readLogTail(n: number): unknown[] {
+/** Short unique id correlating all phases of one user request (dev traces). */
+export function newTraceId(): string {
+  return `tr_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/** Last `n` entries (most recent first); optionally filtered by traceId. */
+export function readLogTail(n: number, trace?: string): unknown[] {
   try {
     const file = logFilePath();
     if (!existsSync(file)) return [];
     const raw: string = require("node:fs").readFileSync(/* turbopackIgnore: true */ file, "utf8");
     const lines = raw.trim().split("\n");
     return lines
+      .slice(-n * 4) // keep some headroom when filtering
+      .filter((l: string) => {
+        if (!trace) return true;
+        try {
+          return JSON.parse(l).traceId === trace;
+        } catch {
+          return false;
+        }
+      })
       .slice(-n)
       .map((l: string) => {
         try {

@@ -3,6 +3,7 @@ import { placeById, upsertPlace, photosVerified, setPhotosVerified, photoHashesF
 import { googlePlaceDetails, googlePhotoBytes } from "@/lib/places/google";
 import { getConfig } from "@/lib/settings";
 import { photoCachePath, readCachedPhoto, writeCachedPhoto, sha1Hex } from "@/lib/photos";
+import { logEntry } from "@/lib/logger";
 
 export const runtime = "nodejs";
 
@@ -17,6 +18,8 @@ const MAX_UNIQUE_PHOTOS = 6;
  * and keep only unique images — persisted in the DB so it never repeats.
  */
 export async function GET(req: NextRequest) {
+  const startedAt = performance.now();
+  const traceId = req.nextUrl.searchParams.get("trace") ?? undefined;
   const ids = (req.nextUrl.searchParams.get("ids") ?? "")
     .split(",")
     .map((s) => s.trim())
@@ -91,5 +94,12 @@ export async function GET(req: NextRequest) {
   }
   await Promise.all([worker(), worker(), worker()]);
 
+  logEntry({
+    type: "photos",
+    traceId,
+    ids: ids.length,
+    enriched: Object.entries(photos).map(([id, refs]) => ({ id, photos: refs.length })),
+    ms: Math.round(performance.now() - startedAt),
+  });
   return NextResponse.json({ photos });
 }
