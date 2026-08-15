@@ -24,22 +24,19 @@ interface GeoapifyResponse {
 }
 
 /** Types with a reliable Geoapify category mapping. */
+/**
+ * Geoapify categories validated live against the API (Nagano sample).
+ * Types without a reliable category are skipped — the discovery chain
+ * falls through to Overpass for them.
+ */
 const GEOAPIFY_CATEGORIES: Record<string, string> = {
-  temple: "religion.buddhist,religion.shinto",
-  viewpoint: "tourism.viewpoint",
-  food: "catering.restaurant,catering.cafe,catering.fast_food",
-  market: "shopping.marketplace",
+  viewpoint: "tourism.attraction",
+  food: "catering.restaurant",
   museum: "entertainment.museum",
-  park: "leisure.park,leisure.garden",
-  shopping: "shopping.mall,shopping.department_store",
+  park: "leisure.park",
+  sakura: "leisure.park", // parks are the sakura spots in spring
   nightlife: "catering.bar,catering.pub",
-};
-
-/** Types with no good category → full-text search within the circle. */
-const GEOAPIFY_TEXT: Record<string, string> = {
-  onsen: "onsen 温泉 public bath",
-  sakura: "sakura hanami cherry blossom",
-  trekking: "hiking trail nature walk",
+  onsen: "leisure.spa", // best-effort; google/overpass cover onsen better
 };
 
 export async function geoapifySearch(
@@ -62,10 +59,8 @@ export async function geoapifySearch(
         lang: lang === "es" ? "es" : "en",
       });
       const categories = GEOAPIFY_CATEGORIES[type.id];
-      const text = GEOAPIFY_TEXT[type.id];
-      if (categories) params.set("categories", categories);
-      else if (text) params.set("text", text);
-      else return [];
+      if (!categories) return []; // no reliable category → chain falls through
+      params.set("categories", categories);
 
       const res = await fetch(`https://api.geoapify.com/v2/places?${params}`, {
         signal: AbortSignal.timeout(30000),
