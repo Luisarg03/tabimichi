@@ -83,7 +83,7 @@ afterEach(() => {
 });
 
 describe("/api/recommend", () => {
-  it("returns scored places, excluding closed ones", async () => {
+  it("returns scored places (closed ones stay in real mode, ranked below)", async () => {
     mockFetch([
       { match: urlContains("open-meteo.com"), response: weatherFixture },
       { match: urlContains("textsearch"), response: googleSearchResponse },
@@ -94,8 +94,10 @@ describe("/api/recommend", () => {
     );
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.places.length).toBe(1); // p2 is closed → dropped
+    expect(body.places.length).toBe(2);
     expect(body.places[0].id).toBe("g_p1");
+    expect(body.places[0].openNow).toBe(true);
+    expect(body.places[1].openNow).toBe(false);
     expect(body.narrated).toBe(false);
   });
 

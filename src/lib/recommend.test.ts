@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { emptyReasonFor, recommend } from "@/lib/recommend";
+import { emptyReasonFor, diversify, recommend } from "@/lib/recommend";
 import { clearWeatherCache } from "@/lib/weather";
 import { readLogTail } from "@/lib/logger";
 import { mockFetch, jsonResponse, urlContains, isolatedStore } from "@/test-utils/helpers";
@@ -77,7 +77,7 @@ describe("recommend — pipeline outcomes", () => {
     vi.unstubAllGlobals();
   });
 
-  it("returns places in real mode (closed ones filtered)", async () => {
+  it("returns places in real mode (closed ones stay, ranked below open)", async () => {
     mockFetch([
       { match: urlContains("open-meteo.com"), response: weatherFixture },
       {
@@ -91,7 +91,9 @@ describe("recommend — pipeline outcomes", () => {
       { match: urlContains("nearbysearch"), response: () => jsonResponse({ status: "OK", results: [] }) },
     ]);
     const r = await recommend({ lat: 36.65, lng: 138.19, budget: "afternoon", types: ["park"], mode: "walking" });
-    expect(r.places.map((p) => p.id)).toEqual(["g_p1"]);
+    expect(r.places.map((p) => p.id)).toEqual(["g_p1", "g_p2"]);
+    expect(r.places[0].openNow).toBe(true);
+    expect(r.places[1].openNow).toBe(false);
     expect(r.emptyReason).toBeUndefined();
     expect(r.traceId).toMatch(/^tr_/);
 
@@ -101,9 +103,10 @@ describe("recommend — pipeline outcomes", () => {
     expect(entry.traceId).toBe(r.traceId);
     expect((entry.filters as { closed: number }).closed).toBe(1); // p2 closed
     expect(entry.candidates).toBe(2);
-    expect(entry.scored).toBe(1);
+    expect(entry.scored).toBe(2);
     const top = entry.top as Array<{ name: string; reasons: string[] }>;
     expect(top[0].reasons).toContain("distanceGood");
+    expect(top[1].reasons).toContain("closedNow");
   });
 
   it("reports all_closed when simulation closes every candidate", async () => {
@@ -148,5 +151,42 @@ describe("recommend — pipeline outcomes", () => {
     const r = await recommend({ lat: 36.65, lng: 138.19, budget: "afternoon", types: ["park"], mode: "walking" });
     expect(r.places).toHaveLength(0);
     expect(r.emptyReason).toBe("no_results");
+  });
+});
+
+describe("diversify", () => {
+  it("spreads the top picks across tags, keeping global best first", () => {
+    const items = [
+      { id: "a", score: 99, tags: ["viewpoint"] },
+      { id: "b", score: 98, tags: ["viewpoint"] },
+      { id: "c", score: 97, tags: ["viewpoint"] },
+      { id: "d", score: 96, tags: ["park"] },
+      { id: "e", score: 95, tags: ["museum"] },
+      { id: "f", score: 94, tags: ["food"] },
+      { id: "g", score: 93, tags: ["temple"] },
+    ];
+    const out = diversify(items, 5);
+    expect(out[0].id).toBe("a"); // global best first
+    expect(out.map((o) => o.id)).toEqual(["a", "d", "e", "f", "g"]);
+  });
+
+  it("keeps single-type ordering untouched", () => {
+    const items = [
+      { id: "a", score: 99, tags: ["food"] },
+      { id: "b", score: 98, tags: ["food"] },
+      { id: "c", score: 97, tags: ["food"] },
+    ];
+    expect(diversify(items, 10).map((o) => o.id)).toEqual(["a", "b", "c"]);
+  });
+
+  it("fills remaining slots with next-best of each type", () => {
+    const items = [
+      { id: "a", score: 99, tags: ["viewpoint"] },
+      { id: "b", score: 98, tags: ["viewpoint"] },
+      { id: "c", score: 97, tags: ["viewpoint"] },
+      { id: "d", score: 96, tags: ["park"] },
+    ];
+    const out = diversify(items, 4);
+    expect(out.map((o) => o.id)).toEqual(["a", "d", "b", "c"]);
   });
 });

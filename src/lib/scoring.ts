@@ -11,6 +11,13 @@ export interface ScoreContext {
   mode?: TransportMode;
   /** hard max distance (km); results beyond it are dropped */
   maxDistKm?: number;
+  /**
+   * Real mode: closed places are NOT dropped — they get a penalty + a
+   * "closedNow" reason and the card shows a badge (Google-Maps style).
+   * Simulation keeps the hard filter so the simulator answers
+   * "qué está abierto a esta hora" precisely.
+   */
+  softClosed?: boolean;
   /** M3: learned tag weights from 👍/👎 feedback, e.g. { onsen: 2, food: -1 } */
   profile?: Record<string, number>;
   /** dev tracing: counters of why candidates were dropped (mutated) */
@@ -23,6 +30,79 @@ function isIndoor(tag: string): boolean {
 
 function isOutdoor(tag: string): boolean {
   return Boolean(EXPERIENCE_TYPE_MAP[tag]?.outdoor);
+}
+
+// ---------------------------------------------------------------------------
+// Quality penalties: ubiquitous chains and hotels are noise for discovery.
+// ---------------------------------------------------------------------------
+
+/** Ubiquitous Japanese (and global) chains — a foodie wants the local gem, not Sukiya. */
+export const CHAIN_NAMES = [
+  "mcdonald",
+  "マクドナルド",
+  "sukiya",
+  "すき家",
+  "matsuya",
+  "松屋",
+  "yoshinoya",
+  "吉野家",
+  "gusto",
+  "ガスト",
+  "royal host",
+  "kfc",
+  "mos burger",
+  "モスバーガー",
+  "starbucks",
+  "スターバックス",
+  "doutor",
+  "ドトール",
+  "pronto",
+  "saizeriya",
+  "サイゼリヤ",
+  "coco ichibanya",
+  "ココイチ",
+  "bikkuri donkey",
+  "びっくりドンキー",
+  "joyfull",
+  "ジョイフル",
+  "denny",
+  "デニーズ",
+  "hidakaya",
+  "日高屋",
+  "pepper lunch",
+  "ペッパーランチ",
+  "first kitchen",
+  "lotteria",
+  "kura sushi",
+  "くら寿司",
+  "sushiro",
+  "スシロー",
+  "hamazushi",
+  "はま寿司",
+  "kappazushi",
+  "かっぱ寿司",
+  "ootoya",
+  "大戸屋",
+  "yayoiken",
+  "やよい軒",
+  "torikizoku",
+  "鳥貴族",
+  "jonathan",
+  "ジョナサン",
+  "coco's",
+  "coco壱番屋",
+] as const;
+
+export function isChainName(name: string): boolean {
+  const n = name.toLowerCase();
+  return CHAIN_NAMES.some((c) => n.includes(c.toLowerCase()));
+}
+
+/** Accommodation signals — a hotel is not "something to do" (unless it has an onsen). */
+const HOTEL_RE = /hotel|ホテル|旅館|ryokan/i;
+
+export function isHotelName(name: string): boolean {
+  return HOTEL_RE.test(name);
 }
 
 /**
@@ -49,25 +129,28 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
     // hard filter: never recommend places that are closed right now
     if (p.openNow === false) {
       ctx.stats && ctx.stats.closed++;
-      continue;
+      if (!ctx.softClosed) continue;
     }
 
     let score = 50;
     const reasons: Reason[] = [];
 
     // --- travel (graduated by minutes so close wins over far) ---
-    if (t <= 10) {
-      score += 16;
+    if (t <= 5) {
+      score += 18;
+      reasons.push({ key: "distanceGood", params: { min: t, modeId: ctx.mode ?? "transit" } });
+    } else if (t <= 10) {
+      score += 15;
       reasons.push({ key: "distanceGood", params: { min: t, modeId: ctx.mode ?? "transit" } });
     } else if (t <= 20) {
-      score += 13;
+      score += 12;
       reasons.push({ key: "distanceGood", params: { min: t, modeId: ctx.mode ?? "transit" } });
     } else if (t <= 35) {
-      score += 10;
+      score += 9;
     } else if (t <= 60) {
-      score += 7;
+      score += 6;
     } else {
-      score += 4;
+      score += 3;
     }
 
     // --- weather fit ---
@@ -104,41 +187,64 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
 
     // --- quality signals: rating shrunk by review count + volume ---
     if (p.rating !== undefined) {
-      const n = p.userRatingsTotal ?? 0;
-      // Bayesian shrinkage: a 4.5 with 5 reviews ≈ 4.0; with 2k reviews it holds.
-      // prior: 3.9 with 30 pseudo-reviews
-      const weighted = n > 0 ? (p.rating * n + 3.9 * 30) / (n + 30) : p.rating;
+      // Bayesian shrinkage with a lower prior (3.7/25) and a review cap (500):
+      // a 4.7 local with 50 reviews keeps its edge over a 4.0 chain with 5k
+      // reviews, while a 4.9 with 3 reviews still gets pulled down.
+      const n = Math.min(p.userRatingsTotal ?? 0, 500);
+      const weighted = n > 0 ? (p.rating * n + 3.7 * 25) / (n + 25) : p.rating;
 
-      if (weighted >= 4.4) {
-        score += 14;
+      if (weighted >= 4.6) {
+        score += 16;
+        reasons.push({ key: "highRated", params: { r: weighted.toFixed(1) } });
+      } else if (weighted >= 4.3) {
+        score += 12;
         reasons.push({ key: "highRated", params: { r: weighted.toFixed(1) } });
       } else if (weighted >= 4.0) {
-        score += 9;
+        score += 8;
       } else if (weighted >= 3.5) {
-        score += 4;
+        score += 3;
+      } else {
+        score -= 4; // actively penalize mediocre places
       }
 
       // review volume: established places, capped so it never dominates
-      if (n >= 5000) {
+      const total = p.userRatingsTotal ?? 0;
+      if (total >= 5000) {
         score += 6;
-        reasons.push({ key: "popular", params: { n: fmtCount(n) } });
-      } else if (n >= 1000) {
+        reasons.push({ key: "popular", params: { n: fmtCount(total) } });
+      } else if (total >= 1000) {
         score += 5;
-        reasons.push({ key: "popular", params: { n: fmtCount(n) } });
-      } else if (n >= 300) {
+        reasons.push({ key: "popular", params: { n: fmtCount(total) } });
+      } else if (total >= 300) {
         score += 4;
-      } else if (n >= 100) {
+      } else if (total >= 100) {
         score += 3;
-      } else if (n >= 30) {
+      } else if (total >= 30) {
         score += 2;
-      } else if (n >= 5) {
+      } else if (total >= 5) {
         score += 1;
       }
+    }
+
+    // --- noise penalties: chains & hotels ---
+    const name = p.name ?? "";
+    if (isChainName(name)) {
+      score -= 12;
+      reasons.push({ key: "chain" });
+    }
+    // a ryokan with an onsen is an experience for this user — exempt it
+    if (isHotelName(name) && !p.tags.includes("onsen")) {
+      score -= 12;
+      reasons.push({ key: "hotel" });
     }
 
     if (p.openNow === true) {
       score += 6;
       reasons.push({ key: "openNow" });
+    } else if (p.openNow === false && ctx.softClosed) {
+      // soft mode: closed places stay discoverable but sink below open ones
+      score -= 15;
+      reasons.push({ key: "closedNow" });
     }
 
     // --- M3: profile affinity (learned tag weights from 👍/👎) ---
