@@ -25,6 +25,8 @@ export interface ScoreContext {
    * if the user explicitly asks for "Sukiya", Sukiya must rank.
    */
   keyword?: string;
+  /** extra name-match tokens (e.g. the LLM-translated term for "gatos" → "cat"). */
+  keywordTerms?: string[];
   /** M3: learned tag weights from 👍/👎 feedback, e.g. { onsen: 2, food: -1 } */
   profile?: Record<string, number>;
   /** dev tracing: counters of why candidates were dropped (mutated) */
@@ -119,7 +121,7 @@ export function isHotelName(name: string): boolean {
 export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
   const { base, budgetMin, weather } = ctx;
   const out: ScoredPlace[] = [];
-  const kwTokens = ctx.keyword ? keywordTokens(ctx.keyword) : [];
+  const kwTokens = ctx.keywordTerms ?? (ctx.keyword ? keywordTokens(ctx.keyword) : []);
 
   for (const p of places) {
     const distanceKm = haversineKm(base, p);

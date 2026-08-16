@@ -9,7 +9,8 @@ import { googlePlaceDetails } from "./places/google";
 import { isOpenAt, type OpenPeriod } from "./open-hours";
 import { jstHourStamp } from "./jst";
 import { logEntry, newTraceId } from "./logger";
-import { normalizeKeyword, searchTermFor } from "./keywords";
+import { keywordTokens, normalizeKeyword } from "./keywords";
+import { translateEsEn } from "./translate";
 
 type Candidate = Place & { periods?: OpenPeriod[] };
 
@@ -58,10 +59,16 @@ export async function recommend(input: RecommendInput): Promise<RecommendResult>
   const budgetMin = BUDGET_MIN[input.budget] ?? 300;
   const radiusKm = input.radiusKm ?? radiusForBudget(input.budget, mode);
   const simulated = input.now ? new Date(input.now) : null;
-  // optional interest keyword — normalized once here, drives discovery + scoring
-  // (discovery gets the alias-expanded search term, scoring the user's word)
+  // optional interest keyword — normalized once here. The raw term goes to
+  // Google as-is; Spanish terms are translated by the free MyMemory API
+  // (cached per term), and both raw + translated terms feed the scoring
+  // name-match.
   const keyword = input.keyword ? normalizeKeyword(input.keyword) : undefined;
-  const searchTerm = keyword ? searchTermFor(keyword) : undefined;
+  const translated = keyword ? await translateEsEn(keyword) : undefined;
+  const searchTerm = translated && translated !== keyword ? translated : keyword;
+  const kwTerms = keyword
+    ? [...keywordTokens(keyword), ...(translated && translated !== keyword ? keywordTokens(translated) : [])]
+    : undefined;
 
   const [weatherRaw, { places, source }] = await Promise.all([
     getWeather(input.lat, input.lng),
@@ -117,6 +124,7 @@ export async function recommend(input: RecommendInput): Promise<RecommendResult>
     // (simulation keeps the hard filter so the simulator is precise)
     softClosed: !simulated,
     keyword,
+    keywordTerms: kwTerms,
     profile,
     stats,
   });
