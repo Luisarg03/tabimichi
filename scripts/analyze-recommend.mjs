@@ -53,12 +53,12 @@ async function runScenario(sc) {
   const avgTravel = places.length
     ? Math.round(places.reduce((a, p) => a + (p.travelMin ?? 0), 0) / places.length)
     : 0;
-  const kwHits = (r.filters?.keywordHits ?? 0) === 0 && keyword
+  const kwHits = (r.filters?.nameMatches ?? 0) === 0 && keyword
     ? places.filter((p) => (p.reasons ?? []).some((x) => x.key === "keywordMatch")).length
-    : (r.filters?.keywordHits ?? 0);
+    : (r.filters?.nameMatches ?? 0);
 
   console.log(`\n=== ${name} ${keyword ? `· kw:"${keyword}"` : "· sin keyword"} — ${r.sourceNote}, ${places.length} resultados, empty:${r.emptyReason ?? "-"} ===`);
-  if (r.filters) console.log(`filters: closed=${r.filters.closed} tooFar=${r.filters.tooFar} keywordHits=${kwHits}`);
+  if (r.filters) console.log(`filters: closed=${r.filters.closed} tooFar=${r.filters.tooFar} nameMatches=${kwHits}`);
   for (const p of places.slice(0, 10)) {
     console.log(
       `  ${String(p.score).padStart(3)} ${(p.name ?? "").slice(0, 42).padEnd(42)} ${String(p.distanceKm ?? 0).padStart(4)}km ⭐${p.rating ?? "-"} [${reasonsOf(p).slice(0, 60)}]`

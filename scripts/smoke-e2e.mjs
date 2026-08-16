@@ -64,8 +64,14 @@ async function main() {
   })).json;
   check("keyword request 200 + places", kw && (kw.places ?? []).length > 0);
   const kwHits = (kw.places ?? []).filter((p) => (p.reasons ?? []).some((x) => x.key === "keywordMatch")).length;
-  if (kwHits === 0) console.log("⚠ warn: keyword 'pokemon' produced 0 name matches (pool:", kw.candidates, ")");
-  else console.log(`✓ ${kwHits} keyword matches in top-${kw.places.length}`);
+  // 0 name matches is NOT a failure: Google's text search matches semantically
+  // (e.g. "pokemon" → Animate/card shops, none named "pokemon"). The pool
+  // being google-sourced with the keyword is the real signal.
+  if (kwHits === 0) {
+    console.log(`⚠ kw 'pokemon': 0 literal name matches (semantic matches ok — pool ${kw.sourceNote})`);
+  } else {
+    console.log(`✓ ${kwHits} literal name matches in top-${kw.places.length}`);
+  }
 
   // 3. geocode
   console.log("geocode:");

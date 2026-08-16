@@ -28,7 +28,7 @@ export interface ScoreContext {
   /** M3: learned tag weights from 👍/👎 feedback, e.g. { onsen: 2, food: -1 } */
   profile?: Record<string, number>;
   /** dev tracing: counters of why candidates were dropped (mutated) */
-  stats?: { closed: number; tooFar: number; keywordHits?: number };
+  stats?: { closed: number; tooFar: number; nameMatches?: number };
 }
 
 function isIndoor(tag: string): boolean {
@@ -143,7 +143,7 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
     // interest keyword: name match → big boost; the user asked for THIS
     const kwHit = kwTokens.length > 0 && matchesKeyword(p.name ?? "", kwTokens);
     if (kwHit) {
-      ctx.stats && (ctx.stats.keywordHits = (ctx.stats.keywordHits ?? 0) + 1);
+      ctx.stats && (ctx.stats.nameMatches = (ctx.stats.nameMatches ?? 0) + 1);
     }
 
     let score = 50;

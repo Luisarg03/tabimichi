@@ -192,9 +192,9 @@ describe("scorePlaces — interest keyword", () => {
   it("counts keyword hits in stats", () => {
     const a = place({ name: "Snoopy Museum", openNow: true });
     const b = place({ name: "Zenko-ji", openNow: true });
-    const stats = { closed: 0, tooFar: 0, keywordHits: 0 };
+    const stats = { closed: 0, tooFar: 0, nameMatches: 0 };
     scorePlaces([a, b], ctx({ keyword: "snoopy", stats }));
-    expect(stats.keywordHits).toBe(1);
+    expect(stats.nameMatches).toBe(1);
   });
 
   it("no keyword → identical ranking (no boost, no exemption)", () => {

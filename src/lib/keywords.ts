@@ -1,10 +1,14 @@
 /**
  * Optional interest keyword: "pokemon", "book off", "gatos"…
- * Normalization + Spanish→English aliases + name matching.
+ * Normalization + a SMALL Spanish→English alias map + name matching.
  *
- * The keyword drives BOTH discovery (Google text-search query) and scoring
- * (a boost for places whose name matches, exempting chain/hotel penalties
- * when the user asked for that place explicitly).
+ * POLICY (keep it tiny — this is what scales):
+ *   - English terms and brand names pass RAW to Google — verified live:
+ *     "pokemon" → card/anime shops, "book off" → BOOKOFF stores.
+ *   - Only PURE-SPANISH words that Google does not understand get an alias:
+ *     verified live: "gatos near Osaka" → ZERO_RESULTS, "cat" → 20 cat cafés.
+ *   - Japanese terms ("ポケモン") also pass raw — Google indexes them.
+ * Do NOT grow this table with brand names, English words or Japanese terms.
  */
 
 /** Lowercase, collapse whitespace, strip diacritics ("Pokémon" → "pokemon"). */
@@ -17,7 +21,7 @@ export function normalizeKeyword(kw: string): string {
     .trim();
 }
 
-/** Common Spanish interest words → the English term Google indexes best. */
+/** Pure-Spanish interest words → the English term Google indexes. */
 export const KEYWORD_ALIASES: Record<string, string> = {
   gatos: "cat",
   gato: "cat",
@@ -34,21 +38,9 @@ export const KEYWORD_ALIASES: Record<string, string> = {
   antiguedades: "antiques",
   plantas: "plants",
   te: "tea",
-  ramen: "ramen",
-  sushi: "sushi",
-  onsen: "onsen",
-  anime: "anime",
-  manga: "manga",
-  ghibli: "ghibli",
-  pokemon: "pokemon",
-  snoopy: "snoopy",
   magia: "magic",
-  ceramica: "ceramics",
-  origami: "origami",
-  kimono: "kimono",
-  samurai: "samurai",
-  ninja: "ninja",
   magos: "magic",
+  ceramica: "ceramics",
 };
 
 /** Primary term for the Google text-search query (alias if known). */

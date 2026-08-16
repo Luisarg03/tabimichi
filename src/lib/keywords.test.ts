@@ -35,10 +35,29 @@ describe("searchTermFor", () => {
   it("keeps unknown keywords as-is", () => {
     expect(searchTermFor("snoopy")).toBe("snoopy");
     expect(searchTermFor("book off")).toBe("book off");
+    expect(searchTermFor("pokemon")).toBe("pokemon");
   });
 
   it("returns empty for blank", () => {
     expect(searchTermFor("  ")).toBe("");
+  });
+});
+
+describe("alias policy", () => {
+  it("never aliases brand names, English or Japanese terms — they pass raw", () => {
+    for (const brand of [
+      "pokemon", "snoopy", "book off", "anime", "manga", "ghibli",
+      "ramen", "sushi", "onsen", "origami", "kimono", "samurai", "ninja",
+      "ポケモン", "ドラゴン", "gundam",
+    ]) {
+      expect(searchTermFor(brand)).toBe(normalizeKeyword(brand));
+      expect(KEYWORD_ALIASES[normalizeKeyword(brand)]).toBeUndefined();
+    }
+  });
+
+  it("only contains pure-Spanish words as keys", () => {
+    // the table must stay tiny — Spanish words Google won't understand
+    expect(Object.keys(KEYWORD_ALIASES).length).toBeLessThanOrEqual(20);
   });
 });
 

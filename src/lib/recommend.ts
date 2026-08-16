@@ -104,7 +104,7 @@ export async function recommend(input: RecommendInput): Promise<RecommendResult>
   }
 
   const profile = getProfile();
-  const stats = { closed: 0, tooFar: 0, keywordHits: 0 };
+  const stats = { closed: 0, tooFar: 0, nameMatches: 0 };
   const scored = scorePlaces(candidates, {
     base: { lat: input.lat, lng: input.lng },
     budgetMin,
@@ -139,7 +139,7 @@ export async function recommend(input: RecommendInput): Promise<RecommendResult>
     sim: simulated !== null,
     source,
     candidates: candidates.length,
-    filters: { closed: stats.closed, tooFar: stats.tooFar, keywordHits: stats.keywordHits },
+    filters: { closed: stats.closed, tooFar: stats.tooFar, nameMatches: stats.nameMatches },
     scored: top.length,
     emptyReason,
     keyword,
