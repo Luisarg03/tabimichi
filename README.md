@@ -77,8 +77,14 @@ Repeated queries hit the freshness caches:
 - **Interest keyword** — optional free-text ("pokemon", "book off", "gatos"):
   the Google text-search query becomes the keyword itself, matching places
   get +20 with a "Coincide con tu interés" reason, and chain/hotel penalties
-  are waived for places the user explicitly asked for. Spanish words map to
-  English search terms via a small alias table (`lib/keywords.ts`).
+  are waived for places the user explicitly asked for. Alias policy
+  (`lib/keywords.ts`): only pure-Spanish words Google doesn't understand get
+  translated (verified: "gatos" → ZERO_RESULTS, "cat" → cat cafés); brand
+  names / English / Japanese terms pass raw (verified: "pokemon" → card &
+  anime shops). The table is kept ≤ 20 entries and tested to never grow with
+  brands. `filters.nameMatches` in the log counts literal name hits — a
+  keyword request with 0 literal hits can still be perfectly relevant
+  (semantic matches).
 - **LLM narrative (M2)** — `lib/llm/` two-layer provider registry, tried in
   order: **OpenCode Zen (free)** `deepseek-v4-flash-free` at
   `opencode.ai/zen/v1` → **OpenCode Go (paid)** `deepseek-v4-flash` at
