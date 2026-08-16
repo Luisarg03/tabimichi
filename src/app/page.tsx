@@ -242,9 +242,14 @@ export default function HomePage() {
 
       {/* floating UI over the map (Google-Maps style) */}
       <div className="pointer-events-none absolute inset-0 z-10">
-        <div className="pointer-events-auto flex h-full flex-col gap-2 p-2 sm:p-3">
+        {/*
+          NOTE: this full-height container must stay pointer-events-none so
+          clicks/drag reach the map; only the actual panels re-enable events.
+          A pointer-events-auto full-screen div would freeze the map.
+        */}
+        <div className="pointer-events-none flex h-full flex-col gap-2 p-2 sm:p-3">
           {/* header row: brand + sim tabs + locale/settings */}
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="pointer-events-auto flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white/95 px-3 py-2 shadow-sm backdrop-blur">
               <span className="text-lg">🗾</span>
               <span className="text-base font-bold text-slate-900">
@@ -286,7 +291,7 @@ export default function HomePage() {
           </div>
 
           {/* left column: search + results, floating over the map */}
-          <div className="flex h-[calc(100%-3.5rem)] w-full flex-col gap-2 md:w-[27rem]">
+          <div className="pointer-events-auto flex h-[calc(100%-3.5rem)] w-full flex-col gap-2 md:w-[27rem]">
             <DayPanel initialLocation={location} loading={loading} onDiscover={handleDiscover} />
 
             <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
