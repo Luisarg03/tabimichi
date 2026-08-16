@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, useMap, ZoomControl } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { LatLng, ScoredPlace } from "@/lib/types";
@@ -27,7 +27,7 @@ function TileSwitcher({
 }) {
   const { t } = useI18n();
   return (
-    <div className="absolute bottom-2 left-2 z-[1000] flex max-w-[calc(100%-1rem)] flex-wrap gap-0.5 rounded-xl border border-slate-200 bg-white/95 p-1 shadow-md backdrop-blur">
+    <div className="absolute bottom-24 right-2 z-[1000] flex max-w-[calc(100%-1rem)] flex-wrap gap-0.5 rounded-xl border border-slate-200 bg-white/95 p-1 shadow-md backdrop-blur">
       {TILE_STYLES.map((s) => (
         <button
           key={s.id}
@@ -150,12 +150,18 @@ export default function MapView({
         zoom={13}
         className="h-full w-full"
         scrollWheelZoom
+        // default zoom control sits top-left — hidden under the floating
+        // header/column; bottom-right is the only free corner
+        zoomControl={false}
       >
+        <ZoomControl position="bottomright" />
         <TileLayer
           key={tile.id}
           attribution={tile.attribution}
           url={tile.url}
-          subdomains={tile.subdomains}
+          // never pass undefined: react-leaflet would override Leaflet's
+          // default subdomains with undefined and _getSubdomain crashes
+          subdomains={tile.subdomains ?? "abc"}
         />
         <FlyTo center={center} zoom={13} />
         <FlyToSelected place={selected} />

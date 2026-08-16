@@ -81,10 +81,18 @@ export default function RecommendationCard({
   const nextPhoto = () => setActiveIdx((i) => (i + 1) % photoRefs.length);
 
   return (
-    <button
+    <div
       id={`card-${place.id}`}
+      role="button"
+      tabIndex={0}
       onClick={() => onSelect(place.id)}
-      className={`w-full overflow-hidden text-left rounded-xl border p-4 transition-colors ${
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect(place.id);
+        }
+      }}
+      className={`w-full cursor-pointer overflow-hidden text-left rounded-xl border p-4 transition-colors ${
         selected
           ? "border-sky-400 bg-sky-50"
           : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
@@ -276,6 +284,6 @@ export default function RecommendationCard({
           )}
         </div>
       )}
-    </button>
+    </div>
   );
 }
