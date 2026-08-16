@@ -9,7 +9,7 @@ import WeatherCard from "@/components/WeatherCard";
 import LocaleToggle from "@/components/LocaleToggle";
 import { useI18n } from "@/lib/i18n";
 import type { PlaceProfile, RecommendResult, ScoredPlace } from "@/lib/types";
-import { EXPERIENCE_TYPE_MAP } from "@/lib/places/taxonomy";
+import { EXPERIENCE_TYPES, EXPERIENCE_TYPE_MAP } from "@/lib/places/taxonomy";
 import { SIM_PRESETS, jstSimulatedDate } from "@/lib/jst";
 
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
@@ -32,6 +32,8 @@ export default function HomePage() {
   const [guideState, setGuideState] = useState<"idle" | "thinking" | "done">("idle");
   const [votes, setVotes] = useState<Record<string, "like" | "dislike">>({});
   const [profile, setProfile] = useState<PlaceProfile | null>(null);
+  /** "Tus gustos" manager panel visibility */
+  const [tastesOpen, setTastesOpen] = useState(false);
   /** time simulation: null = real now; else a SIM_PRESETS id (JST hour) */
   const [simPreset, setSimPreset] = useState<string | null>(null);
   const lastQueryRef = useRef<{
@@ -179,6 +181,44 @@ export default function HomePage() {
     [locale, simPreset]
   );
 
+  /** "Tus gustos": set one tag weight directly (optimistic, then server truth). */
+  const handleTaste = useCallback(async (tag: string, delta: number) => {
+    const cur = profile?.[tag] ?? 0;
+    const next = Math.max(-5, Math.min(5, cur + delta));
+    setProfile((p) => ({ ...(p ?? {}), [tag]: next }));
+    try {
+      const res = await fetch("/api/profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tag, weight: next }),
+      });
+      if (res.ok) {
+        const d = (await res.json()) as { profile: PlaceProfile };
+        setProfile(d.profile);
+      }
+    } catch {
+      // optimistic value stays; next action reconciles
+    }
+  }, [profile]);
+
+  /** "Tus gustos": reset the whole learned profile. */
+  const handleTasteReset = useCallback(async () => {
+    setProfile({});
+    try {
+      const res = await fetch("/api/profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reset: true }),
+      });
+      if (res.ok) {
+        const d = (await res.json()) as { profile: PlaceProfile };
+        setProfile(d.profile);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
   /** On-demand guide: narrates the current results (button, not automatic). */
   const narrateNow = useCallback(async () => {
     const q = lastQueryRef.current;
@@ -313,6 +353,73 @@ export default function HomePage() {
               {result && !loading && (
                 <>
                   <WeatherCard weather={result.weather} />
+                  {result.keywordMiss && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 shadow-sm">
+                      {t("status.keywordMiss", { kw: result.keyword ?? "" })}
+                    </div>
+                  )}
+                  {/* Tus gustos: manage the learned profile */}
+                  <button
+                    onClick={() => setTastesOpen((v) => !v)}
+                    className="w-full rounded-xl border border-slate-200 bg-white/95 px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm backdrop-blur transition-colors hover:bg-slate-50"
+                  >
+                    {tastesOpen ? "▾ " : "▸ "}
+                    {t("profile.title")}
+                    {profile && Object.values(profile).some((w) => w !== 0) && (
+                      <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                        {Object.entries(profile).filter(([, w]) => w !== 0).length}
+                      </span>
+                    )}
+                  </button>
+                  {tastesOpen && (
+                    <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                      <p className="mb-2 text-xs text-slate-500">{t("profile.hint")}</p>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {EXPERIENCE_TYPES.map((type) => {
+                          const w = profile?.[type.id] ?? 0;
+                          return (
+                            <div
+                              key={type.id}
+                              className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 px-2 py-1"
+                            >
+                              <span className="text-xs text-slate-700">
+                                {type.emoji} {t(`panel.type.${type.id}`)}
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <button
+                                  onClick={() => handleTaste(type.id, -1)}
+                                  disabled={w <= -5}
+                                  className="h-6 w-6 rounded-md border border-slate-300 text-sm leading-none text-slate-600 hover:bg-slate-100 disabled:opacity-30"
+                                >
+                                  −
+                                </button>
+                                <span
+                                  className={`w-6 text-center text-xs font-semibold ${
+                                    w > 0 ? "text-emerald-600" : w < 0 ? "text-rose-500" : "text-slate-400"
+                                  }`}
+                                >
+                                  {w}
+                                </span>
+                                <button
+                                  onClick={() => handleTaste(type.id, 1)}
+                                  disabled={w >= 5}
+                                  className="h-6 w-6 rounded-md border border-slate-300 text-sm leading-none text-slate-600 hover:bg-slate-100 disabled:opacity-30"
+                                >
+                                  +
+                                </button>
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <button
+                        onClick={handleTasteReset}
+                        className="mt-2 w-full rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-100"
+                      >
+                        {t("profile.reset")}
+                      </button>
+                    </div>
+                  )}
                   {result.sourceNote === "none" ? (
                     <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 shadow-sm">
                       {t(`panel.source.${result.sourceNote}`)}

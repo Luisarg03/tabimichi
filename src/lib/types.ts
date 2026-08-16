@@ -26,6 +26,8 @@ export interface Place {
   /** up to 5 photo references for the gallery */
   photoRefs?: string[];
   url?: string;
+  /** true when this candidate came from the keyword text query (in-memory only) */
+  fromKeyword?: boolean;
 }
 
 export type TimeBudget = "lunch" | "afternoon" | "full_day";
@@ -129,4 +131,10 @@ export interface RecommendResult {
   emptyReason?: EmptyReason;
   /** dev trace id correlating this request with its narrate/photos phases */
   traceId?: string;
+  /** interest keyword echoed back (UI shows the miss note with it) */
+  keyword?: string;
+  /** how many candidates came from the keyword query itself */
+  keywordResults?: number;
+  /** true when the keyword found nothing and the pool is generic */
+  keywordMiss?: boolean;
 }

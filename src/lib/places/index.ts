@@ -39,13 +39,17 @@ function dedupe(places: Place[]): Place[] {
  *   4. local SQLite cache     — last resort (type-filtered)
  * The first source that returns places wins. Results are cached.
  */
-export async function discover(opts: DiscoverOptions): Promise<{ places: Place[]; source: SourceNote }> {
+export async function discover(
+  opts: DiscoverOptions
+): Promise<{ places: Place[]; source: SourceNote; keywordResults?: number }> {
   const { lat, lng, radiusKm, types, lang = "es", keyword } = opts;
   const radiusM = Math.round(radiusKm * 1000);
   const experienceTypes = resolveTypes(types);
   const config = getConfig();
   let places: Place[] = [];
   let source: SourceNote = "none";
+  // how many candidates came from the keyword query itself (0 = keyword miss)
+  const gstats: { keywordResults?: number } = {};
 
   if (config.overpassEndpoint) setOverpassEndpoint(config.overpassEndpoint);
 
@@ -72,7 +76,8 @@ export async function discover(opts: DiscoverOptions): Promise<{ places: Place[]
         lng,
         radiusM,
         lang,
-        keyword
+        keyword,
+        gstats
       );
       if (places.length > 0) source = "google";
     } catch {
@@ -112,5 +117,9 @@ export async function discover(opts: DiscoverOptions): Promise<{ places: Place[]
   // so global results never become candidates (or pollute the cache)
   const bounded = deduped.filter((p) => haversineKm({ lat, lng }, p) <= radiusKm * 1.5);
   if (bounded.length > 0) cachePlaces(bounded);
-  return { places: bounded, source };
+  // keywordResults = keyword-query candidates that survived the radius bound:
+  // Google may return relevant places (e.g. Snoopy cafés 70 km away) that are
+  // out of reach — the UI must not pretend they exist nearby
+  const keywordResults = keyword ? bounded.filter((p) => p.fromKeyword).length : gstats.keywordResults;
+  return { places: bounded, source, keywordResults };
 }

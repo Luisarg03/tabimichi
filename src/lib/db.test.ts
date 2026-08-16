@@ -8,6 +8,8 @@ import {
   freshNearby,
   applyFeedback,
   getProfile,
+  resetProfile,
+  setProfileWeight,
   setDataDir,
 } from "@/lib/db";
 import { isolatedStore } from "@/test-utils/helpers";
@@ -81,5 +83,23 @@ describe("feedback → profile", () => {
     expect(getProfile().onsen).toBe(5);
     for (let i = 0; i < 10; i++) applyFeedback("f3", false, ["onsen"]);
     expect(getProfile().onsen).toBe(-5);
+  });
+
+  it("setProfileWeight sets, clamps and removes at zero", () => {
+    setProfileWeight("onsen", 3);
+    expect(getProfile().onsen).toBe(3);
+    setProfileWeight("onsen", 99);
+    expect(getProfile().onsen).toBe(5);
+    setProfileWeight("onsen", -99);
+    expect(getProfile().onsen).toBe(-5);
+    setProfileWeight("onsen", 0);
+    expect(getProfile().onsen).toBeUndefined();
+  });
+
+  it("resetProfile clears everything", () => {
+    setProfileWeight("onsen", 2);
+    setProfileWeight("food", -1);
+    expect(Object.keys(resetProfile())).toHaveLength(0);
+    expect(getProfile()).toEqual({});
   });
 });
