@@ -32,6 +32,15 @@ describe("translateEsEn", () => {
     expect(await translateEsEn("snoopy")).toBe("snoopy"); // normalized-equal → raw
   });
 
+  it("multi-word phrases pass through untranslated (caller decides)", async () => {
+    // translateEsEn itself still translates; the caller (recommend) skips
+    // multi-word keywords — here we only assert the API still works for them
+    mockFetch([
+      { match: urlContains("api.mymemory"), response: () => myMemoryOk("cafe cat") },
+    ]);
+    expect(await translateEsEn("cafe, neko")).toBe("cafe cat");
+  });
+
   it("skips Japanese terms entirely (no network)", async () => {
     let calls = 0;
     mockFetch([{ match: () => true, response: () => (calls++, myMemoryOk("x")) }]);

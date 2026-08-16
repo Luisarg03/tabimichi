@@ -8,25 +8,29 @@
  * free keyless MyMemory API (lib/translate.ts), cached per term.
  */
 
-/** Lowercase, collapse whitespace, strip diacritics ("Pokémon" → "pokemon"). */
+/** Lowercase, collapse whitespace, strip diacritics, commas→space ("Pokémon" → "pokemon", "cafe, neko" → "cafe neko"). */
 export function normalizeKeyword(kw: string): string {
   return kw
     .toLowerCase()
     .normalize("NFD")
     .replace(/\p{Diacritic}/gu, "")
+    .replace(/[,;]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
 
 /**
- * Tokens used for name matching: the raw keyword plus the space-stripped
- * variant ("book off" must match "BOOKOFF"). Callers may append tokens of
- * a translated term so "gatos" also matches "Cat Cafe".
+ * Tokens used for name matching: the full phrase, each individual word and
+ * the compact variants ("cafe, neko" must match "Neko Cafe Naru" via "neko",
+ * and "book off" must match "BOOKOFF").
  */
 export function keywordTokens(kw: string): string[] {
   const n = normalizeKeyword(kw);
   if (!n) return [];
   const tokens = new Set<string>([n]);
+  for (const word of n.split(" ")) {
+    if (word) tokens.add(word);
+  }
   tokens.add(n.replace(/\s+/g, ""));
   return [...tokens];
 }

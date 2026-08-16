@@ -60,12 +60,20 @@ export async function recommend(input: RecommendInput): Promise<RecommendResult>
   const radiusKm = input.radiusKm ?? radiusForBudget(input.budget, mode);
   const simulated = input.now ? new Date(input.now) : null;
   // optional interest keyword — normalized once here. The raw term goes to
-  // Google as-is; Spanish terms are translated by the free MyMemory API
-  // (cached per term), and both raw + translated terms feed the scoring
-  // name-match.
+  // Google as-is; single Spanish words ("gatos") are translated by the free
+  // MyMemory API (cached). Multi-word keywords ("cafe, neko", "book off")
+  // are NEVER translated — MyMemory would mangle words that exist in both
+  // languages ("cafe" → "coffee") and Google handles the phrase natively.
   const keyword = input.keyword ? normalizeKeyword(input.keyword) : undefined;
-  const translated = keyword ? await translateEsEn(keyword) : undefined;
-  const searchTerm = translated && translated !== keyword ? translated : keyword;
+  const translated = keyword && !keyword.includes(" ") ? await translateEsEn(keyword) : undefined;
+  // Spanish interest words describe THEMED PLACES: "gatos" → "cat cafe", not
+  // "cat" (Google reads "cat" as pet shops). The ' cafe' suffix only applies
+  // to translated terms — raw keywords ("snoopy", "book off", "cafe, neko")
+  // keep their own query.
+  const searchTerm =
+    translated && translated !== keyword
+      ? `${translated} cafe`
+      : keyword;
   const kwTerms = keyword
     ? [...keywordTokens(keyword), ...(translated && translated !== keyword ? keywordTokens(translated) : [])]
     : undefined;
@@ -129,16 +137,23 @@ export async function recommend(input: RecommendInput): Promise<RecommendResult>
     stats,
   });
 
-  // With an interest keyword the user's intent wins: places whose name
-  // matches rank first (weather/rating noise can't bury them), then the
-  // rest by score. Without a keyword (or no matches) keep the diversified,
-  // score-sorted list.
+  // With an interest keyword the user's intent wins: candidates that came
+  // from the keyword query itself (or match its name) rank first —
+  // weather/rating noise can't bury them; then the rest by score.
   const kwMiss = Boolean(keyword) && (keywordResults ?? 0) === 0;
   let top: ScoredPlace[];
   if (keyword && !kwMiss) {
-    const matched = scored.filter((p) => p.reasons.some((r) => r.key === "keywordMatch"));
-    const rest = scored.filter((p) => !p.reasons.some((r) => r.key === "keywordMatch"));
-    top = [...matched, ...rest].slice(0, 10);
+    // intent order: Google's own keyword-query results first (e.g. Neko Cafe
+    // Naru is Google's rank 1 for "cafe neko"), then name matches from the
+    // generic pool (any cafe with 'cafe' in its name), then the rest
+    const fromQuery = scored.filter((p) => p.fromKeyword);
+    const nameOnly = scored.filter(
+      (p) => !p.fromKeyword && p.reasons.some((r) => r.key === "keywordMatch")
+    );
+    const rest = scored.filter(
+      (p) => !p.fromKeyword && !p.reasons.some((r) => r.key === "keywordMatch")
+    );
+    top = [...fromQuery, ...nameOnly, ...rest].slice(0, 10);
   } else {
     top = diversify(scored, 10).sort(
       (a, b) => b.score - a.score || a.travelMin - b.travelMin

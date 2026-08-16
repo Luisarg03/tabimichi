@@ -144,9 +144,10 @@ async function nearbySearch(
   lat: number,
   lng: number,
   radiusM: number,
-  lang: string
+  lang: string,
+  gtypeOverride?: string
 ): Promise<GoogleResult[]> {
-  const gtype = type.googleTypes?.[0];
+  const gtype = gtypeOverride ?? type.googleTypes?.[0];
   if (!gtype) return [];
   const buildUrl = (token?: string) => {
     const params = new URLSearchParams({
@@ -214,6 +215,9 @@ export async function googleSearch(
   }> = [{ fromKeyword: Boolean(keyword), promise: textSearch(apiKey, type, lat, lng, radiusM, keyword, stats) }];
   if ((type.googleTypes?.length ?? 0) > 0) {
     jobs.push({ fromKeyword: false, promise: nearbySearch(apiKey, type, lat, lng, radiusM, lang) });
+  }
+  if (keyword && type.id === "food") {
+    jobs.push({ fromKeyword: false, promise: nearbySearch(apiKey, type, lat, lng, radiusM, lang, "cafe") });
   }
 
   const settled = await Promise.allSettled(jobs.map((j) => j.promise));
