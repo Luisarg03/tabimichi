@@ -146,7 +146,7 @@ describe("recommend — pipeline outcomes", () => {
         match: urlContains("textsearch"),
         response: (u) =>
           googleSearch(
-            u.includes("query=cat+near")
+            u.includes("query=cat+cafe+near")
               ? [result("c1", "Cat Cafe MoCHA", { opening_hours: { open_now: true } })]
               : [result("c2", "Otro", { opening_hours: { open_now: true } })]
           ),
@@ -223,6 +223,37 @@ describe("recommend — pipeline outcomes", () => {
     expect(r.keywordMiss).toBe(true);
     expect(r.keywordResults).toBe(0);
     expect(r.places.length).toBeGreaterThan(0); // generic pool still shown, honestly labeled
+  });
+
+  it("keyword-origin results rank first even without a name match", async () => {
+    mockFetch([
+      { match: urlContains("open-meteo.com"), response: weatherFixture },
+      {
+        match: urlContains("textsearch"),
+        response: () =>
+          googleSearch([
+            // from the keyword query, but 'Feline Friends' matches no token
+            result("kw1", "Feline Friends", { opening_hours: { open_now: true } }),
+          ]),
+      },
+      {
+        match: urlContains("nearbysearch"),
+        response: () =>
+          jsonResponse({
+            status: "OK",
+            results: [
+              result("gen1", "Big Soba Restaurant", {
+                rating: 4.6, user_ratings_total: 5000, opening_hours: { open_now: true },
+              }),
+            ],
+          }),
+      },
+    ]);
+    const r = await recommend({
+      lat: 36.65, lng: 138.19, budget: "afternoon", types: ["museum"], mode: "walking",
+      keyword: "cafe, neko",
+    });
+    expect(r.places[0].id).toBe("g_kw1"); // keyword-query result first, no name match needed
   });
 
   it("flags keywordMiss when keyword results exist but are out of reach", async () => {

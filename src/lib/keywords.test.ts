@@ -17,15 +17,27 @@ describe("normalizeKeyword", () => {
     expect(normalizeKeyword("   ")).toBe("");
     expect(normalizeKeyword("")).toBe("");
   });
+
+  it("turns commas into spaces (multi-word keywords)", () => {
+    expect(normalizeKeyword("cafe, neko")).toBe("cafe neko");
+    expect(normalizeKeyword("cafe,gatos")).toBe("cafe gatos");
+  });
 });
 
 describe("keywordTokens", () => {
-  it("includes raw and compact variants only (no alias table)", () => {
+  it("includes full, individual-word and compact variants", () => {
     const tokens = keywordTokens("book off");
     expect(tokens).toContain("book off");
+    expect(tokens).toContain("book");
+    expect(tokens).toContain("off");
     expect(tokens).toContain("bookoff");
-    expect(tokens).toHaveLength(2);
     expect(keywordTokens("gatos")).toEqual(["gatos"]);
+  });
+
+  it("matches multi-word keywords against any word of the place name", () => {
+    // "cafe, neko" must match "Neko Cafe Naru" via the "neko" token
+    expect(matchesKeyword("Neko Cafe Naru", keywordTokens("cafe, neko"))).toBe(true);
+    expect(matchesKeyword("Neko Cafe Naru", keywordTokens("gatos"))).toBe(false);
   });
 });
 
