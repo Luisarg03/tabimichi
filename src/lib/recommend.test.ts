@@ -134,6 +134,34 @@ describe("recommend — pipeline outcomes", () => {
     expect(top[0].reasons).toContain("keywordMatch");
   });
 
+  it("translates Spanish keywords via MyMemory and matches translated names", async () => {
+    mockFetch([
+      { match: urlContains("open-meteo.com"), response: weatherFixture },
+      {
+        match: urlContains("api.mymemory.translated.net"),
+        response: () =>
+          jsonResponse({ responseData: { translatedText: "cat" }, responseStatus: 200 }),
+      },
+      {
+        match: urlContains("textsearch"),
+        response: (u) =>
+          googleSearch(
+            u.includes("query=cat+near")
+              ? [result("c1", "Cat Cafe MoCHA", { opening_hours: { open_now: true } })]
+              : [result("c2", "Otro", { opening_hours: { open_now: true } })]
+          ),
+      },
+      { match: urlContains("nearbysearch"), response: () => jsonResponse({ status: "OK", results: [] }) },
+    ]);
+    const r = await recommend({
+      lat: 36.65, lng: 138.19, budget: "afternoon", types: ["museum"], mode: "walking",
+      keyword: "gatos",
+    });
+    expect(r.places[0].id).toBe("g_c1"); // 'cat' query → cat café
+    const top = r.places[0];
+    expect(top.reasons.some((x) => x.key === "keywordMatch")).toBe(true); // via translated term
+  });
+
   it("reports all_closed when simulation closes every candidate", async () => {
     mockFetch([
       { match: urlContains("open-meteo.com"), response: weatherFixture },
