@@ -110,7 +110,9 @@ gracefully with a clear "data unavailable" message.
 ## Tech stack
 
 - **Next.js 16** (App Router) + TypeScript + Tailwind CSS v4
-- **Leaflet + react-leaflet** with OpenStreetMap tiles (free, no key)
+- **Leaflet + react-leaflet** with switchable tile layers (OSM / CARTO
+  Voyager / Positron / Esri Street — English labels in Japan / Esri
+  satellite), all free, no key
 - **node:sqlite** — zero-dependency local cache
 - **i18n** ES / EN (built-in dictionaries)
 - **DeepSeek Harness** — the agentic development environment this project was

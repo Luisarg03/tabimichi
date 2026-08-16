@@ -143,6 +143,13 @@ const es: Dict = {
     youAreHere: "Estás acá",
     approx: "Ubicación aproximada (dirección buscada)",
     exact: "Ubicación exacta (GPS)",
+    tiles: {
+      esri: "Esri (EN)",
+      osm: "OSM",
+      voyager: "Voyager",
+      positron: "Positron",
+      satellite: "Satélite",
+    },
   },
 };
 
@@ -282,6 +289,13 @@ const en: Dict = {
     youAreHere: "You are here",
     approx: "Approximate position (searched address)",
     exact: "Exact position (GPS)",
+    tiles: {
+      esri: "Esri (EN)",
+      osm: "OSM",
+      voyager: "Voyager",
+      positron: "Positron",
+      satellite: "Satellite",
+    },
   },
 };
 

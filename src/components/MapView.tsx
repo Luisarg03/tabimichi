@@ -1,12 +1,51 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { LatLng, ScoredPlace } from "@/lib/types";
 import { EXPERIENCE_TYPE_MAP } from "@/lib/places/taxonomy";
+import { DEFAULT_TILE, TILE_STYLES, tileStyleById } from "@/lib/tiles";
 import { useI18n } from "@/lib/i18n";
+
+const TILE_ICONS: Record<string, string> = {
+  esri: "🏙️",
+  osm: "🗺️",
+  voyager: "🎨",
+  positron: "⬜",
+  satellite: "🛰️",
+};
+
+/** Tile-layer switcher (bottom-left): persists the choice per browser. */
+function TileSwitcher({
+  tileId,
+  onChange,
+}: {
+  tileId: string;
+  onChange: (id: string) => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <div className="absolute bottom-2 left-2 z-[1000] flex max-w-[calc(100%-1rem)] flex-wrap gap-0.5 rounded-xl border border-slate-200 bg-white/95 p-1 shadow-md backdrop-blur">
+      {TILE_STYLES.map((s) => (
+        <button
+          key={s.id}
+          onClick={() => onChange(s.id)}
+          title={t(`map.tiles.${s.id}`)}
+          className={`flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium transition-colors ${
+            tileId === s.id
+              ? "bg-slate-900 text-white"
+              : "text-slate-600 hover:bg-slate-100"
+          }`}
+        >
+          <span>{TILE_ICONS[s.id] ?? "🗺️"}</span>
+          <span className="hidden sm:inline">{t(`map.tiles.${s.id}`)}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
 
 function scoreColor(score: number): string {
   if (score >= 70) return "#059669"; // emerald
@@ -88,20 +127,38 @@ export default function MapView({
 }) {
   const { t } = useI18n();
   const selected = places.find((p) => p.id === selectedId) ?? null;
+  const [tileId, setTileId] = useState<string>(() => {
+    try {
+      return localStorage.getItem("tabi.tiles") ?? DEFAULT_TILE;
+    } catch {
+      return DEFAULT_TILE;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem("tabi.tiles", tileId);
+    } catch {
+      // ignore
+    }
+  }, [tileId]);
+  const tile = tileStyleById(tileId);
 
   return (
-    <MapContainer
-      center={[center.lat, center.lng]}
-      zoom={13}
-      className="h-full w-full"
-      scrollWheelZoom
-    >
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
-      <FlyTo center={center} zoom={13} />
-      <FlyToSelected place={selected} />
+    <div className="relative h-full w-full">
+      <MapContainer
+        center={[center.lat, center.lng]}
+        zoom={13}
+        className="h-full w-full"
+        scrollWheelZoom
+      >
+        <TileLayer
+          key={tile.id}
+          attribution={tile.attribution}
+          url={tile.url}
+          subdomains={tile.subdomains}
+        />
+        <FlyTo center={center} zoom={13} />
+        <FlyToSelected place={selected} />
 
       {/* you are here — visual reference of the input position */}
       <Marker position={[center.lat, center.lng]} icon={userIcon()} zIndexOffset={500}>
@@ -153,6 +210,9 @@ export default function MapView({
           </Popup>
         </Marker>
       )}
-    </MapContainer>
+      </MapContainer>
+      {/* switcher sits above the map but below the page overlay */}
+      <TileSwitcher tileId={tileId} onChange={setTileId} />
+    </div>
   );
 }
