@@ -13,6 +13,8 @@ export interface DiscoverOptions {
   radiusKm: number;
   types: string[]; // empty = any
   lang?: string;
+  /** optional interest keyword: "pokemon", "book off", "gatos"… (already normalized) */
+  keyword?: string;
 }
 
 export type SourceNote = "google" | "geoapify" | "overpass" | "cache" | "none";
@@ -38,7 +40,7 @@ function dedupe(places: Place[]): Place[] {
  * The first source that returns places wins. Results are cached.
  */
 export async function discover(opts: DiscoverOptions): Promise<{ places: Place[]; source: SourceNote }> {
-  const { lat, lng, radiusKm, types, lang = "es" } = opts;
+  const { lat, lng, radiusKm, types, lang = "es", keyword } = opts;
   const radiusM = Math.round(radiusKm * 1000);
   const experienceTypes = resolveTypes(types);
   const config = getConfig();
@@ -47,13 +49,17 @@ export async function discover(opts: DiscoverOptions): Promise<{ places: Place[]
 
   if (config.overpassEndpoint) setOverpassEndpoint(config.overpassEndpoint);
 
-  // fast path: reuse a fresh local cache covering every requested type
+  // fast path: reuse a fresh local cache covering every requested type.
+  // SKIPPED when an interest keyword is set — the cache is keyword-agnostic
+  // and would bypass the keyword discovery entirely (Google must be asked).
   const typeIds = experienceTypes.map((t) => t.id);
-  const fresh = freshNearby(lat, lng, radiusKm, typeIds, 15 * 60 * 1000);
-  if (fresh && fresh.length > 0) {
-    // only return places that match the requested types
-    const matched = fresh.filter((p) => p.tags.some((t) => typeIds.includes(t)));
-    if (matched.length > 0) return { places: matched, source: "cache" };
+  if (!keyword) {
+    const fresh = freshNearby(lat, lng, radiusKm, typeIds, 15 * 60 * 1000);
+    if (fresh && fresh.length > 0) {
+      // only return places that match the requested types
+      const matched = fresh.filter((p) => p.tags.some((t) => typeIds.includes(t)));
+      if (matched.length > 0) return { places: matched, source: "cache" };
+    }
   }
 
   if (config.googlePlacesApiKey) {
@@ -65,7 +71,8 @@ export async function discover(opts: DiscoverOptions): Promise<{ places: Place[]
         lat,
         lng,
         radiusM,
-        lang
+        lang,
+        keyword
       );
       if (places.length > 0) source = "google";
     } catch {
@@ -92,7 +99,8 @@ export async function discover(opts: DiscoverOptions): Promise<{ places: Place[]
     }
   }
 
-  if (places.length === 0) {
+  if (places.length === 0 && !keyword) {
+    // last-resort fallback; also skipped for keywords (cache is keyword-agnostic)
     const cached = cachedNear(lat, lng, radiusKm * 2);
     places = types.length > 0 ? cached.filter((p) => p.tags.some((t) => types.includes(t))) : cached;
     if (places.length > 0) source = "cache";

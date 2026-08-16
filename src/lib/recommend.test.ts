@@ -109,6 +109,31 @@ describe("recommend — pipeline outcomes", () => {
     expect(top[1].reasons).toContain("closedNow");
   });
 
+  it("threads the interest keyword into discovery, scoring and the log", async () => {
+    mockFetch([
+      { match: urlContains("open-meteo.com"), response: weatherFixture },
+      {
+        match: urlContains("textsearch"),
+        response: (u) =>
+          googleSearch(
+            u.includes("query=pokemon+near")
+              ? [result("p1", "Pokémon Center", { opening_hours: { open_now: true } })]
+              : [result("p2", "Otro", { opening_hours: { open_now: true } })]
+          ),
+      },
+      { match: urlContains("nearbysearch"), response: () => jsonResponse({ status: "OK", results: [] }) },
+    ]);
+    const r = await recommend({
+      lat: 36.65, lng: 138.19, budget: "afternoon", types: ["museum"], mode: "walking",
+      keyword: "pokemon",
+    });
+    expect(r.places[0].id).toBe("g_p1"); // keyword query result ranked
+    const entry = readLogTail(1)[0] as Record<string, unknown>;
+    expect(entry.keyword).toBe("pokemon");
+    const top = entry.top as Array<{ name: string; reasons: string[] }>;
+    expect(top[0].reasons).toContain("keywordMatch");
+  });
+
   it("reports all_closed when simulation closes every candidate", async () => {
     mockFetch([
       { match: urlContains("open-meteo.com"), response: weatherFixture },

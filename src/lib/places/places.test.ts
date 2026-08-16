@@ -180,6 +180,42 @@ describe("googleSearch", () => {
     const onsen = await googleSearch(KEY, resolveTypes(["onsen"])[0], 36.65, 138.19, 5000, "es");
     expect(onsen.map((p) => p.id)).toEqual(["g_ryokan"]);
   });
+
+  it("uses the interest keyword as the text-search query", async () => {
+    let urls: string[] = [];
+    mockFetch([
+      {
+        match: urlContains("textsearch"),
+        response: (u) => {
+          urls.push(u);
+          return jsonResponse({ status: "ZERO_RESULTS", results: [] });
+        },
+      },
+      {
+        match: urlContains("nearbysearch"),
+        response: () => jsonResponse({ status: "ZERO_RESULTS", results: [] }),
+      },
+    ]);
+    await googleSearch(KEY, resolveTypes(["museum"])[0], 36.65, 138.19, 5000, "es", "pokemon");
+    expect(urls.length).toBe(1);
+    expect(urls[0]).toContain("query=pokemon+near");
+    // without keyword the type query is used
+    mockFetch([
+      {
+        match: urlContains("textsearch"),
+        response: (u) => {
+          urls = [u];
+          return jsonResponse({ status: "ZERO_RESULTS", results: [] });
+        },
+      },
+      {
+        match: urlContains("nearbysearch"),
+        response: () => jsonResponse({ status: "ZERO_RESULTS", results: [] }),
+      },
+    ]);
+    await googleSearch(KEY, resolveTypes(["museum"])[0], 36.65, 138.19, 5000, "es");
+    expect(urls[0]).toContain("query=museum+near");
+  });
 });
 
 describe("geoapifySearch", () => {

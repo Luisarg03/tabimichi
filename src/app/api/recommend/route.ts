@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid json" }, { status: 400 });
   }
 
-  const { lat, lng, budget, types = [], radiusKm, mode, lang, now } = body ?? {};
+  const { lat, lng, budget, types = [], radiusKm, mode, lang, now, keyword } = body ?? {};
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
     return NextResponse.json({ error: "lat/lng required" }, { status: 400 });
   }
@@ -26,6 +26,9 @@ export async function POST(req: NextRequest) {
   if (now !== undefined && Number.isNaN(Date.parse(now))) {
     return NextResponse.json({ error: "invalid now" }, { status: 400 });
   }
+  if (keyword !== undefined && (typeof keyword !== "string" || keyword.trim().length > 60)) {
+    return NextResponse.json({ error: "keyword too long" }, { status: 400 });
+  }
 
   try {
     const result = await recommend({
@@ -37,6 +40,7 @@ export async function POST(req: NextRequest) {
       mode,
       lang: lang === "en" ? "en" : "es",
       now,
+      keyword: typeof keyword === "string" ? keyword.trim() : undefined,
     });
     return NextResponse.json(result);
   } catch (e) {

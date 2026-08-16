@@ -41,6 +41,7 @@ export default function HomePage() {
     types: string[];
     mode: string;
     now?: string;
+    keyword?: string;
     traceId?: string;
   } | null>(null);
   const lastPlacesRef = useRef<
@@ -113,6 +114,7 @@ export default function HomePage() {
             mode: payload.mode,
             lang: locale,
             now,
+            keyword: payload.keyword,
           }),
         });
         if (!res.ok) throw new Error("bad response");
@@ -157,6 +159,7 @@ export default function HomePage() {
             types: payload.types,
             mode: payload.mode,
             now,
+            keyword: payload.keyword,
             traceId: data.traceId,
           };
           lastPlacesRef.current = data.places.map((p) => ({

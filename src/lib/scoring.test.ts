@@ -170,6 +170,41 @@ describe("scorePlaces — noise penalties (chains & hotels)", () => {
   });
 });
 
+describe("scorePlaces — interest keyword", () => {
+  it("boosts keyword-matching places with a reason", () => {
+    const match = place({ name: "Pokémon Center Tokyo", rating: 4.0, userRatingsTotal: 500, openNow: true });
+    const other = place({ name: "Zenko-ji Temple", rating: 4.6, userRatingsTotal: 2000, openNow: true });
+    const out = scorePlaces([match, other], ctx({ keyword: "pokemon" }));
+    expect(out[0].id).toBe(match.id); // +20 boost beats the better-rated temple
+    const m = out.find((p) => p.id === match.id)!;
+    expect(m.reasons.some((r) => r.key === "keywordMatch" && r.params?.kw === "pokemon")).toBe(true);
+  });
+
+  it("exempts chains the user explicitly asked for", () => {
+    const chain = place({ name: "Sukiya", tags: ["food"], rating: 4.0, userRatingsTotal: 1000, openNow: true });
+    const out = scorePlaces([chain], ctx({ keyword: "sukiya" }));
+    expect(out[0].reasons.some((r) => r.key === "chain")).toBe(false);
+    // without keyword the same place is penalized
+    const plain = scorePlaces([chain], ctx())[0];
+    expect(plain.reasons.some((r) => r.key === "chain")).toBe(true);
+  });
+
+  it("counts keyword hits in stats", () => {
+    const a = place({ name: "Snoopy Museum", openNow: true });
+    const b = place({ name: "Zenko-ji", openNow: true });
+    const stats = { closed: 0, tooFar: 0, keywordHits: 0 };
+    scorePlaces([a, b], ctx({ keyword: "snoopy", stats }));
+    expect(stats.keywordHits).toBe(1);
+  });
+
+  it("no keyword → identical ranking (no boost, no exemption)", () => {
+    const chain = place({ name: "Sukiya", tags: ["food"], rating: 4.0, userRatingsTotal: 1000, openNow: true });
+    const out = scorePlaces([chain], ctx());
+    expect(out[0].reasons.some((r) => r.key === "keywordMatch")).toBe(false);
+    expect(out[0].reasons.some((r) => r.key === "chain")).toBe(true);
+  });
+});
+
 describe("scorePlaces — profile affinity", () => {
   it("boosts liked tags with a reason", () => {
     const onsen = place({ tags: ["onsen"] });

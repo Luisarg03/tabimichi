@@ -112,6 +112,24 @@ describe("/api/recommend", () => {
       post("http://localhost/api/recommend", { lat: 36, lng: 138, budget: "lunch", now: "not-a-date" })
     );
     expect(badNow.status).toBe(400);
+    const longKw = await recommendPOST(
+      post("http://localhost/api/recommend", { lat: 36, lng: 138, budget: "lunch", keyword: "x".repeat(61) })
+    );
+    expect(longKw.status).toBe(400);
+  });
+
+  it("accepts an optional interest keyword", async () => {
+    mockFetch([
+      { match: urlContains("open-meteo.com"), response: weatherFixture },
+      { match: urlContains("textsearch"), response: googleSearchResponse },
+      { match: urlContains("nearbysearch"), response: () => jsonResponse({ status: "OK", results: [] }) },
+    ]);
+    const res = await recommendPOST(
+      post("http://localhost/api/recommend", { lat: 36.65, lng: 138.19, budget: "afternoon", types: [], mode: "walking", keyword: "pokemon" })
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(Array.isArray(body.places)).toBe(true);
   });
 
   it("simulates a time slot: evaluates opening hours locally", async () => {

@@ -16,6 +16,8 @@ interface NarrateBody {
   lang?: string;
   /** ISO instant — the narration is evaluated at this simulated time */
   now?: string;
+  /** optional interest keyword, so the guide tailors the summary */
+  keyword?: string;
   /** dev trace id correlating with the recommend phase */
   traceId?: string;
   places: NarratePlaceInput[];
@@ -33,7 +35,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid json" }, { status: 400 });
   }
 
-  const { lat, lng, budget, mode = "transit", types = [], lang = "es", now, traceId, places = [] } = body ?? {};
+  const { lat, lng, budget, mode = "transit", types = [], lang = "es", now, traceId, keyword, places = [] } = body ?? {};
   if (!Number.isFinite(lat) || !Number.isFinite(lng) || !Array.isArray(places) || places.length === 0) {
     return NextResponse.json({ error: "lat/lng + places required" }, { status: 400 });
   }
@@ -70,6 +72,7 @@ export async function POST(req: NextRequest) {
     mode,
     lang: lang === "en" ? "en" : "es",
     types,
+    keyword,
   });
 
   logEntry({
@@ -80,6 +83,7 @@ export async function POST(req: NextRequest) {
     budget,
     mode,
     lang,
+    keyword,
     sim: simulated !== null,
     provider,
     narratives: narratives.size,

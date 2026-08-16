@@ -87,6 +87,8 @@ export interface RecommendInput {
   lang?: string;
   /** ISO instant — when set, the pipeline simulates this time (JST evaluation) */
   now?: string;
+  /** Optional interest keyword: "pokemon", "book off", "gatos"… */
+  keyword?: string;
 }
 
 /** Input for the async LLM narrative phase (/api/narrate). */
