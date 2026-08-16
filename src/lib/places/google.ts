@@ -102,7 +102,8 @@ async function textSearch(
   lat: number,
   lng: number,
   radiusM: number,
-  keyword?: string
+  keyword?: string,
+  stats?: { keywordResults?: number }
 ): Promise<GoogleResult[]> {
   const buildUrl = (token?: string) => {
     const params = new URLSearchParams({
@@ -118,7 +119,12 @@ async function textSearch(
     if (token) params.set("pagetoken", token);
     return `https://maps.googleapis.com/maps/api/place/textsearch/json?${params}`;
   };
-  return fetchPages(buildUrl, type.googleTypes?.length ? 1 : 2);
+  return fetchPages(buildUrl, type.googleTypes?.length ? 1 : 2).then((rs) => {
+    // results that came from the keyword query itself — 0 means the keyword
+    // found nothing and the pool is generic (a "keyword miss")
+    if (keyword && stats) stats.keywordResults = (stats.keywordResults ?? 0) + rs.length;
+    return rs;
+  });
 }
 
 /**
@@ -156,7 +162,7 @@ async function nearbySearch(
   return fetchPages(buildUrl, 3);
 }
 
-function toPlace(r: GoogleResult, type: ExperienceType): Place {
+function toPlace(r: GoogleResult, type: ExperienceType, fromKeyword = false): Place {
   const photoRefs = (r.photos ?? []).slice(0, 5).map((p) => p.photo_reference);
   return {
     id: `g_${r.place_id}`,
@@ -173,6 +179,7 @@ function toPlace(r: GoogleResult, type: ExperienceType): Place {
     photoRef: photoRefs[0],
     photoRefs,
     url: r.url,
+    fromKeyword,
   };
 }
 
@@ -196,30 +203,38 @@ export async function googleSearch(
   lng: number,
   radiusM: number,
   lang: string,
-  keyword?: string
+  keyword?: string,
+  stats?: { keywordResults?: number }
 ): Promise<Place[]> {
   if (!apiKey) throw new Error("no-google-key");
 
-  const jobs: Array<Promise<GoogleResult[]>> = [textSearch(apiKey, type, lat, lng, radiusM, keyword)];
+  const jobs: Array<{
+    fromKeyword: boolean;
+    promise: Promise<GoogleResult[]>;
+  }> = [{ fromKeyword: Boolean(keyword), promise: textSearch(apiKey, type, lat, lng, radiusM, keyword, stats) }];
   if ((type.googleTypes?.length ?? 0) > 0) {
-    jobs.push(nearbySearch(apiKey, type, lat, lng, radiusM, lang));
+    jobs.push({ fromKeyword: false, promise: nearbySearch(apiKey, type, lat, lng, radiusM, lang) });
   }
 
-  const settled = await Promise.allSettled(jobs);
-  const results = settled
-    .filter((r) => r.status === "fulfilled")
-    .flatMap((r) => (r as PromiseFulfilledResult<GoogleResult[]>).value);
-
+  const settled = await Promise.allSettled(jobs.map((j) => j.promise));
   const seen = new Set<string>();
-  return results
-    .filter((r) => !r.business_status || r.business_status === "OPERATIONAL")
-    .filter((r) => !isNoiseForType(r, type))
-    .filter((r) => {
-      if (seen.has(r.place_id)) return false;
-      seen.add(r.place_id);
-      return true;
-    })
-    .map((r) => toPlace(r, type));
+  const out: Place[] = [];
+  settled.forEach((r, i) => {
+    if (r.status !== "fulfilled") return;
+    // Google returns text results relevance-ordered: with a keyword, only its
+    // TOP-3 matches are kept — lower-ranked hits (e.g. a convenience store
+    // Google loosely matched for "snoopy") are dropped as noise.
+    const kwRank = jobs[i].fromKeyword ? 3 : Infinity;
+    for (const [idx, gr] of r.value.entries()) {
+      if (gr.business_status && gr.business_status !== "OPERATIONAL") continue;
+      if (isNoiseForType(gr, type)) continue;
+      if (jobs[i].fromKeyword && idx >= kwRank) continue;
+      if (seen.has(gr.place_id)) continue;
+      seen.add(gr.place_id);
+      out.push(toPlace(gr, type, jobs[i].fromKeyword && idx < kwRank));
+    }
+  });
+  return out;
 }
 
 /**
@@ -233,7 +248,8 @@ export async function googleSearchAll(
   lng: number,
   radiusM: number,
   lang: string,
-  keyword?: string
+  keyword?: string,
+  stats?: { keywordResults?: number }
 ): Promise<Place[]> {
   const limit = 3;
   let cursor = 0;
@@ -242,7 +258,7 @@ export async function googleSearchAll(
     while (cursor < types.length) {
       const type = types[cursor++];
       try {
-        out.push(...(await googleSearch(apiKey, type, lat, lng, radiusM, lang, keyword)));
+        out.push(...(await googleSearch(apiKey, type, lat, lng, radiusM, lang, keyword, stats)));
       } catch {
         // one type failing must not kill the others
       }

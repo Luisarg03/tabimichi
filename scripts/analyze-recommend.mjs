@@ -57,8 +57,9 @@ async function runScenario(sc) {
     ? places.filter((p) => (p.reasons ?? []).some((x) => x.key === "keywordMatch")).length
     : (r.filters?.nameMatches ?? 0);
 
-  console.log(`\n=== ${name} ${keyword ? `· kw:"${keyword}"` : "· sin keyword"} — ${r.sourceNote}, ${places.length} resultados, empty:${r.emptyReason ?? "-"} ===`);
-  if (r.filters) console.log(`filters: closed=${r.filters.closed} tooFar=${r.filters.tooFar} nameMatches=${kwHits}`);
+  const miss = r.keywordMiss ? " ⚠ KEYWORD MISS (pool genérico)" : "";
+  console.log(`\n=== ${name} ${keyword ? `· kw:"${keyword}"` : "· sin keyword"} — ${r.sourceNote}, ${places.length} resultados, empty:${r.emptyReason ?? "-"}${miss} ===`);
+  if (r.filters) console.log(`filters: closed=${r.filters.closed} tooFar=${r.filters.tooFar} nameMatches=${kwHits} kwResults=${r.keywordResults ?? 0}`);
   for (const p of places.slice(0, 10)) {
     console.log(
       `  ${String(p.score).padStart(3)} ${(p.name ?? "").slice(0, 42).padEnd(42)} ${String(p.distanceKm ?? 0).padStart(4)}km ⭐${p.rating ?? "-"} [${reasonsOf(p).slice(0, 60)}]`

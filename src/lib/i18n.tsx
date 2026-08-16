@@ -86,7 +86,11 @@ const es: Dict = {
     guideButton: "🧠 Preguntale al guía",
     guideRegenerate: "🔁 Regenerar resumen del guía",
   },
-  profile: { title: "Tus gustos" },
+  profile: {
+    title: "Tus gustos",
+    hint: "Ajustá el peso de cada tipo — también se aprende solo con 👍/👎.",
+    reset: "Resetear todo",
+  },
   sim: {
     label: "Simular hora (Japón)",
     now: "Ahora",
@@ -118,6 +122,7 @@ const es: Dict = {
     guideThinking: "El guía está escribiendo el resumen…",
     error: "No se pudo obtener datos. Probá de nuevo.",
     empty: "No encontramos lugares con esos filtros. Probá otra zona o tipo.",
+    keywordMiss: "No encontramos nada para «{kw}» en tu zona — te mostramos lo mejor cerca.",
     emptyClosed: "A esta hora todo está cerrado. Probá otro horario — o usá el simulador para ver el día.",
     emptyFar: "Lo que está abierto queda lejos para tu tiempo disponible. Ampliá el tiempo o cambiá de transporte.",
     geocodeError: "No encontramos ese lugar.",
@@ -236,7 +241,11 @@ const en: Dict = {
     guideButton: "🧠 Ask the guide",
     guideRegenerate: "🔁 Regenerate guide summary",
   },
-  profile: { title: "Your tastes" },
+  profile: {
+    title: "Your tastes",
+    hint: "Tune the weight of each type — it also learns from 👍/👎 votes.",
+    reset: "Reset all",
+  },
   sim: {
     label: "Simulate time (Japan)",
     now: "Now",
@@ -268,6 +277,7 @@ const en: Dict = {
     guideThinking: "The guide is writing the summary…",
     error: "Could not fetch data. Try again.",
     empty: "No places found with these filters. Try another area or type.",
+    keywordMiss: "Nothing found for «{kw}» near you — showing the best of the area instead.",
     emptyClosed: "Everything is closed at this hour. Try another time — or use the simulator to preview the day.",
     emptyFar: "What's open is too far for your available time. Increase the time or change transport.",
     geocodeError: "Could not find that place.",

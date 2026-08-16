@@ -162,6 +162,136 @@ describe("recommend — pipeline outcomes", () => {
     expect(top.reasons.some((x) => x.key === "keywordMatch")).toBe(true); // via translated term
   });
 
+  it("keyword matches rank first even when a generic place scores higher", async () => {
+    mockFetch([
+      { match: urlContains("open-meteo.com"), response: weatherFixture },
+      {
+        match: urlContains("textsearch"),
+        response: () =>
+          googleSearch([
+            // low-rated match: base 50 + dist + rating(−4) + vol + open + kw(+20)
+            result("kw1", "Pokemon Center", {
+              rating: 3, user_ratings_total: 5, opening_hours: { open_now: true },
+            }),
+          ]),
+      },
+      {
+        match: urlContains("nearbysearch"),
+        response: () =>
+          jsonResponse({
+            status: "OK",
+            results: [
+              // generic star: high rating + volume → way higher raw score
+              result("gen1", "Big Museum", {
+                rating: 4.6, user_ratings_total: 5000, opening_hours: { open_now: true },
+              }),
+            ],
+          }),
+      },
+    ]);
+    const r = await recommend({
+      lat: 36.65, lng: 138.19, budget: "afternoon", types: ["museum"], mode: "walking",
+      keyword: "pokemon",
+    });
+    expect(r.places[0].id).toBe("g_kw1"); // intent wins over rating/volume
+    expect(r.keywordMiss).toBe(false);
+    expect(r.keywordResults).toBeGreaterThan(0);
+  });
+
+  it("flags keywordMiss when the keyword query finds nothing", async () => {
+    mockFetch([
+      { match: urlContains("open-meteo.com"), response: weatherFixture },
+      {
+        match: urlContains("textsearch"),
+        response: () => jsonResponse({ status: "ZERO_RESULTS", results: [] }),
+      },
+      {
+        match: urlContains("nearbysearch"),
+        response: () =>
+          jsonResponse({
+            status: "OK",
+            results: [
+              result("gen1", "Generic Place", { opening_hours: { open_now: true } }),
+            ],
+          }),
+      },
+    ]);
+    const r = await recommend({
+      lat: 36.65, lng: 138.19, budget: "afternoon", types: ["museum"], mode: "walking",
+      keyword: "snoopy",
+    });
+    expect(r.keywordMiss).toBe(true);
+    expect(r.keywordResults).toBe(0);
+    expect(r.places.length).toBeGreaterThan(0); // generic pool still shown, honestly labeled
+  });
+
+  it("flags keywordMiss when keyword results exist but are out of reach", async () => {
+    mockFetch([
+      { match: urlContains("open-meteo.com"), response: weatherFixture },
+      {
+        match: urlContains("textsearch"),
+        response: () =>
+          googleSearch([
+            // Google found a real Snoopy place — but ~30 km away
+            result("far1", "SNOOPY Chaya", {
+              geometry: { location: { lat: 36.9, lng: 138.3 } },
+              opening_hours: { open_now: true },
+            }),
+          ]),
+      },
+      {
+        match: urlContains("nearbysearch"),
+        response: () =>
+          jsonResponse({
+            status: "OK",
+            results: [
+              result("local1", "Generic Place", { opening_hours: { open_now: true } }),
+            ],
+          }),
+      },
+    ]);
+    const r = await recommend({
+      lat: 36.65, lng: 138.19, budget: "afternoon", types: ["museum"], mode: "walking",
+      keyword: "snoopy",
+    });
+    expect(r.keywordMiss).toBe(true); // nothing Snoopy-ish within reach
+    expect(r.keywordResults).toBe(0);
+    expect(r.places.map((p) => p.id)).toContain("g_local1");
+  });
+
+  it("drops low-relevance keyword results (rank ≥ 3) so junk can't mask a miss", async () => {
+    mockFetch([
+      { match: urlContains("open-meteo.com"), response: weatherFixture },
+      {
+        match: urlContains("textsearch"),
+        response: () =>
+          googleSearch([
+            // Google's top-3: real Snoopy places, but all out of reach
+            result("far1", "SNOOPY Chaya", { geometry: { location: { lat: 36.9, lng: 138.3 } }, opening_hours: { open_now: true } }),
+            result("far2", "Snoopy Museum", { geometry: { location: { lat: 36.95, lng: 138.4 } }, opening_hours: { open_now: true } }),
+            result("far3", "Snoopy Town", { geometry: { location: { lat: 36.98, lng: 138.5 } }, opening_hours: { open_now: true } }),
+            // rank 4+: loose match near the user — must be dropped as noise
+            result("junk1", "THANK YOU MART", { opening_hours: { open_now: true } }),
+          ]),
+      },
+      {
+        match: urlContains("nearbysearch"),
+        response: () =>
+          jsonResponse({
+            status: "OK",
+            results: [result("local1", "Zenko-ji Temple", { opening_hours: { open_now: true } })],
+          }),
+      },
+    ]);
+    const r = await recommend({
+      lat: 36.65, lng: 138.19, budget: "afternoon", types: ["museum"], mode: "walking",
+      keyword: "snoopy",
+    });
+    expect(r.keywordMiss).toBe(true);
+    expect(r.keywordResults).toBe(0);
+    expect(r.places.map((p) => p.id)).not.toContain("g_junk1"); // noise dropped
+  });
+
   it("reports all_closed when simulation closes every candidate", async () => {
     mockFetch([
       { match: urlContains("open-meteo.com"), response: weatherFixture },

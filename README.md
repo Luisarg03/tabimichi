@@ -86,7 +86,13 @@ Repeated queries hit the freshness caches:
   penalties are waived for places the user explicitly asked for.
   `filters.nameMatches` in the log counts literal name hits — 0 literal hits
   can still be perfectly relevant (semantic matches, e.g. Animate for
-  "pokemon").
+  "pokemon"). When the keyword query finds nothing the UI shows an honest
+  note ("no encontramos nada para «snoopy» — mostramos lo mejor cerca")
+  instead of presenting the generic pool as keyword results. Keyword
+  matches always rank first — the user's intent beats weather/rating noise.
+- **Profile manager** — "Tus gustos": a panel (🎯) to read and steer the
+  learned 👍/👎 profile per type (−5..+5 steppers + reset), via
+  `/api/profile` (GET / POST {tag, weight} / POST {reset: true}).
 - **LLM narrative (M2)** — `lib/llm/` two-layer provider registry, tried in
   order: **OpenCode Zen (free)** `deepseek-v4-flash-free` at
   `opencode.ai/zen/v1` → **OpenCode Go (paid)** `deepseek-v4-flash` at

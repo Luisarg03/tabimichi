@@ -1,4 +1,4 @@
-import type { EmptyReason, Place, RecommendInput, RecommendResult, TransportMode } from "./types";
+import type { EmptyReason, Place, RecommendInput, RecommendResult, ScoredPlace, TransportMode } from "./types";
 import { getWeather, weatherAt } from "./weather";
 import { BUDGET_MIN, radiusForBudget, haversineKm } from "./geo";
 import { discover } from "./places";
@@ -70,7 +70,7 @@ export async function recommend(input: RecommendInput): Promise<RecommendResult>
     ? [...keywordTokens(keyword), ...(translated && translated !== keyword ? keywordTokens(translated) : [])]
     : undefined;
 
-  const [weatherRaw, { places, source }] = await Promise.all([
+  const [weatherRaw, { places, source, keywordResults }] = await Promise.all([
     getWeather(input.lat, input.lng),
     discover({
       lat: input.lat,
@@ -129,11 +129,21 @@ export async function recommend(input: RecommendInput): Promise<RecommendResult>
     stats,
   });
 
-  // diversify keeps the SET varied (no 6 parks out of 10); sorting after
-  // keeps the displayed order clean — best score first, ties by travel time
-  const top = diversify(scored, 10).sort(
-    (a, b) => b.score - a.score || a.travelMin - b.travelMin
-  );
+  // With an interest keyword the user's intent wins: places whose name
+  // matches rank first (weather/rating noise can't bury them), then the
+  // rest by score. Without a keyword (or no matches) keep the diversified,
+  // score-sorted list.
+  const kwMiss = Boolean(keyword) && (keywordResults ?? 0) === 0;
+  let top: ScoredPlace[];
+  if (keyword && !kwMiss) {
+    const matched = scored.filter((p) => p.reasons.some((r) => r.key === "keywordMatch"));
+    const rest = scored.filter((p) => !p.reasons.some((r) => r.key === "keywordMatch"));
+    top = [...matched, ...rest].slice(0, 10);
+  } else {
+    top = diversify(scored, 10).sort(
+      (a, b) => b.score - a.score || a.travelMin - b.travelMin
+    );
+  }
   const emptyReason = emptyReasonFor(candidates, top.length);
 
   const traceId = newTraceId();
@@ -151,6 +161,8 @@ export async function recommend(input: RecommendInput): Promise<RecommendResult>
     scored: top.length,
     emptyReason,
     keyword,
+    keywordResults: keywordResults ?? 0,
+    keywordMiss: kwMiss,
     weather: { condition: weather.condition, tempC: weather.tempC, precipMm: weather.precipMm },
     profile,
     radiusKm,
@@ -180,6 +192,9 @@ export async function recommend(input: RecommendInput): Promise<RecommendResult>
     narrated: false,
     emptyReason,
     traceId,
+    keyword,
+    keywordResults: keywordResults ?? 0,
+    keywordMiss: kwMiss,
   };
 }
 

@@ -4,6 +4,7 @@ import path from "node:path";
 import { existsSync } from "node:fs";
 import { POST as recommendPOST } from "@/app/api/recommend/route";
 import { POST as feedbackPOST, GET as feedbackGET } from "@/app/api/feedback/route";
+import { GET as profileGET, POST as profilePOST } from "@/app/api/profile/route";
 import { GET as settingsGET, POST as settingsPOST } from "@/app/api/settings/route";
 import { GET as geocodeGET } from "@/app/api/geocode/route";
 import { GET as photoGET } from "@/app/api/photo/route";
@@ -355,5 +356,67 @@ describe("/api/photos", () => {
     const body2 = await second.json();
     expect(body2.photos.g_d1).toEqual(["r1", "r3"]);
     expect(detailsCalls).toBe(1); // verified → skipped
+  });
+});
+
+describe("/api/profile", () => {
+  it("reads the profile", async () => {
+    const res = await profileGET();
+    const body = await res.json();
+    expect(body.profile).toEqual({});
+  });
+
+  it("sets a tag weight, clamps it, and removes at zero", async () => {
+    const set = async (tag: string, weight: number) => {
+      const res = await profilePOST(
+        new NextRequest("http://localhost/api/profile", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tag, weight }),
+        })
+      );
+      expect(res.status).toBe(200);
+      return (await res.json()).profile as Record<string, number>;
+    };
+    expect((await set("onsen", 3)).onsen).toBe(3);
+    expect((await set("onsen", 99)).onsen).toBe(5);
+    expect((await set("onsen", 0)).onsen).toBeUndefined();
+  });
+
+  it("resets the whole profile", async () => {
+    await profilePOST(
+      new NextRequest("http://localhost/api/profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tag: "food", weight: 4 }),
+      })
+    );
+    const res = await profilePOST(
+      new NextRequest("http://localhost/api/profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reset: true }),
+      })
+    );
+    expect(((await res.json()).profile as Record<string, number>)).toEqual({});
+  });
+
+  it("rejects unknown tags and non-numeric weights", async () => {
+    const bad1 = await profilePOST(
+      new NextRequest("http://localhost/api/profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tag: "nope", weight: 1 }),
+      })
+    );
+    expect(bad1.status).toBe(400);
+    const bad2 = await profilePOST(
+      new NextRequest("http://localhost/api/profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tag: "onsen", weight: "mucho" }),
+      })
+    );
+    expect(bad2.status).toBe(400);
   });
 });

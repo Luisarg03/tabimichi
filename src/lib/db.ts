@@ -246,6 +246,27 @@ export function getProfile(): Record<string, number> {
   return out;
 }
 
+/** Set one tag weight directly (Tus gustos manager), clamped to [-5, 5]. */
+export function setProfileWeight(tag: string, weight: number): Record<string, number> {
+  const d = getDb();
+  const clamped = Math.max(-5, Math.min(5, Math.round(weight)));
+  if (clamped === 0) {
+    d.prepare("DELETE FROM profile_weights WHERE tag = ?").run(tag);
+  } else {
+    d.prepare(
+      `INSERT INTO profile_weights (tag, weight) VALUES (?, ?)
+       ON CONFLICT(tag) DO UPDATE SET weight = excluded.weight`
+    ).run(tag, clamped);
+  }
+  return getProfile();
+}
+
+/** Clear the whole learned profile (Tus gustos → reset). */
+export function resetProfile(): Record<string, number> {
+  getDb().prepare("DELETE FROM profile_weights").run();
+  return {};
+}
+
 /**
  * Record a 👍/👎 on a place and update the profile: each tag of the place
  * gets +1 (like) or −1 (dislike), clamped to [-5, 5].
