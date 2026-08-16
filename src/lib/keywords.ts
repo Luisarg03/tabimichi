@@ -2,10 +2,10 @@
  * Optional interest keyword: "pokemon", "book off", "gatos"…
  * Normalization + name matching.
  *
- * NO alias table: the keyword passes RAW to Google (brands, English and
- * Japanese terms work as-is — verified live). Spanish words that Google
- * doesn't understand ("gatos" → ZERO_RESULTS) are translated on the fly by
- * the LLM layer (lib/llm/translate.ts), automatically and cached.
+ * NO alias table and NO LLM: the keyword passes RAW to Google (brands,
+ * English and Japanese terms work as-is — verified live). Spanish words that
+ * Google doesn't understand ("gatos" → ZERO_RESULTS) are translated by the
+ * free keyless MyMemory API (lib/translate.ts), cached per term.
  */
 
 /** Lowercase, collapse whitespace, strip diacritics ("Pokémon" → "pokemon"). */
