@@ -9,6 +9,7 @@ import { googlePlaceDetails } from "./places/google";
 import { isOpenAt, type OpenPeriod } from "./open-hours";
 import { jstHourStamp } from "./jst";
 import { logEntry, newTraceId } from "./logger";
+import { normalizeKeyword, searchTermFor } from "./keywords";
 
 type Candidate = Place & { periods?: OpenPeriod[] };
 
@@ -57,6 +58,10 @@ export async function recommend(input: RecommendInput): Promise<RecommendResult>
   const budgetMin = BUDGET_MIN[input.budget] ?? 300;
   const radiusKm = input.radiusKm ?? radiusForBudget(input.budget, mode);
   const simulated = input.now ? new Date(input.now) : null;
+  // optional interest keyword — normalized once here, drives discovery + scoring
+  // (discovery gets the alias-expanded search term, scoring the user's word)
+  const keyword = input.keyword ? normalizeKeyword(input.keyword) : undefined;
+  const searchTerm = keyword ? searchTermFor(keyword) : undefined;
 
   const [weatherRaw, { places, source }] = await Promise.all([
     getWeather(input.lat, input.lng),
@@ -66,6 +71,7 @@ export async function recommend(input: RecommendInput): Promise<RecommendResult>
       radiusKm,
       types: input.types,
       lang: input.lang,
+      keyword: searchTerm,
     }),
   ]);
 
@@ -98,7 +104,7 @@ export async function recommend(input: RecommendInput): Promise<RecommendResult>
   }
 
   const profile = getProfile();
-  const stats = { closed: 0, tooFar: 0 };
+  const stats = { closed: 0, tooFar: 0, keywordHits: 0 };
   const scored = scorePlaces(candidates, {
     base: { lat: input.lat, lng: input.lng },
     budgetMin,
@@ -110,6 +116,7 @@ export async function recommend(input: RecommendInput): Promise<RecommendResult>
     // real mode: closed places stay as candidates with a badge + penalty
     // (simulation keeps the hard filter so the simulator is precise)
     softClosed: !simulated,
+    keyword,
     profile,
     stats,
   });
@@ -132,9 +139,10 @@ export async function recommend(input: RecommendInput): Promise<RecommendResult>
     sim: simulated !== null,
     source,
     candidates: candidates.length,
-    filters: { closed: stats.closed, tooFar: stats.tooFar },
+    filters: { closed: stats.closed, tooFar: stats.tooFar, keywordHits: stats.keywordHits },
     scored: top.length,
     emptyReason,
+    keyword,
     weather: { condition: weather.condition, tempC: weather.tempC, precipMm: weather.precipMm },
     profile,
     radiusKm,

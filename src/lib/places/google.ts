@@ -101,11 +101,14 @@ async function textSearch(
   type: ExperienceType,
   lat: number,
   lng: number,
-  radiusM: number
+  radiusM: number,
+  keyword?: string
 ): Promise<GoogleResult[]> {
   const buildUrl = (token?: string) => {
     const params = new URLSearchParams({
-      query: `${type.googleQuery} near ${lat.toFixed(4)},${lng.toFixed(4)}`,
+      // with an interest keyword the query becomes the keyword itself
+      // (e.g. "pokemon near …") — that's the whole point of keyword mode
+      query: `${keyword ? keyword : type.googleQuery} near ${lat.toFixed(4)},${lng.toFixed(4)}`,
       location: `${lat.toFixed(5)},${lng.toFixed(5)}`,
       radius: String(Math.min(radiusM, 50000)),
       // restriction, not a bias: drop results outside the radius
@@ -192,11 +195,12 @@ export async function googleSearch(
   lat: number,
   lng: number,
   radiusM: number,
-  lang: string
+  lang: string,
+  keyword?: string
 ): Promise<Place[]> {
   if (!apiKey) throw new Error("no-google-key");
 
-  const jobs: Array<Promise<GoogleResult[]>> = [textSearch(apiKey, type, lat, lng, radiusM)];
+  const jobs: Array<Promise<GoogleResult[]>> = [textSearch(apiKey, type, lat, lng, radiusM, keyword)];
   if ((type.googleTypes?.length ?? 0) > 0) {
     jobs.push(nearbySearch(apiKey, type, lat, lng, radiusM, lang));
   }
@@ -228,7 +232,8 @@ export async function googleSearchAll(
   lat: number,
   lng: number,
   radiusM: number,
-  lang: string
+  lang: string,
+  keyword?: string
 ): Promise<Place[]> {
   const limit = 3;
   let cursor = 0;
@@ -237,7 +242,7 @@ export async function googleSearchAll(
     while (cursor < types.length) {
       const type = types[cursor++];
       try {
-        out.push(...(await googleSearch(apiKey, type, lat, lng, radiusM, lang)));
+        out.push(...(await googleSearch(apiKey, type, lat, lng, radiusM, lang, keyword)));
       } catch {
         // one type failing must not kill the others
       }

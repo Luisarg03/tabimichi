@@ -2,6 +2,7 @@ import type { Place, Reason, ScoredPlace, WeatherInfo, LatLng, TransportMode } f
 import { haversineKm, travelMin } from "./geo";
 import { EXPERIENCE_TYPE_MAP } from "./places/taxonomy";
 import { fmtCount } from "./format";
+import { keywordTokens, matchesKeyword } from "./keywords";
 
 export interface ScoreContext {
   base: LatLng;
@@ -18,10 +19,16 @@ export interface ScoreContext {
    * "qué está abierto a esta hora" precisely.
    */
   softClosed?: boolean;
+  /**
+   * Optional interest keyword: places whose name matches get a big boost
+   * (+20, reason "keywordMatch") and are exempt from chain/hotel penalties —
+   * if the user explicitly asks for "Sukiya", Sukiya must rank.
+   */
+  keyword?: string;
   /** M3: learned tag weights from 👍/👎 feedback, e.g. { onsen: 2, food: -1 } */
   profile?: Record<string, number>;
   /** dev tracing: counters of why candidates were dropped (mutated) */
-  stats?: { closed: number; tooFar: number };
+  stats?: { closed: number; tooFar: number; keywordHits?: number };
 }
 
 function isIndoor(tag: string): boolean {
@@ -112,6 +119,7 @@ export function isHotelName(name: string): boolean {
 export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
   const { base, budgetMin, weather } = ctx;
   const out: ScoredPlace[] = [];
+  const kwTokens = ctx.keyword ? keywordTokens(ctx.keyword) : [];
 
   for (const p of places) {
     const distanceKm = haversineKm(base, p);
@@ -130,6 +138,12 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
     if (p.openNow === false) {
       ctx.stats && ctx.stats.closed++;
       if (!ctx.softClosed) continue;
+    }
+
+    // interest keyword: name match → big boost; the user asked for THIS
+    const kwHit = kwTokens.length > 0 && matchesKeyword(p.name ?? "", kwTokens);
+    if (kwHit) {
+      ctx.stats && (ctx.stats.keywordHits = (ctx.stats.keywordHits ?? 0) + 1);
     }
 
     let score = 50;
@@ -226,14 +240,21 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
       }
     }
 
-    // --- noise penalties: chains & hotels ---
+    // --- interest keyword: explicit user intent wins over noise rules ---
+    if (kwHit) {
+      score += 20;
+      reasons.push({ key: "keywordMatch", params: { kw: ctx.keyword ?? "" } });
+    }
+
+    // --- noise penalties: chains & hotels (skipped when the keyword matched:
+    // the user asked for that exact place, e.g. "Sukiya") ---
     const name = p.name ?? "";
-    if (isChainName(name)) {
+    if (!kwHit && isChainName(name)) {
       score -= 12;
       reasons.push({ key: "chain" });
     }
     // a ryokan with an onsen is an experience for this user — exempt it
-    if (isHotelName(name) && !p.tags.includes("onsen")) {
+    if (!kwHit && isHotelName(name) && !p.tags.includes("onsen")) {
       score -= 12;
       reasons.push({ key: "hotel" });
     }

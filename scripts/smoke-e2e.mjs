@@ -55,6 +55,18 @@ async function main() {
     [...sim9.places, ...sim3.places].some((p) => p.openNow === true)
   );
 
+  // 2b. interest keyword — should return 200 with places; keyword hits are a
+  // quality signal, warn (not fail) when the pool has no name matches
+  console.log("recommend (keyword):");
+  const kw = (await post("/api/recommend", {
+    lat: 35.681619, lng: 139.7653303, budget: "afternoon", types: [], mode: "transit", lang: "es",
+    keyword: "pokemon",
+  })).json;
+  check("keyword request 200 + places", kw && (kw.places ?? []).length > 0);
+  const kwHits = (kw.places ?? []).filter((p) => (p.reasons ?? []).some((x) => x.key === "keywordMatch")).length;
+  if (kwHits === 0) console.log("⚠ warn: keyword 'pokemon' produced 0 name matches (pool:", kw.candidates, ")");
+  else console.log(`✓ ${kwHits} keyword matches in top-${kw.places.length}`);
+
   // 3. geocode
   console.log("geocode:");
   const geo = await fetch(`${BASE}/api/geocode?q=${encodeURIComponent("Ofukacho, Osaka")}`).then((x) => x.json());

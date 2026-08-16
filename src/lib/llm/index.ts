@@ -9,6 +9,8 @@ export interface NarrateOpts {
   mode: TransportMode;
   lang: string;
   types: string[];
+  /** optional interest keyword: the guide tailors the summary to it */
+  keyword?: string;
 }
 
 const BUDGET_LABEL: Record<string, [string, string]> = {
@@ -56,8 +58,8 @@ function buildPrompt(opts: NarrateOpts): { system: string; user: string } {
     : "You are Tabi, an expert local travel guide for Japan. Answer in English, concise and specific. JSON only, no extra text.";
 
   const user = es
-    ? `Contexto: el usuario explora cerca de su zona con ${BUDGET_LABEL[opts.budget]?.[0] ?? "tiempo"} disponible y se mueve ${MODE_LABEL[opts.mode]?.[0] ?? "de alguna forma"}. Clima: ${opts.weather.label}, ${opts.weather.tempC}°C, sensación ${opts.weather.feelsC}°C. Intereses: ${opts.types.join(", ") || "cualquier cosa"}. Candidatos puntuados: ${JSON.stringify(candidates)}. Redactá para los mejores 3 un "por qué ir hoy" de 1-2 frases cada uno, mencionando algo concreto (clima, momento del día, distancia en su modo de transporte, qué lo hace especial). Además escribí un resumen general de 2-3 frases del plan ideal para el día con estos candidatos. Respondé SOLO JSON: {"summary":"...","narratives":[{"id":"...","why":"..."}]}`
-    : `Context: the user is exploring near their area with ${BUDGET_LABEL[opts.budget]?.[1] ?? "some time"} available and moves ${MODE_LABEL[opts.mode]?.[1] ?? "somehow"}. Weather: ${opts.weather.label}, ${opts.weather.tempC}°C, feels like ${opts.weather.feelsC}°C. Interests: ${opts.types.join(", ") || "anything"}. Scored candidates: ${JSON.stringify(candidates)}. Write a "why go today" of 1-2 sentences for the best 3, mentioning something concrete (weather, time of day, distance in their transport mode, what makes it special). Also write a 2-3 sentence general summary of the ideal day plan with these candidates. Reply JSON ONLY: {"summary":"...","narratives":[{"id":"...","why":"..."}]}`;
+    ? `Contexto: el usuario explora cerca de su zona con ${BUDGET_LABEL[opts.budget]?.[0] ?? "tiempo"} disponible y se mueve ${MODE_LABEL[opts.mode]?.[0] ?? "de alguna forma"}. Clima: ${opts.weather.label}, ${opts.weather.tempC}°C, sensación ${opts.weather.feelsC}°C. Intereses: ${opts.types.join(", ") || "cualquier cosa"}${opts.keyword ? `. Interés específico del usuario: "${opts.keyword}" — priorizalo en el resumen` : ""}. Candidatos puntuados: ${JSON.stringify(candidates)}. Redactá para los mejores 3 un "por qué ir hoy" de 1-2 frases cada uno, mencionando algo concreto (clima, momento del día, distancia en su modo de transporte, qué lo hace especial). Además escribí un resumen general de 2-3 frases del plan ideal para el día con estos candidatos. Respondé SOLO JSON: {"summary":"...","narratives":[{"id":"...","why":"..."}]}`
+    : `Context: the user is exploring near their area with ${BUDGET_LABEL[opts.budget]?.[1] ?? "some time"} available and moves ${MODE_LABEL[opts.mode]?.[1] ?? "somehow"}. Weather: ${opts.weather.label}, ${opts.weather.tempC}°C, feels like ${opts.weather.feelsC}°C. Interests: ${opts.types.join(", ") || "anything"}${opts.keyword ? `. User's specific interest: "${opts.keyword}" — prioritize it in the summary` : ""}. Scored candidates: ${JSON.stringify(candidates)}. Write a "why go today" of 1-2 sentences for the best 3, mentioning something concrete (weather, time of day, distance in their transport mode, what makes it special). Also write a 2-3 sentence general summary of the ideal day plan with these candidates. Reply JSON ONLY: {"summary":"...","narratives":[{"id":"...","why":"..."}]}`;
 
   return { system, user };
 }

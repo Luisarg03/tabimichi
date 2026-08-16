@@ -14,6 +14,8 @@ export interface DiscoverPayload {
   mode: TransportMode;
   /** true when the position is exact GPS, false when geocoded address */
   gps?: boolean;
+  /** optional interest keyword: "pokemon", "book off", "gatos"… */
+  keyword?: string;
 }
 
 const BUDGETS: TimeBudget[] = ["lunch", "afternoon", "full_day"];
@@ -47,6 +49,7 @@ export default function DayPanel({
   const [budget, setBudget] = useState<TimeBudget>("afternoon");
   const [mode, setMode] = useState<TransportMode>("transit");
   const [types, setTypes] = useState<string[]>([]);
+  const [keyword, setKeyword] = useState("");
 
   async function geocode(q: string) {
     if (!q.trim()) return;
@@ -80,7 +83,8 @@ export default function DayPanel({
 
   function submit() {
     if (!location) return;
-    onDiscover({ ...location, budget, types, mode });
+    const kw = keyword.trim();
+    onDiscover({ ...location, budget, types, mode, keyword: kw || undefined });
   }
 
   return (
@@ -191,6 +195,19 @@ export default function DayPanel({
             );
           })}
         </div>
+      </div>
+
+      {/* optional interest keyword */}
+      <div className="mt-4">
+        <span className="text-sm font-medium text-slate-700">{t("panel.interestLabel")}</span>
+        <input
+          value={keyword}
+          onChange={(e) => setKeyword(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && submit()}
+          placeholder={t("panel.interestPlaceholder")}
+          className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+        />
+        <p className="mt-1 text-xs text-slate-400">{t("panel.interestHint")}</p>
       </div>
 
       {/* discover */}

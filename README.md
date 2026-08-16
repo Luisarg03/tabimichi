@@ -74,6 +74,11 @@ Repeated queries hit the freshness caches:
   weather fit, **Bayesian-shrunk rating** (a 4.5★ with 5 reviews ≈ 4.0),
   **review volume** (capped popularity boost), open-now status, hard distance
   cap, profile affinity (M3).
+- **Interest keyword** — optional free-text ("pokemon", "book off", "gatos"):
+  the Google text-search query becomes the keyword itself, matching places
+  get +20 with a "Coincide con tu interés" reason, and chain/hotel penalties
+  are waived for places the user explicitly asked for. Spanish words map to
+  English search terms via a small alias table (`lib/keywords.ts`).
 - **LLM narrative (M2)** — `lib/llm/` two-layer provider registry, tried in
   order: **OpenCode Zen (free)** `deepseek-v4-flash-free` at
   `opencode.ai/zen/v1` → **OpenCode Go (paid)** `deepseek-v4-flash` at
@@ -132,15 +137,17 @@ Three layers, all hermetic except the last one:
 npm test          # unit + integration (Vitest, fetch fully mocked, temp stores)
 npm test:watch    # TDD mode
 npm run test:e2e  # smoke against a LIVE server (npm start first)
+node scripts/analyze-recommend.mjs  # quality report per scenario (server on :3000)
 ```
 
 - **Unit** (`src/lib/*.test.ts`): geo (modes/budgets), opening-hours (same-day,
   overnight, 24h), JST simulation, weather classification + hour override,
   scoring (travel bands, weather×mode, Bayesian rating, review volume, profile
-  affinity, hard filters), LLM (retry on 5xx, fail-fast on 4xx, provider
-  fallback, JSON parsing), place sources (Google/Geoapify/Overpass parsing +
-  the full fallback chain google → geoapify → overpass → cache), DB (upsert,
-  freshness, feedback clamping).
+  affinity, hard filters, interest-keyword boost + chain exemption), keywords
+  (normalization, ES→EN aliases, name matching), LLM (retry on 5xx, fail-fast
+  on 4xx, provider fallback, JSON parsing), place sources (Google/Geoapify/
+  Overpass parsing + the full fallback chain google → geoapify → overpass →
+  cache), DB (upsert, freshness, feedback clamping).
 - **Integration** (`src/app/api/routes.test.ts`): every API route exercised
   with mocked fetch — recommend (incl. time-simulation filtering), feedback,
   settings, geocode, photo proxy (disk cache), photo dedupe.
