@@ -23,7 +23,15 @@ interface SavedLocation {
 
 export default function HomePage() {
   const { t, locale } = useI18n();
-  const [location, setLocation] = useState<SavedLocation | null>(null);
+  const [location, setLocation] = useState<SavedLocation | null>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const raw = localStorage.getItem("tabi.lastLocation");
+      return raw ? (JSON.parse(raw) as SavedLocation) : null;
+    } catch {
+      return null;
+    }
+  });
   const [mode, setMode] = useState<string>("transit");
   const [result, setResult] = useState<RecommendResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -51,12 +59,6 @@ export default function HomePage() {
   >(null);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem("tabi.lastLocation");
-      if (raw) setLocation(JSON.parse(raw) as SavedLocation);
-    } catch {
-      // ignore
-    }
     fetch("/api/feedback")
       .then((r) => r.json())
       .then((d) => setProfile(d.profile as PlaceProfile))

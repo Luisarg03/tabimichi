@@ -74,7 +74,7 @@ export default function RecommendationCard({
 
   // reset the gallery when the card shows a different place
   useEffect(() => {
-    setActiveIdx(0);
+    setActiveIdx(0); // eslint-disable-line react-hooks/set-state-in-effect
   }, [place.id]);
 
   const prevPhoto = () => setActiveIdx((i) => (i - 1 + photoRefs.length) % photoRefs.length);
