@@ -47,6 +47,23 @@ npm run dev        # http://localhost:3000
 
 **Requirements:** Node.js ≥ 22.5 (for built-in `node:sqlite`)
 
+### 🚀 Deploy to Vercel
+
+```bash
+bash scripts/setup-vercel.sh   # guided setup (login + env vars)
+```
+
+Or manually:
+
+```bash
+vercel link                      # link to your Vercel account
+vercel env add GOOGLE_PLACES_API_KEY production
+# ... add other keys
+vercel --prod                    # deploy to production
+```
+
+**Security:** API keys live on Vercel's servers only — they never reach the browser. Preview deploys are created automatically for every PR.
+
 ### 🔑 API keys (optional)
 
 All keys are optional — the app works without any, using public Overpass + local cache.
