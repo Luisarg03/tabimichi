@@ -4,7 +4,7 @@ import { BUDGET_MIN, radiusForBudget, haversineKm } from "./geo";
 import { discover } from "./places";
 import { scorePlaces } from "./scoring";
 import { getProfile } from "./db";
-import { getConfig } from "./settings";
+import { getConfig, type AppConfig } from "./settings";
 import { googlePlaceDetails } from "./places/google";
 import { isOpenAt, type OpenPeriod } from "./open-hours";
 import { jstHourStamp } from "./jst";
@@ -13,6 +13,11 @@ import { keywordTokens, normalizeKeyword } from "./keywords";
 import { translateEsEn } from "./translate";
 
 type Candidate = Place & { periods?: OpenPeriod[] };
+
+export interface RecommendOptions extends RecommendInput {
+  /** per-user API keys — avoids reading from shared process.env */
+  config?: AppConfig;
+}
 
 /**
  * Spread the top picks across experience types so a generic "discover" shows
@@ -53,7 +58,7 @@ export function diversify<T extends { tags: string[] }>(scored: T[], limit: numb
  * candidates and open/closed is evaluated at the simulated instant, and the
  * weather is taken from the hourly forecast at that hour.
  */
-export async function recommend(input: RecommendInput): Promise<RecommendResult> {
+export async function recommend(input: RecommendOptions): Promise<RecommendResult> {
   const startedAt = performance.now();
   const mode: TransportMode = input.mode ?? "transit";
   const budgetMin = BUDGET_MIN[input.budget] ?? 300;
@@ -87,6 +92,7 @@ export async function recommend(input: RecommendInput): Promise<RecommendResult>
       types: input.types,
       lang: input.lang,
       keyword: searchTerm,
+      config: input.config,
     }),
   ]);
 
@@ -97,7 +103,7 @@ export async function recommend(input: RecommendInput): Promise<RecommendResult>
   // the results back — never discard candidates outside the enriched slice.
   let candidates: Candidate[] = places;
   if (simulated) {
-    const config = getConfig();
+    const config = input.config ?? getConfig();
     const base = { lat: input.lat, lng: input.lng };
     const byDistance = [...places].sort(
       (a, b) => haversineKm(base, a) - haversineKm(base, b)

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useI18n } from "@/lib/i18n";
+import { useAuth } from "@/lib/auth-context";
 
 interface Status {
   googlePlacesApiKey: boolean;
@@ -30,39 +31,95 @@ const KEY_FIELDS: Array<{
 
 export default function SettingsForm() {
   const { t } = useI18n();
+  const { getToken } = useAuth();
   const [status, setStatus] = useState<Status | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
   const [endpoint, setEndpoint] = useState("");
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/settings")
-      .then((r) => r.json())
-      .then((s: Status) => {
-        setStatus(s);
-        setEndpoint(s.overpassEndpoint ?? "");
-      })
-      .catch(() => {});
-  }, []);
+    async function load() {
+      try {
+        const token = await getToken();
+        if (!token) return;
+
+        const res = await fetch("/api/user-keys", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+
+        const data = await res.json();
+        const config = data.config ?? {};
+
+        // Set status (which keys are configured)
+        setStatus({
+          googlePlacesApiKey: Boolean(config.googlePlacesApiKey),
+          opencodeApiKey: Boolean(config.opencodeApiKey),
+          opencodeGoApiKey: Boolean(config.opencodeGoApiKey),
+          geoapifyApiKey: Boolean(config.geoapifyApiKey),
+          overpassEndpoint: config.overpassEndpoint ?? "",
+        });
+        setEndpoint(config.overpassEndpoint ?? "");
+      } catch {
+        // ignore
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, [getToken]);
 
   async function save() {
     setSaving(true);
-    const payload: Record<string, string> = { overpassEndpoint: endpoint.trim() };
-    for (const f of KEY_FIELDS) if (values[f.key]) payload[f.key] = values[f.key];
     try {
-      const res = await fetch("/api/settings", {
+      const token = await getToken();
+      if (!token) return;
+
+      const payload: Record<string, string> = { overpassEndpoint: endpoint.trim() };
+      for (const f of KEY_FIELDS) {
+        // Only include if user typed something (empty = don't overwrite)
+        if (values[f.key]) payload[f.key] = values[f.key];
+      }
+
+      const res = await fetch("/api/user-keys", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify(payload),
       });
-      const s = (await res.json()) as Status;
-      setStatus(s);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2500);
+
+      if (res.ok) {
+        // Update status
+        setStatus((prev) => {
+          if (!prev) return prev;
+          const next = { ...prev };
+          for (const f of KEY_FIELDS) {
+            if (values[f.key]) next[f.key] = true;
+          }
+          next.overpassEndpoint = endpoint.trim();
+          return next;
+        });
+        setValues({});
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2500);
+      }
     } finally {
       setSaving(false);
     }
+  }
+
+  if (loading) {
+    return (
+      <div className="mx-auto max-w-xl space-y-5">
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="h-20 animate-pulse rounded-xl bg-slate-100" />
+        ))}
+      </div>
+    );
   }
 
   return (
@@ -88,13 +145,13 @@ export default function SettingsForm() {
             type="password"
             value={values[f.key] ?? ""}
             onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
-            placeholder={f.placeholder}
+            placeholder={status?.[f.key] ? "•••••••• (ya configurada)" : f.placeholder}
             className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
           />
         </div>
       ))}
 
-      {/* custom Overpass endpoint (self-hosted osm3s) */}
+      {/* custom Overpass endpoint */}
       <div className="rounded-xl border border-slate-200 bg-white p-4">
         <div className="flex items-center justify-between gap-2">
           <label className="text-sm font-medium text-slate-800">{t("settings.overpass")}</label>

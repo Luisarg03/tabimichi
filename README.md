@@ -64,14 +64,32 @@ vercel --prod                    # deploy to production
 
 **Security:** API keys live on Vercel's servers only — they never reach the browser. Preview deploys are created automatically for every PR.
 
-### 🔑 API keys (optional)
+### 🔐 Multi-user API keys (Supabase)
 
-All keys are optional — the app works without any, using public Overpass + local cache.
+Each user manages their own API keys — no shared keys, no admin burden.
 
-| Service | Env var | Purpose | Cost |
-|---------|---------|---------|------|
-| Google Places | `GOOGLE_PLACES_API_KEY` | Ratings, hours, photos | Free $200/mo credit |
-| Geoapify | `GEOAPIFY_API_KEY` | Backup discovery source | Free 3k req/day |
+1. **Create a free Supabase project:** [supabase.com](https://supabase.com) → New Project
+2. **Run the migration:** paste `supabase/migrations/001_api_keys.sql` in SQL Editor
+3. **Add env vars to Vercel:**
+
+| Variable | Where to find it |
+|----------|------------------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase → Settings → API → Project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Settings → API → anon public |
+| `SUPABASE_URL` | Same as above |
+| `SUPABASE_ANON_KEY` | Same as above |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Settings → API → service_role (secret) |
+
+4. **Done.** Users sign up in the app → manage their own keys → keys stored per-user with RLS isolation.
+
+### 🔑 API keys (per-user)
+
+Each user configures their own keys in ⚙️ Settings. Keys are stored in Supabase with Row Level Security — only the owner can access them.
+
+| Service | Purpose | Cost |
+|---------|---------|------|
+| Google Places | Ratings, hours, photos | Free $200/mo credit |
+| Geoapify | Backup discovery source | Free 3k req/day |
 | Overpass | `OVERPASS_ENDPOINT` | Your own osm3s Docker | Free / self-hosted |
 | OpenCode Zen | `OPENCODE_API_KEY` | LLM guide (free tier) | Free |
 | OpenCode Go | `OPENCODE_GO_API_KEY` | LLM guide (paid tier) | Pay-per-use |

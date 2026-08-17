@@ -1,4 +1,4 @@
-import { getConfig } from "../settings";
+import { getConfig, type AppConfig } from "../settings";
 
 /**
  * LLM provider registry (M2).
@@ -42,8 +42,8 @@ const GO: Omit<LlmProvider, "apiKey"> = {
 };
 
 /** Providers with a configured key, free layer first (fallback order). */
-export function activeProviders(): LlmProvider[] {
-  const cfg = getConfig();
+export function activeProviders(config?: AppConfig): LlmProvider[] {
+  const cfg = config ?? getConfig();
   const out: LlmProvider[] = [];
   if (cfg.opencodeApiKey) out.push({ ...ZEN, apiKey: cfg.opencodeApiKey });
   if (cfg.opencodeGoApiKey) out.push({ ...GO, apiKey: cfg.opencodeGoApiKey });
