@@ -1,229 +1,301 @@
-# Tabimichi 旅道 — Discover what to do today
+<div align="center">
 
-[![Next.js](https://img.shields.io/badge/Next.js%2016-000000?style=for-the-badge&logo=nextdotjs&logoColor=white)](https://nextjs.org)
-[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
-[![React](https://img.shields.io/badge/React%2019-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev)
-[![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS%20v4-38BDF8?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
-[![Leaflet](https://img.shields.io/badge/Leaflet-199900?style=for-the-badge&logo=leaflet&logoColor=white)](https://leafletjs.com)
-[![SQLite](https://img.shields.io/badge/node%3Asqlite-003B57?style=for-the-badge&logo=sqlite&logoColor=white)](https://nodejs.org)
-[![Vitest](https://img.shields.io/badge/Vitest-6E9F18?style=for-the-badge&logo=vitest&logoColor=white)](https://vitest.dev)
-[![Google Places](https://img.shields.io/badge/Google%20Places-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://developers.google.com/maps/documentation/places/web-service)
-[![OpenStreetMap](https://img.shields.io/badge/Overpass-7EBC6F?style=for-the-badge&logo=openstreetmap&logoColor=white)](https://overpass-api.de)
-[![Open-Meteo](https://img.shields.io/badge/Open--Meteo-FF6B35?style=for-the-badge)](https://open-meteo.com)
-[![DeepSeek](https://img.shields.io/badge/DeepSeek-4D6BFE?style=for-the-badge&logo=deepseek&logoColor=white)](https://deepseek.com)
-[![DeepSeek Harness](https://img.shields.io/badge/Built%20with%20DeepSeek%20Harness-7C3AED?style=for-the-badge)](https://github.com/deepseek-ai/DeepSeek-Harness)
+# 🗾 Tabimichi 旅道
 
-Tabimichi (旅道, "the road of the journey") is a local discovery app: tell it **where you are** and **how much time you
-have**, and it recommends nearby places to explore — ranked by weather, distance,
-time budget and your mood. It's a personal travel guide, not a hardcoded
-itinerary: every recommendation is discovered live from real data sources.
+### *Discover what to do today*
 
-> Status: **M3 done** — discovery + weather + scoring + map + LLM narrative +
-> feedback profile, running locally. M4 (taste onboarding + season layer) and
-> M5 (PWA/mobile) are next.
+A local discovery app that recommends nearby places ranked by **weather**, **distance**, **time budget** and your **mood**.
 
-## Quick start
+<br/>
+
+[![Next.js](https://img.shields.io/badge/Next.js_16-000000?style=flat-square&logo=nextdotjs&logoColor=white)](https://nextjs.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![React](https://img.shields.io/badge/React_19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS_v4-38BDF8?style=flat-square&logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
+
+[![Leaflet](https://img.shields.io/badge/Leaflet-199900?style=flat-square&logo=leaflet&logoColor=white)](https://leafletjs.com)
+[![SQLite](https://img.shields.io/badge/node%3Asqlite-003B57?style=flat-square&logo=sqlite&logoColor=white)](https://nodejs.org)
+[![Vitest](https://img.shields.io/badge/Vitest-6E9F18?style=flat-square&logo=vitest&logoColor=white)](https://vitest.dev)
+[![Google Places](https://img.shields.io/badge/Google_Places-4285F4?style=flat-square&logo=google&logoColor=white)](https://developers.google.com/maps/documentation/places/web-service)
+[![Overpass](https://img.shields.io/badge/Overpass-7EBC6F?style=flat-square&logo=openstreetmap&logoColor=white)](https://overpass-api.de)
+[![Open-Meteo](https://img.shields.io/badge/Open--Meteo-FF6B35?style=flat-square)](https://open-meteo.com)
+[![DeepSeek](https://img.shields.io/badge/DeepSeek-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://deepseek.com)
+[![DeepSeek Harness](https://img.shields.io/badge/Built_with_DeepSeek_Harness-7C3AED?style=flat-square)](https://github.com/deepseek-ai/DeepSeek-Harness)
+
+<br/>
+
+<img src="docs/screenshots/03-results.png" alt="Tabimichi recommendation results" width="700">
+
+*Nearby places ranked by weather, distance, and your mood — with interactive map*
+
+<br/>
+
+> **Status:** `M3 done` · `M4 next` · `M5 planned`
+>
+> Discovery + weather + scoring + map + LLM narrative + feedback profile — running locally.
+
+</div>
+
+---
+
+## 🚀 Quick start
 
 ```bash
 npm install
 npm run dev        # http://localhost:3000
 ```
 
-Production:
+**Requirements:** Node.js ≥ 22.5 (for built-in `node:sqlite`)
 
-```bash
-npm run build
-npm start          # http://localhost:3000
-```
+### 🔑 API keys (optional)
 
-## How it works
+All keys are optional — the app works without any, using public Overpass + local cache.
 
-```
-Where are you? + time budget + transport mode + mood/type
-        ↓
-  /api/recommend  (fast path ~1s: weather ∥ discovery, rule scoring)
-        ↓
-  Cards + map instantly       ←──  then, async:
-        ↓                           /api/narrate (LLM, ~5-10s)
-  "El guía está escribiendo…"       day summary + per-place "why"
-        ↓
-  Summary + narratives fill in
-```
-
-**Latency design (two phases):** the rules pipeline (weather + discovery +
-scoring) responds in ~1s and renders the cards; the LLM narrative runs as a
-separate async call and fills in the day summary + per-place "why" when ready.
-Repeated queries hit the freshness caches:
-
-- **Weather cache** (in-memory, 10 min TTL per ~1 km area)
-- **Discovery cache** (SQLite, 15 min TTL, only when every requested type is covered)
-- **Overpass hard budget** (30 s ceiling so the fallback can never hang a request)
-
-- **Transport mode** — 🚶 walking / 🚃 train-bus / 🚗 car changes everything:
-  the discovery radius (walking ~0.4×, car ~2×), travel-time heuristics
-  (4.5 km/h on foot, ~28 km/h + wait for transit, ~40 km/h by car) and the
-  reasons ("a 15 min en tren", "a 6 min en auto"). Walking under rain/snow
-  penalizes outdoor picks extra.
-- **Discovery** — multi-source, tried in priority order:
-  1. **Google Places** (text + nearby search, strictbounds) when a key is configured
-  2. **Geoapify** (free tier, 3k req/day) when a key is configured
-  3. **OpenStreetMap Overpass** — your own osm3s endpoint if set, else public mirrors
-  4. **local SQLite cache** (`data/tabi.db`) as last resort
-  Results are always cached for resilience.
-- **Scoring** — rule-based "base fit" score (0–100): travel time vs. budget,
-  weather fit, **Bayesian-shrunk rating** (a 4.5★ with 5 reviews ≈ 4.0),
-  **review volume** (capped popularity boost), open-now status, hard distance
-  cap, profile affinity (M3).
-- **Interest keyword** — optional free-text ("pokemon", "book off", "gatos"):
-  the Google text-search query becomes the keyword itself (no alias table —
-  brands/English/Japanese pass raw, verified: "pokemon" → card & anime shops).
-  Pure-Spanish words Google doesn't understand ("gatos" → ZERO_RESULTS) are
-  translated with the free keyless MyMemory API (`lib/translate.ts`): one
-  ~300 ms call per unique keyword, cached in memory afterwards (zero added
-  latency on repeats; non-keyword requests never touch it). Japanese terms
-  pass raw — Google indexes them directly. Matching places get +20 with a "Coincide con tu
-  interés" reason (raw + translated terms both match names), chain/hotel
-  penalties are waived for places the user explicitly asked for.
-  `filters.nameMatches` in the log counts literal name hits — 0 literal hits
-  can still be perfectly relevant (semantic matches, e.g. Animate for
-  "pokemon"). When the keyword query finds nothing the UI shows an honest
-  note ("no encontramos nada para «snoopy» — mostramos lo mejor cerca")
-  instead of presenting the generic pool as keyword results. Keyword
-  matches always rank first — the user's intent beats weather/rating noise.
-- **Profile manager** — "Tus gustos": a panel (🎯) to read and steer the
-  learned 👍/👎 profile per type (−5..+5 steppers + reset), via
-  `/api/profile` (GET / POST {tag, weight} / POST {reset: true}).
-- **LLM narrative (M2)** — `lib/llm/` two-layer provider registry, tried in
-  order: **OpenCode Zen (free)** `deepseek-v4-flash-free` at
-  `opencode.ai/zen/v1` → **OpenCode Go (paid)** `deepseek-v4-flash` at
-  `opencode.ai/zen/go/v1`. Fail-fast on rate limits (429), retry on transient
-  5xx, fall back to the next layer. The model writes a "why go today" for the
-  top picks in the app's language; the rules still score, the LLM only
-  narrates. Cards show which layer narrated. No provider → rule reasons only.
-- **Photos & popularity** — cards show a photo gallery (up to 8 per place via
-  Place Details, async enrichment after the fast response). Photos are served
-  through a local proxy with per-photo on-disk cache (`data/photos/`, key
-  never exposed). Cards show rating + review count as a popularity panorama.
-- **Closed-now filter** — places known to be closed at query time are excluded
-  (nearby search uses `opennow`), so recommendations are always reachable.
-- **Storage** — `node:sqlite` (built into Node ≥ 22.5, no native deps):
-  place cache + user profile & feedback.
-
-## Settings / API keys
+| Service | Env var | Purpose | Cost |
+|---------|---------|---------|------|
+| Google Places | `GOOGLE_PLACES_API_KEY` | Ratings, hours, photos | Free $200/mo credit |
+| Geoapify | `GEOAPIFY_API_KEY` | Backup discovery source | Free 3k req/day |
+| Overpass | `OVERPASS_ENDPOINT` | Your own osm3s Docker | Free / self-hosted |
+| OpenCode Zen | `OPENCODE_API_KEY` | LLM guide (free tier) | Free |
+| OpenCode Go | `OPENCODE_GO_API_KEY` | LLM guide (paid tier) | Pay-per-use |
 
 Open **⚙️ Ajustes** in the app or edit `data/config.json` directly (gitignored).
-Keys never leave your machine; environment variables override the file.
 
-| Key | Env var | Purpose |
-|-----|---------|---------|
-| Google Places | `GOOGLE_PLACES_API_KEY` | Primary source: ratings, hours, photos. $200/month free credit (~6k calls) — effectively free for personal use. |
-| Geoapify | `GEOAPIFY_API_KEY` | Free backup source (3,000 req/day, no credit card). |
-| Overpass endpoint | `OVERPASS_ENDPOINT` | Point to your own osm3s (Docker) for unlimited reliable OSM data; empty = public mirrors. |
-| OpenCode Zen | `OPENCODE_API_KEY` | LLM guide — next phase (M2). |
-| OpenCode Go | `OPENCODE_GO_API_KEY` | LLM guide — next phase (M2). |
+<div align="center">
+  <img src="docs/screenshots/06-settings.png" alt="Settings page" width="500">
+</div>
 
-Without any key the app still works via public Overpass + local cache; public
-instances are shared and can be slow or overloaded — the app degrades
-gracefully with a clear "data unavailable" message.
+---
 
-## Tech stack
+## ⚙️ How it works
 
-- **Next.js 16** (App Router) + TypeScript + Tailwind CSS v4
-- **Leaflet + react-leaflet** with switchable tile layers (OSM / CARTO
-  Voyager / Positron / Esri Street — English labels in Japan / Esri
-  satellite), all free, no key
-- **node:sqlite** — zero-dependency local cache
-- **i18n** ES / EN (built-in dictionaries)
-- **DeepSeek Harness** — the agentic development environment this project was
-  designed and built in, end to end
-
-## License
-
-**Proprietary.** The repository is public for viewing, but all rights are
-reserved — the code may not be copied, modified, redistributed or used without
-written permission. See [LICENSE](LICENSE).
-
-## Testing
-
-Three layers, all hermetic except the last one:
-
-```bash
-npm test          # unit + integration (Vitest, fetch fully mocked, temp stores)
-npm test:watch    # TDD mode
-npm run test:e2e  # smoke against a LIVE server (npm start first)
-node scripts/analyze-recommend.mjs  # quality report per scenario (server on :3000)
+```
+         ┌─────────────────────────────────────┐
+         │  📍 Where are you?                  │
+         │  ⏱️  How much time?                  │
+         │  🚃 How will you get around?         │
+         │  🎭 What's your mood?                │
+         └───────────────┬─────────────────────┘
+                         │
+                         ▼
+         ┌─────────────────────────────────────┐
+         │    /api/recommend   ⚡ ~1 second    │
+         │  ┌─────────┐  ┌─────────────────┐   │
+         │  │ Weather  │  │   Discovery     │   │
+         │  │ (parallel)│  │ (4 sources)    │   │
+         │  └────┬─────┘  └───────┬────────┘   │
+         │       └────────┬───────┘            │
+         │                ▼                    │
+         │         Rule Scoring                │
+         │         (0–100 points)              │
+         └───────────────┬─────────────────────┘
+                         │
+            ┌────────────┴────────────┐
+            ▼                         ▼
+    ┌───────────────┐      ┌─────────────────────┐
+    │  🃏 Cards +   │      │  🧠 /api/narrate    │
+    │  🗺️  Map       │      │  (async, on-demand) │
+    │  instantly     │      │  LLM writes "why"   │
+    └───────────────┘      └─────────────────────┘
 ```
 
-- **Unit** (`src/lib/*.test.ts`): geo (modes/budgets), opening-hours (same-day,
-  overnight, 24h), JST simulation, weather classification + hour override,
-  scoring (travel bands, weather×mode, Bayesian rating, review volume, profile
-  affinity, hard filters, interest-keyword boost + chain exemption), keywords
-  (normalization, ES→EN aliases, name matching), LLM (retry on 5xx, fail-fast
-  on 4xx, provider fallback, JSON parsing), place sources (Google/Geoapify/
-  Overpass parsing + the full fallback chain google → geoapify → overpass →
-  cache), DB (upsert, freshness, feedback clamping).
-- **Integration** (`src/app/api/routes.test.ts`): every API route exercised
-  with mocked fetch — recommend (incl. time-simulation filtering), feedback,
-  settings, geocode, photo proxy (disk cache), photo dedupe.
-- **E2E** (`scripts/smoke-e2e.mjs`): real server, real network — recommend
-  (real + simulated hours), geocode, photo proxy, feedback, narrate.
+**Two-phase latency design:** the rules pipeline responds in ~1s and renders cards immediately. The LLM narrative runs separately and fills in when ready. Repeated queries hit freshness caches:
 
-Every request is **traced end-to-end** and persisted as JSON Lines in
-`data/logs/requests.jsonl`. Each recommend generates a `traceId` that
-correlates all its phases (recommend → narrate → photos), and every entry
-carries the full picture for development evaluation:
+| Cache | TTL | Notes |
+|-------|-----|-------|
+| 🌤️ Weather | 10 min | Per ~1 km area |
+| 📍 Discovery | 15 min | Only when all requested types are covered |
+| ⏱️ Overpass hard budget | 30 s | Prevents hanging requests |
 
-- inputs (coords, budget, types, mode, simulation flag)
-- discovery source + candidate count
-- **filter breakdown** (how many candidates were dropped as closed / too far)
-- scored results with scores, distances and reason keys
-- weather used, the user's profile weights at that moment, latency
-- narrate outcome (provider tier, narrative count, summary) and photo
-  enrichment, linked by the same traceId
+---
 
-`GET /api/logs?tail=N` returns recent entries; `&trace=tr_…` filters one
-request's full journey. API errors log with stack traces.
+## 🌐 Discovery sources
 
-The **guide is on-demand**: after a discovery the cards show immediately and
-a button ("Preguntale al guía") triggers the LLM summary + per-place "why";
-it can be regenerated anytime. No automatic LLM cost per search.
+Places are discovered live from multiple sources, tried in priority order:
 
-Empty results are classified so the UI explains *why*: `all_closed` (e.g.
-searching at 3 AM in Japan), `too_far` (beyond your time/transport) or
-`no_results` (sources returned nothing).
+```
+  ┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+  │   Google     │ ──▶ │   Geoapify   │ ──▶ │   Overpass   │ ──▶ │   SQLite     │
+  │   Places     │     │              │     │   (OSM)      │     │   Cache      │
+  │   ✅ Key     │     │   ✅ Key     │     │   ❌ Free    │     │   ❌ Local   │
+  └──────────────┘     └──────────────┘     └──────────────┘     └──────────────┘
+       Primary              Backup              Fallback           Last resort
+```
 
-Testability hooks: `TABI_DATA_DIR` env / `setDataDir()` / `setConfigPath()` /
-`setPhotoDir()` / `clearWeatherCache()` — tests run in temp dirs and never
-touch your real data or API keys.
+Results are always cached for resilience. The app degrades gracefully with a clear message when no source is available.
 
-## Roadmap
+---
 
-| Milestone | Scope |
-|-----------|-------|
-| **M1 ✅** | Discovery (Google/Geoapify/Overpass), weather, scoring, map, i18n, settings |
-| **M2 ✅** | Transport mode factor (walking/transit/car) + `lib/llm/` narrative "why now" (retry + provider fallback) |
-| **M3 ✅** | Feedback loop: 👍/👎 per card → tag profile → weighted scoring + reactive map selection |
-| M4 | Taste onboarding quiz + general season layer (sakura/snow/festivals by location & date) |
-| M5 | PWA + mobile |
+## 📊 Scoring engine
 
-## Project layout
+Each place receives a **base fit score (0–100)** based on multiple signals:
+
+| Signal | Weight | Description |
+|--------|:------:|-------------|
+| 🚶 Travel time | `+3 to +18` | Graduated by minutes (≤5 min = max bonus) |
+| 🌧️ Weather fit | `−28 to +15` | Indoor boost in rain/snow, outdoor penalty |
+| ⭐ Bayesian rating | `−4 to +16` | Shrunk by review count (4.5★ with 5 reviews ≈ 4.0) |
+| 📈 Review volume | `+1 to +6` | Capped popularity boost (5k+ reviews = max) |
+| 🟢 Open now | `+6 / −15` | Bonus for open, penalty for closed |
+| 🎯 Keyword match | `+20` | User intent wins over noise rules |
+| 🏪 Chain/hotel penalty | `−12` | Ubiquitous chains are noise (skipped if keyword matched) |
+| ❤️ Profile affinity | `−12 to +12` | Learned from 👍/👎 feedback (M3) |
+
+---
+
+## 🚃 Transport modes
+
+Walking / transit / car changes everything — radius, travel times, and reasons:
+
+<div align="center">
+
+| | 🚶 Walking | 🚃 Transit | 🚗 Car |
+|--|:----------:|:----------:|:------:|
+| **Radius** | 0.4× | 1.0× | 2.0× |
+| **Speed** | 4.5 km/h | ~28 km/h | ~40 km/h |
+| **Overhead** | — | +8 min wait | +2 min |
+| **Rain penalty** | +10 | — | — |
+
+</div>
+
+---
+
+## 🎯 Interest keywords
+
+Optional free-text search for specific brands, themes, or interests:
+
+- **English/Japanese:** "pokemon", "book off", "スターバックス" — Google uses them directly
+- **Spanish:** "gatos", "café" — auto-translated via MyMemory API (~300ms first call, cached)
+- **Matching places** get `+20` score boost and chain/hotel penalties are waived
+
+---
+
+## ✨ Features
+
+<div align="center">
+  <img src="docs/screenshots/05-narrated.png" alt="LLM narrative guide" width="700">
+  <br/>
+  <em>On-demand LLM guide writes a "why go today" summary</em>
+</div>
+
+<br/>
+
+| Feature | Description |
+|---------|-------------|
+| 🔍 **Multi-source discovery** | Google Places → Geoapify → Overpass → SQLite cache, automatic fallback |
+| 🌤️ **Weather-aware scoring** | Open-Meteo forecast drives indoor/outdoor preferences |
+| 🚃 **Transport modes** | Walking, transit, car — affects radius, travel times, and reasons |
+| 🎯 **Interest keywords** | Search for specific brands, themes, or interests |
+| 🧠 **LLM narrative** | Two-tier provider (free → paid) writes day summaries and per-place "why" |
+| 📸 **Photo gallery** | Up to 8 photos per place via Place Details, async enrichment |
+| 👍 **Feedback loop** | 👍/👎 per card → learned profile → weighted scoring |
+| ⚙️ **Tus gustos** | Manual profile manager (−5..+5 steppers per experience type) |
+| ⏰ **Time simulation** | Simulate discovery at any hour (JST-aware) |
+| 🌐 **i18n** | Spanish / English (built-in dictionaries) |
+| 📱 **Responsive** | Works on desktop and mobile |
+
+<div align="center">
+  <img src="docs/screenshots/07-mobile.png" alt="Mobile view" width="280">
+  <br/>
+  <em>Responsive design for on-the-go use</em>
+</div>
+
+---
+
+## 📁 Project layout
 
 ```
 src/
-  app/            pages + API routes (/api/recommend, /narrate, /photos, /feedback, /settings, /geocode)
-  components/     MapView, DayPanel, RecommendationCard, WeatherCard, SettingsForm…
-  lib/
-    i18n.tsx      ES/EN dictionaries + provider
-    types.ts      shared types
-    geo.ts        haversine + travel time by transport mode
-    weather.ts    Open-Meteo client
-    scoring.ts    rule-based fit score + reasons (mode-aware)
-    recommend.ts  end-to-end pipeline (rules score → LLM narrates)
-    llm/          provider registry + OpenAI-compatible client + narrate()
-    settings.ts   local key storage (data/config.json)
-    db.ts         node:sqlite cache
-    places/       taxonomy + google/geoapify/overpass adapters + orchestrator
+├── app/
+│   ├── api/
+│   │   ├── recommend/      # Discovery + scoring pipeline
+│   │   ├── narrate/        # LLM narrative (async phase 2)
+│   │   ├── photos/         # Photo enrichment (async)
+│   │   ├── feedback/       # 👍/👎 → profile update
+│   │   ├── profile/        # Tus gustos (manual weights)
+│   │   ├── geocode/        # Location search
+│   │   ├── settings/       # API key management
+│   │   └── logs/           # Request tracing
+│   ├── page.tsx            # Main UI (map + cards)
+│   └── settings/page.tsx   # Settings form
+├── components/
+│   ├── MapView.tsx         # Leaflet map with markers
+│   ├── DayPanel.tsx        # Search + filters panel
+│   ├── RecommendationCard.tsx  # Place card with gallery
+│   ├── WeatherCard.tsx     # Weather display
+│   └── SettingsForm.tsx    # API key form
+└── lib/
+    ├── recommend.ts        # End-to-end pipeline
+    ├── scoring.ts          # Rule-based scoring engine
+    ├── weather.ts          # Open-Meteo client
+    ├── geo.ts              # Haversine + travel time
+    ├── db.ts               # node:sqlite cache + profile
+    ├── i18n.tsx            # ES/EN dictionaries
+    ├── types.ts            # Shared TypeScript types
+    ├── llm/                # Provider registry + narrate()
+    ├── places/             # Google/Geoapify/Overpass adapters
+    ├── keywords.ts         # Keyword normalization + matching
+    ├── translate.ts        # MyMemory translation API
+    ├── photos.ts           # Photo proxy + disk cache
+    ├── open-hours.ts       # Opening hours evaluation
+    ├── jst.ts              # JST timezone helpers
+    └── settings.ts         # Local key storage
 ```
 
-Built for a personal trip, but designed as a generic discovery tool — usable in
-any city, on any trip.
+---
+
+## 🧪 Testing
+
+```bash
+npm test              # Unit + integration (Vitest)
+npm test:watch        # TDD mode
+npm run test:e2e      # E2E smoke tests (needs live server)
+```
+
+| Layer | Location | Coverage |
+|-------|----------|----------|
+| **Unit** | `src/lib/*.test.ts` | Geo, scoring, weather, keywords, LLM retry, place sources, DB |
+| **Integration** | `src/app/api/routes.test.ts` | All API routes with mocked fetch |
+| **E2E** | `scripts/smoke-e2e.mjs` | Real server, real network |
+
+Every request is **traced end-to-end** via `traceId` and persisted as JSON Lines in `data/logs/requests.jsonl`. Inspect with:
+
+```bash
+GET /api/logs?tail=N          # Recent entries
+GET /api/logs?trace=tr_...    # Full request journey
+```
+
+**Testability hooks:** `TABI_DATA_DIR` env / `setDataDir()` / `setConfigPath()` / `setPhotoDir()` / `clearWeatherCache()` — tests run in temp dirs and never touch real data or API keys.
+
+---
+
+## 🗺️ Roadmap
+
+```
+  M1 ✅          M2 ✅          M3 ✅          M4 🔜          M5 📋
+    │              │              │              │              │
+    ▼              ▼              ▼              ▼              ▼
+┌────────┐   ┌────────┐   ┌────────┐   ┌────────┐   ┌────────┐
+│Foundation│   │ Transport│   │ Feedback│   │ Onboard │   │ Mobile │
+│Discovery│   │ + LLM    │   │ + Profile│   │ + Season│   │ + PWA  │
+│Weather  │   │ Narrative│   │ Learning│   │ Layers  │   │        │
+│Scoring  │   │          │   │          │   │         │   │        │
+│Map      │   │          │   │          │   │         │   │        │
+└────────┘   └────────┘   └────────┘   └────────┘   └────────┘
+```
+
+---
+
+## 📄 License
+
+**Proprietary.** The repository is public for viewing, but all rights are reserved — the code may not be copied, modified, redistributed or used without written permission. See [LICENSE](LICENSE).
+
+---
+
+<div align="center">
+
+*Built for a personal trip, but designed as a generic discovery tool — usable in any city, on any trip.*
+
+🇯🇵 旅道 — *The road of the journey*
+
+</div>
