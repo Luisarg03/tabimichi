@@ -49,7 +49,7 @@ describe("googleSearch", () => {
   });
 
   it("asks for strictbounds and never sends opennow (we filter closed places in scoring)", async () => {
-    let urls: string[] = [];
+    const urls: string[] = [];
     mockFetch([
       {
         match: (u) => u.includes("textsearch") || u.includes("nearbysearch"),
@@ -66,7 +66,7 @@ describe("googleSearch", () => {
   });
 
   it("keeps all candidates in real mode too (closed places are filtered later)", async () => {
-    let urls: string[] = [];
+    const urls: string[] = [];
     mockFetch([
       {
         match: (u) => u.includes("textsearch") || u.includes("nearbysearch"),

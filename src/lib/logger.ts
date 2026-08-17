@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync, existsSync, statSync, renameSync } from "node:fs";
+import { appendFileSync, mkdirSync, existsSync, readFileSync, statSync, renameSync } from "node:fs";
 import path from "node:path";
 
 /**
@@ -53,7 +53,7 @@ export function readLogTail(n: number, trace?: string): unknown[] {
   try {
     const file = logFilePath();
     if (!existsSync(file)) return [];
-    const raw: string = require("node:fs").readFileSync(/* turbopackIgnore: true */ file, "utf8");
+    const raw: string = readFileSync(/* turbopackIgnore: true */ file, "utf8");
     const lines = raw.trim().split("\n");
     return lines
       .slice(-n * 4) // keep some headroom when filtering
