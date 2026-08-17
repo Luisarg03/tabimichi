@@ -1,9 +1,61 @@
 import { NextRequest, NextResponse } from "next/server";
 import { recommend } from "@/lib/recommend";
 import { logEntry } from "@/lib/logger";
+import type { AppConfig } from "@/lib/settings";
+import { getSupabaseAdmin } from "@/lib/supabase/server";
 import type { RecommendInput } from "@/lib/types";
 
 export const runtime = "nodejs";
+
+/**
+ * Get API keys for the current user from Supabase.
+ * Falls back to env vars / config file if no user is authenticated.
+ */
+async function getKeysForRequest(req: NextRequest): Promise<AppConfig> {
+  // Try to get user keys from Supabase
+  const auth = req.headers.get("authorization");
+  if (auth?.startsWith("Bearer ")) {
+    const token = auth.slice(7);
+    try {
+      const admin = getSupabaseAdmin();
+      const { data: { user } } = await admin.auth.getUser(token);
+      if (user) {
+        const { data: keys } = await admin
+          .from("api_keys")
+          .select("key_name, key_value")
+          .eq("user_id", user.id);
+
+        if (keys && keys.length > 0) {
+          const KEY_MAP: Record<string, keyof AppConfig> = {
+            google_places: "googlePlacesApiKey",
+            geoapify: "geoapifyApiKey",
+            overpass_endpoint: "overpassEndpoint",
+            opencode_zen: "opencodeApiKey",
+            opencode_go: "opencodeGoApiKey",
+          };
+          const config: AppConfig = {
+            googlePlacesApiKey: "",
+            opencodeApiKey: "",
+            opencodeGoApiKey: "",
+            geoapifyApiKey: "",
+            overpassEndpoint: "",
+          };
+          for (const row of keys) {
+            const field = KEY_MAP[row.key_name];
+            if (field) config[field] = row.key_value;
+          }
+          return config;
+        }
+      }
+    } catch {
+      // Fall through to default config
+    }
+  }
+
+  // Fallback to env vars / config file
+  const { getConfig } = await import("@/lib/settings");
+  return getConfig();
+}
 
 export async function POST(req: NextRequest) {
   let body: RecommendInput;
@@ -31,6 +83,9 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    // Get user-specific API keys (no process.env mutation!)
+    const keys = await getKeysForRequest(req);
+
     const result = await recommend({
       lat,
       lng,
@@ -41,6 +96,7 @@ export async function POST(req: NextRequest) {
       lang: lang === "en" ? "en" : "es",
       now,
       keyword: typeof keyword === "string" ? keyword.trim() : undefined,
+      config: keys,
     });
     return NextResponse.json(result);
   } catch (e) {

@@ -3,6 +3,8 @@ import { getWeather, weatherAt } from "@/lib/weather";
 import { narrateTop } from "@/lib/llm";
 import { jstHourStamp } from "@/lib/jst";
 import { logEntry } from "@/lib/logger";
+import type { AppConfig } from "@/lib/settings";
+import { getSupabaseAdmin } from "@/lib/supabase/server";
 import type { NarratePlaceInput, NarrateResponse } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -14,19 +16,43 @@ interface NarrateBody {
   mode: "walking" | "transit" | "car";
   types: string[];
   lang?: string;
-  /** ISO instant — the narration is evaluated at this simulated time */
   now?: string;
-  /** optional interest keyword, so the guide tailors the summary */
   keyword?: string;
-  /** dev trace id correlating with the recommend phase */
   traceId?: string;
   places: NarratePlaceInput[];
 }
 
-/**
- * Phase 2 of the pipeline: the LLM writes the day summary + per-place "why".
- * Called asynchronously by the client after the fast recommend response.
- */
+async function getKeysForRequest(req: NextRequest): Promise<AppConfig> {
+  const auth = req.headers.get("authorization");
+  if (auth?.startsWith("Bearer ")) {
+    const token = auth.slice(7);
+    try {
+      const admin = getSupabaseAdmin();
+      const { data: { user } } = await admin.auth.getUser(token);
+      if (user) {
+        const { data: keys } = await admin
+          .from("api_keys")
+          .select("key_name, key_value")
+          .eq("user_id", user.id);
+        if (keys && keys.length > 0) {
+          const KEY_MAP: Record<string, keyof AppConfig> = {
+            google_places: "googlePlacesApiKey",
+            geoapify: "geoapifyApiKey",
+            overpass_endpoint: "overpassEndpoint",
+            opencode_zen: "opencodeApiKey",
+            opencode_go: "opencodeGoApiKey",
+          };
+          const config: AppConfig = { googlePlacesApiKey: "", opencodeApiKey: "", opencodeGoApiKey: "", geoapifyApiKey: "", overpassEndpoint: "" };
+          for (const row of keys) { const f = KEY_MAP[row.key_name]; if (f) config[f] = row.key_value; }
+          return config;
+        }
+      }
+    } catch { /* fall through */ }
+  }
+  const { getConfig } = await import("@/lib/settings");
+  return getConfig();
+}
+
 export async function POST(req: NextRequest) {
   let body: NarrateBody;
   try {
@@ -46,55 +72,37 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid mode" }, { status: 400 });
   }
 
-  let weather = await getWeather(lat, lng);
-  const simulated = now ? new Date(now) : null;
-  if (simulated) weather = weatherAt(weather, jstHourStamp(simulated));
+  try {
+    const keys = await getKeysForRequest(req);
 
-  const scored = places.map((p) => ({
-    id: p.id,
-    source: "overpass" as const, // source is irrelevant for narration
-    name: p.name,
-    lat,
-    lng,
-    tags: p.tags,
-    rating: p.rating,
-    distanceKm: p.distanceKm,
-    travelMin: p.travelMin,
-    score: 50,
-    reasons: [],
-  }));
+    let weather = await getWeather(lat, lng);
+    const simulated = now ? new Date(now) : null;
+    if (simulated) weather = weatherAt(weather, jstHourStamp(simulated));
 
-  const startedAt = performance.now();
-  const { narratives, summary, provider } = await narrateTop({
-    places: scored,
-    weather,
-    budget,
-    mode,
-    lang: lang === "en" ? "en" : "es",
-    types,
-    keyword,
-  });
+    const scored = places.map((p) => ({
+      id: p.id, source: "overpass" as const, name: p.name, lat, lng,
+      tags: p.tags, rating: p.rating, distanceKm: p.distanceKm,
+      travelMin: p.travelMin, score: 50, reasons: [],
+    }));
 
-  logEntry({
-    type: "narrate",
-    traceId,
-    lat,
-    lng,
-    budget,
-    mode,
-    lang,
-    keyword,
-    sim: simulated !== null,
-    provider,
-    narratives: narratives.size,
-    summary: Boolean(summary),
-    ms: Math.round(performance.now() - startedAt),
-  });
+    const startedAt = performance.now();
+    const { narratives, summary, provider } = await narrateTop({
+      places: scored, weather, budget, mode,
+      lang: lang === "en" ? "en" : "es", types, keyword,
+      config: keys,
+    });
 
-  const out: NarrateResponse = {
-    summary,
-    narratives: Object.fromEntries(narratives),
-    narratedBy: provider,
-  };
-  return NextResponse.json(out);
+    logEntry({
+      type: "narrate", traceId, lat, lng, budget, mode, lang, keyword,
+      sim: simulated !== null, provider, narratives: narratives.size,
+      summary: Boolean(summary), ms: Math.round(performance.now() - startedAt),
+    });
+
+    const out: NarrateResponse = { summary, narratives: Object.fromEntries(narratives), narratedBy: provider };
+    return NextResponse.json(out);
+  } catch (e) {
+    console.error("[tabi] /api/narrate failed:", e);
+    logEntry({ type: "error", route: "narrate", error: String(e) });
+    return NextResponse.json({ error: String(e) }, { status: 502 });
+  }
 }

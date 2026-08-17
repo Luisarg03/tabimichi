@@ -1,6 +1,7 @@
 import { activeProviders, type LlmProvider } from "./providers";
 import { chatComplete } from "./client";
 import type { ScoredPlace, WeatherInfo, TimeBudget, TransportMode } from "../types";
+import type { AppConfig } from "../settings";
 
 export interface NarrateOpts {
   places: ScoredPlace[];
@@ -11,6 +12,8 @@ export interface NarrateOpts {
   types: string[];
   /** optional interest keyword: the guide tailors the summary to it */
   keyword?: string;
+  /** per-user API keys — avoids reading from shared process.env */
+  config?: AppConfig;
 }
 
 const BUDGET_LABEL: Record<string, [string, string]> = {
@@ -121,7 +124,7 @@ async function narrateWith(
  * to rule-based reasons.
  */
 export async function narrateTop(opts: NarrateOpts): Promise<NarrateResult> {
-  const providers = activeProviders();
+  const providers = activeProviders(opts.config);
   if (providers.length === 0) return { narratives: new Map() };
   if (opts.places.length === 0) return { narratives: new Map() };
 

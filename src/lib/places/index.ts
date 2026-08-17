@@ -1,5 +1,5 @@
 import type { Place } from "../types";
-import { getConfig } from "../settings";
+import { getConfig, type AppConfig } from "../settings";
 import { cachePlaces, cachedNear, freshNearby } from "../db";
 import { haversineKm } from "../geo";
 import { resolveTypes } from "./taxonomy";
@@ -15,6 +15,8 @@ export interface DiscoverOptions {
   lang?: string;
   /** optional interest keyword: "pokemon", "book off", "gatos"… (already normalized) */
   keyword?: string;
+  /** per-user API keys (avoids reading from shared process.env) */
+  config?: AppConfig;
 }
 
 export type SourceNote = "google" | "geoapify" | "overpass" | "cache" | "none";
@@ -42,10 +44,10 @@ function dedupe(places: Place[]): Place[] {
 export async function discover(
   opts: DiscoverOptions
 ): Promise<{ places: Place[]; source: SourceNote; keywordResults?: number }> {
-  const { lat, lng, radiusKm, types, lang = "es", keyword } = opts;
+  const { lat, lng, radiusKm, types, lang = "es", keyword, config: userConfig } = opts;
   const radiusM = Math.round(radiusKm * 1000);
   const experienceTypes = resolveTypes(types);
-  const config = getConfig();
+  const config = userConfig ?? getConfig();
   let places: Place[] = [];
   let source: SourceNote = "none";
   // how many candidates came from the keyword query itself (0 = keyword miss)
