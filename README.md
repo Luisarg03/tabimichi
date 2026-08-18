@@ -68,14 +68,20 @@ vercel --prod                    # deploy to production
 
 Two Supabase environments exist: **sandbox** (Vercel Preview + sandbox Supabase project `rjsrzuqyoyxuonvcrpec`) and **production** (Vercel Production + prod Supabase project `yfwslmehyaftomzmkafs`). Preview deployments use Preview-scoped env vars pointing at the sandbox project.
 
-Migrations are applied per environment — sandbox first, production after validation:
+The local CLI is linked to the **sandbox only** — never to production:
+
+```bash
+supabase link --project-ref rjsrzuqyoyxuonvcrpec   # local dev → sandbox
+```
+
+Migrations are applied per environment — sandbox first, production after validation. Production **always** requires an explicit `--project-ref` (never rely on the linked project for it):
 
 ```bash
 supabase db push --project-ref rjsrzuqyoyxuonvcrpec   # sandbox first
 supabase db push --project-ref yfwslmehyaftomzmkafs   # production after validation
 ```
 
-(`supabase db push` without `--project-ref` targets the linked project.)
+> **Never link the local CLI to `yfwslmehyaftomzmkafs`.** `supabase db push` without `--project-ref` targets the linked project — if that is production, a push meant for the sandbox writes to the live database.
 
 Keys are stored per-user in Supabase `api_keys` (RLS); anonymous users fall back to server env vars.
 
@@ -84,7 +90,7 @@ Keys are stored per-user in Supabase `api_keys` (RLS); anonymous users fall back
 Each user manages their own API keys — no shared keys, no admin burden.
 
 1. **Create a free Supabase project:** [supabase.com](https://supabase.com) → New Project
-2. **Run the migrations:** paste `supabase/migrations/001_api_keys.sql` **and** `supabase/migrations/002_profiles_feedback.sql` in SQL Editor (in that order).
+2. **Run the migrations:** paste `supabase/migrations/001_api_keys.sql`, `002_profiles_feedback.sql` and `003_security_hardening.sql` in SQL Editor (in that order), or `supabase db push --project-ref <ref>` per environment.
 3. **Add env vars to Vercel:**
 
 | Variable | Where to find it |
