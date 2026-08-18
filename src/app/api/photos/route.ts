@@ -13,6 +13,8 @@ import { enforceRateLimit } from "@/lib/security";
 import { getUserKeys } from "@/lib/user-keys";
 
 export const runtime = "nodejs";
+// allow slow external calls (Overpass, Google, LLM) past the default function timeout
+export const maxDuration = 60;
 
 const MAX_ENRICH = 4;
 const MAX_PHOTOS = 3;
