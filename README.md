@@ -41,8 +41,8 @@ A local discovery app that recommends nearby places ranked by **weather**, **dis
 ## 🚀 Quick start
 
 ```bash
-npm install
-npm run dev        # http://localhost:3000
+pnpm install
+pnpm run dev        # http://localhost:3000
 ```
 
 **Requirements:** Node.js ≥ 22.5 (for built-in `node:sqlite`)
@@ -336,9 +336,9 @@ src/
 ## 🧪 Testing
 
 ```bash
-npm test              # Unit + integration (Vitest)
-npm test:watch        # TDD mode
-npm run test:e2e      # E2E smoke tests (needs live server)
+pnpm test              # Unit + integration (Vitest)
+pnpm test:watch        # TDD mode
+pnpm run test:e2e      # E2E smoke tests (needs live server)
 ```
 
 | Layer | Location | Coverage |
