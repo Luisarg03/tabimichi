@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { I18nProvider, type Locale } from "@/lib/i18n";
 import { AuthProvider } from "@/lib/auth-context";
 import "./globals.css";
@@ -35,6 +36,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <AuthProvider>
           <I18nProvider initialLocale={locale}>{children}</I18nProvider>
         </AuthProvider>
+        <SpeedInsights />
       </body>
     </html>
   );
