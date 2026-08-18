@@ -1,22 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
-import { placeById, upsertPlace, photosVerified, setPhotosVerified, photoHashesFor, rememberPhotoHash } from "@/lib/db";
+import {
+  placeById,
+  upsertPlace,
+  photosVerified,
+  setPhotosVerified,
+  readCachedPhoto,
+  writeCachedPhoto,
+} from "@/lib/cache";
 import { googlePlaceDetails, googlePhotoBytes } from "@/lib/places/google";
-import { getConfig } from "@/lib/settings";
-import { photoCachePath, readCachedPhoto, writeCachedPhoto, sha1Hex } from "@/lib/photos";
 import { logEntry } from "@/lib/logger";
 import { enforceRateLimit } from "@/lib/security";
+import { getUserKeys } from "@/lib/user-keys";
 
 export const runtime = "nodejs";
 
 const MAX_ENRICH = 4;
-const MAX_UNIQUE_PHOTOS = 3;
+const MAX_PHOTOS = 3;
 
 /**
- * Async photo enrichment with content-hash dedupe.
- * Google's search APIs return ~1 photo and Place Details up to 8, but
- * different photo_references can point to the SAME image (Google quirk).
- * We download each candidate once (reusing the proxy disk cache), hash it,
- * and keep only unique images — persisted in the DB so it never repeats.
+ * Async photo enrichment (BYOK): pulls extra refs from Google Place Details
+ * with the requesting user's own key, ensures each ref is downloadable, and
+ * caches the bytes in Supabase Storage (shared — each photo is downloaded
+ * once). The `photos_verified` flag skips Place Details on repeat visits.
  */
 export async function GET(req: NextRequest) {
   const startedAt = performance.now();
@@ -27,29 +32,23 @@ export async function GET(req: NextRequest) {
     .filter(Boolean)
     .slice(0, MAX_ENRICH);
 
-  // Enrichment downloads photos with the operator's Google key: bound abuse.
+  // Enrichment downloads photos with the user's own Google key: bound abuse.
   const limited = enforceRateLimit(req, "photos", { perIp: 30 });
   if (limited) return limited;
 
-  const key = getConfig().googlePlacesApiKey;
+  const config = await getUserKeys(req);
+  const key = config.googlePlacesApiKey;
   const photos: Record<string, string[]> = {};
-  if (!key) return NextResponse.json({ photos });
-  if (ids.length === 0) return NextResponse.json({ photos });
+  if (!key || ids.length === 0) return NextResponse.json({ photos });
 
   const queue = [...ids];
 
-  async function verifyPlace(id: string): Promise<string[]> {
-    // already deduped before → serve stored refs
-    if (photosVerified(id)) {
-      const cached = placeById(id);
-      return cached?.photoRefs ?? [];
-    }
+  async function refsFor(id: string): Promise<string[]> {
+    const cached = await placeById(id);
+    if (cached && (await photosVerified(id))) return cached.photoRefs ?? [];
 
-    const cached = placeById(id);
-    const have = cached?.photoRefs ?? [];
-    const refs = [...have];
-
-    // pull more refs from Place Details
+    const refs = [...(cached?.photoRefs ?? [])];
+    // pull more refs from Place Details (up to 8)
     const googleId = id.startsWith("g_") ? id.slice(2) : id;
     try {
       const details = await googlePlaceDetails(key, googleId);
@@ -58,32 +57,23 @@ export async function GET(req: NextRequest) {
       // keep search refs
     }
 
-    // hash-dedupe: reuse disk cache when available, else download once
-    const seen = new Set<string>(photoHashesFor(id));
-    const kept: string[] = [];
-    for (const ref of refs) {
-      if (kept.length >= MAX_UNIQUE_PHOTOS) break;
-      try {
-        const cachePath = photoCachePath(id, ref);
-        let bytes = readCachedPhoto(cachePath);
-        if (!bytes) {
-          bytes = await googlePhotoBytes(key, ref);
-          writeCachedPhoto(cachePath, bytes);
+    const kept = refs.slice(0, MAX_PHOTOS);
+    // ensure each ref is fetchable and cached (best effort; keep ref anyway)
+    await Promise.all(
+      kept.map(async (ref) => {
+        if (await readCachedPhoto(id, ref)) return;
+        try {
+          await writeCachedPhoto(id, ref, await googlePhotoBytes(key, ref));
+        } catch {
+          // unverifiable — keep the ref, the proxy will serve a placeholder
         }
-        const hash = sha1Hex(bytes);
-        if (seen.has(hash)) continue; // duplicate image (same photo, other ref)
-        seen.add(hash);
-        rememberPhotoHash(id, ref, hash);
-        kept.push(ref);
-      } catch {
-        kept.push(ref); // unverifiable — keep it anyway
-      }
-    }
+      })
+    );
 
     if (cached && kept.length > 0) {
-      upsertPlace({ ...cached, photoRefs: kept, photoRef: kept[0] });
+      await upsertPlace({ ...cached, photoRefs: kept, photoRef: kept[0] });
     }
-    setPhotosVerified(id, true);
+    await setPhotosVerified(id, true);
     return kept;
   }
 
@@ -91,7 +81,7 @@ export async function GET(req: NextRequest) {
     while (queue.length > 0) {
       const id = queue.shift()!;
       try {
-        photos[id] = await verifyPlace(id);
+        photos[id] = await refsFor(id);
       } catch {
         photos[id] = [];
       }

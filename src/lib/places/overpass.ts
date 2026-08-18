@@ -22,6 +22,8 @@ const MIRRORS = [
   "https://overpass.kumi.systems/api/interpreter",
 ];
 
+export { MIRRORS };
+
 /** hard ceiling for the whole Overpass attempt — never let the fallback hang */
 const TOTAL_BUDGET_MS = 30000;
 
@@ -31,12 +33,11 @@ const TOTAL_BUDGET_MS = 30000;
  *
  * The endpoint travels as an explicit per-request option (never module state),
  * so concurrent requests from different users cannot leak configuration into
- * each other. Endpoints supplied by end users are SSRF-checked before use
- * (`trusted: true` is reserved for operator-controlled env config).
+ * each other. Every custom endpoint is user-supplied (BYOK), so it is always
+ * SSRF-checked before use — there is no trusted operator path.
  */
 export interface OverpassOptions {
   endpoint?: string;
-  trusted?: boolean;
 }
 
 const TIMEOUT_MS = 40000;
@@ -128,29 +129,28 @@ export async function overpassSearch(
 
   const query = buildQuery(valid, lat, lng, radiusM);
   let lastErr: unknown = null;
+  let sawEmpty = false;
   const startedAt = Date.now();
 
   let endpoints: string[] = MIRRORS;
   if (opts.endpoint) {
-    if (opts.trusted) {
-      // Operator-controlled (env): the operator is responsible for it.
+    // User-supplied (BYOK): reject private/reserved targets (SSRF guard).
+    // On any guard failure we skip the custom endpoint and fall back to the
+    // public mirrors instead of failing the whole discovery.
+    const check = await assertResolvedPublic(opts.endpoint);
+    if (check.ok) {
       endpoints = [opts.endpoint, ...MIRRORS];
     } else {
-      // User-supplied: reject private/reserved targets (SSRF guard).
-      // On any guard failure we skip the custom endpoint and fall back to the
-      // public mirrors instead of failing the whole discovery.
-      const check = await assertResolvedPublic(opts.endpoint);
-      if (check.ok) {
-        endpoints = [opts.endpoint, ...MIRRORS];
-      } else {
-        console.warn(`[tabi] overpass endpoint rejected (${check.reason}), using mirrors`);
-      }
+      console.warn(`[tabi] overpass endpoint rejected (${check.reason}), using mirrors`);
     }
   }
 
   for (const endpoint of endpoints) {
-    if (Date.now() - startedAt > TOTAL_BUDGET_MS) break;
     for (let attempt = 0; attempt < 2; attempt++) {
+      // Real hard ceiling: shrink the per-request timeout to whatever budget
+      // remains, so an in-flight mirror can never blow past TOTAL_BUDGET_MS.
+      const remaining = TOTAL_BUDGET_MS - (Date.now() - startedAt);
+      if (remaining <= 0) break;
       try {
         const res = await fetch(endpoint, {
           method: "POST",
@@ -160,12 +160,19 @@ export async function overpassSearch(
             "User-Agent": "tabi-local/0.1 (personal travel discovery app)",
           },
           body: new URLSearchParams({ data: query }),
-          signal: AbortSignal.timeout(TIMEOUT_MS),
+          signal: AbortSignal.timeout(Math.min(TIMEOUT_MS, remaining)),
         });
         if (!res.ok) throw new Error(`overpass-http-${res.status}`);
         const data = (await res.json()) as OverpassResponse;
 
         const assigned = assignTypes(data.elements, valid);
+        // A mirror that answers 200 with zero matching elements usually has
+        // stale/partial coverage (osm.ch is chronically thin for Asia). Keep
+        // the failover alive instead of short-circuiting the whole attempt.
+        if (assigned.length === 0) {
+          sawEmpty = true;
+          break; // no point retrying the same mirror — move to the next one
+        }
         return assigned
           .map(({ element: e, matched }): Place | null => {
             const lat2 = e.lat ?? e.center?.lat;
@@ -189,9 +196,14 @@ export async function overpassSearch(
           .filter((p): p is Place => p !== null);
       } catch (err) {
         lastErr = err;
-        await sleep(1200 * (attempt + 1));
+        // keep retry backoff inside the remaining budget too
+        await sleep(Math.min(1200 * (attempt + 1), Math.max(0, TOTAL_BUDGET_MS - (Date.now() - startedAt))));
       }
     }
   }
+  // Every mirror exhausted. A mirror that answered is a valid "nothing matches
+  // here" (return []); only total unreachability is an error (throw → callers
+  // fall back to the cache).
+  if (sawEmpty) return [];
   throw lastErr ?? new Error("overpass-unreachable");
 }

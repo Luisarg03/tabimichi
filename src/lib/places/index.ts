@@ -1,11 +1,14 @@
 import type { Place } from "../types";
 import { getConfig, type AppConfig } from "../settings";
-import { cachePlaces, cachedNear, freshNearby } from "../db";
+import { cachePlaces, cachedNear, freshNearby } from "../cache";
 import { haversineKm } from "../geo";
 import { resolveTypes } from "./taxonomy";
 import { googleSearchAll } from "./google";
 import { geoapifySearch } from "./geoapify";
 import { overpassSearch } from "./overpass";
+
+/** Shared cache TTL: places rarely change — discover each area once a day. */
+export const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 export interface DiscoverOptions {
   lat: number;
@@ -15,11 +18,8 @@ export interface DiscoverOptions {
   lang?: string;
   /** optional interest keyword: "pokemon", "book off", "gatos"… (already normalized) */
   keyword?: string;
-  /** per-user API keys (avoids reading from shared process.env) */
+  /** per-user API keys (BYOK) — empty for anonymous; endpoints are user-supplied */
   config?: AppConfig;
-  /** true when `config` came from operator env vars (endpoints trusted);
-   *  false when it holds end-user values (endpoints get SSRF-checked) */
-  trustedEndpoint?: boolean;
 }
 
 export type SourceNote = "google" | "geoapify" | "overpass" | "cache" | "none";
@@ -63,7 +63,7 @@ export async function discover(
   // and would bypass the keyword discovery entirely (Google must be asked).
   const typeIds = experienceTypes.map((t) => t.id);
   if (!keyword) {
-    const fresh = freshNearby(lat, lng, radiusKm, typeIds, 15 * 60 * 1000);
+    const fresh = await freshNearby(lat, lng, radiusKm, typeIds, CACHE_TTL_MS);
     if (fresh && fresh.length > 0) {
       // only return places that match the requested types
       const matched = fresh.filter((p) => p.tags.some((t) => typeIds.includes(t)));
@@ -104,7 +104,6 @@ export async function discover(
       // single combined query (custom endpoint first, then mirror failover)
       places = await overpassSearch(experienceTypes, lat, lng, radiusM, {
         endpoint: overpassEndpoint,
-        trusted: opts.trustedEndpoint === true,
       });
       if (places.length > 0) source = "overpass";
     } catch {
@@ -114,7 +113,7 @@ export async function discover(
 
   if (places.length === 0 && !keyword) {
     // last-resort fallback; also skipped for keywords (cache is keyword-agnostic)
-    const cached = cachedNear(lat, lng, radiusKm * 2);
+    const cached = await cachedNear(lat, lng, radiusKm * 2);
     places = types.length > 0 ? cached.filter((p) => p.tags.some((t) => types.includes(t))) : cached;
     if (places.length > 0) source = "cache";
   }
@@ -124,7 +123,7 @@ export async function discover(
   // with strictbounds — hard-drop anything beyond 1.5× the discovery radius
   // so global results never become candidates (or pollute the cache)
   const bounded = deduped.filter((p) => haversineKm({ lat, lng }, p) <= radiusKm * 1.5);
-  if (bounded.length > 0) cachePlaces(bounded);
+  if (bounded.length > 0) await cachePlaces(bounded);
   // keywordResults = keyword-query candidates that survived the radius bound:
   // Google may return relevant places (e.g. Snoopy cafés 70 km away) that are
   // out of reach — the UI must not pretend they exist nearby

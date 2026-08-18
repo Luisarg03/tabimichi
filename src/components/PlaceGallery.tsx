@@ -1,10 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-
-function photoUrl(ref: string, id: string): string {
-  return `/api/photo?ref=${encodeURIComponent(ref)}&id=${encodeURIComponent(id)}`;
-}
+import PlacePhoto from "./PlacePhoto";
 
 /** Swipeable photo gallery (hero). Reused by the place detail panel/sheet. */
 export default function PlaceGallery({
@@ -50,11 +47,10 @@ export default function PlaceGallery({
         }
       }}
     >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={photoUrl(photoRefs[activeIdx]!, placeId)}
+      <PlacePhoto
+        photoRef={photoRefs[activeIdx]!}
+        placeId={placeId}
         alt={alt}
-        loading="lazy"
         className={imgClassName}
       />
       {photoRefs.length > 1 && (

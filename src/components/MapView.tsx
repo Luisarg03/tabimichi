@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useEffect, useState } from "react";
-import { MapContainer, TileLayer, Marker, Popup, useMap, ZoomControl } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { LatLng, ScoredPlace } from "@/lib/types";
@@ -20,6 +20,29 @@ const TILE_ICONS: Record<string, string> = {
 /** Tile-layer switcher (bottom-left): persists the choice per browser.
  *  On mobile it renders compact (icons only) and moves to bottom-center so
  *  it never hides behind the results column. */
+/**
+ * Bottom-right zoom control.
+ * react-leaflet v5's <ZoomControl position=…> applies the position during
+ * render, before the map has initialized its control corners — it crashes
+ * with "map._controlCorners is undefined" on remounts (Fast Refresh, reused
+ * container). Adding the control from an effect after mount (and removing it
+ * on unmount) is safe: the map is fully initialized by then. The `_controlCorners`
+ * guard only matters during dev HMR, where a reused container can briefly hold
+ * a half-initialized map — skip and let the auto full-reload recover.
+ */
+function ZoomControlBR() {
+  const map = useMap();
+  useEffect(() => {
+    if (!(map as unknown as { _controlCorners?: object })._controlCorners) return;
+    const ctrl = L.control.zoom({ position: "bottomright" });
+    ctrl.addTo(map);
+    return () => {
+      ctrl.remove();
+    };
+  }, [map]);
+  return null;
+}
+
 function TileSwitcher({
   tileId,
   onChange,
@@ -213,7 +236,7 @@ export default function MapView({
         // header/column; bottom-right is the only free corner
         zoomControl={false}
       >
-        <ZoomControl position="bottomright" />
+        <ZoomControlBR />
         <TileLayer
           key={tile.id}
           attribution={tile.attribution}

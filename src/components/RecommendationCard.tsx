@@ -4,10 +4,7 @@ import type { ScoredPlace } from "@/lib/types";
 import { EXPERIENCE_TYPE_MAP } from "@/lib/places/taxonomy";
 import { useI18n } from "@/lib/i18n";
 import { fmtCount } from "@/lib/format";
-
-function photoUrl(ref: string, id: string): string {
-  return `/api/photo?ref=${encodeURIComponent(ref)}&id=${encodeURIComponent(id)}`;
-}
+import PlacePhoto from "./PlacePhoto";
 
 const MODE_EMOJI: Record<string, string> = {
   walking: "🚶",
@@ -31,6 +28,11 @@ export default function RecommendationCard({
 }) {
   const { t } = useI18n();
   const photoRef = place.photoRefs?.[0] ?? place.photoRef;
+  const emojiBox = (
+    <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-2xl">
+      {EXPERIENCE_TYPE_MAP[place.tags[0] ?? "viewpoint"]?.emoji ?? "📍"}
+    </div>
+  );
 
   return (
     <article
@@ -52,17 +54,15 @@ export default function RecommendationCard({
       }`}
     >
       {photoRef ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={photoUrl(photoRef, place.id)}
+        <PlacePhoto
+          photoRef={photoRef}
+          placeId={place.id}
           alt={place.name}
-          loading="lazy"
           className="h-20 w-20 shrink-0 rounded-xl object-cover"
+          fallback={emojiBox}
         />
       ) : (
-        <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-2xl">
-          {EXPERIENCE_TYPE_MAP[place.tags[0] ?? "viewpoint"]?.emoji ?? "📍"}
-        </div>
+        emojiBox
       )}
 
       <div className="min-w-0 flex-1">

@@ -1,7 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { NextRequest } from "next/server";
-import path from "node:path";
-import { existsSync } from "node:fs";
 import { POST as recommendPOST } from "@/app/api/recommend/route";
 import { POST as feedbackPOST, GET as feedbackGET } from "@/app/api/feedback/route";
 import { GET as profileGET, POST as profilePOST } from "@/app/api/profile/route";
@@ -11,10 +9,10 @@ import { GET as photosGET } from "@/app/api/photos/route";
 import { GET as logsGET } from "@/app/api/logs/route";
 import { geocodeVariants } from "@/app/api/geocode/route";
 import { logEntry } from "@/lib/logger";
-import { upsertPlace } from "@/lib/db";
+import { upsertPlace, setAdminForTests } from "@/lib/cache";
 import { clearWeatherCache } from "@/lib/weather";
-import { setPhotoDir } from "@/lib/photos";
 import { mockFetch, jsonResponse, imageResponse, urlContains, isolatedStore } from "@/test-utils/helpers";
+import { makeSupabaseFake } from "@/test-utils/supabase-fake";
 
 // /api/logs is admin-only since the security audit; simulate an admin caller
 // so the route's log-reading behavior stays covered. Other auth helpers keep
@@ -28,7 +26,22 @@ vi.mock("@/lib/supabase/auth", async (importOriginal) => {
   };
 });
 
-const KEY = "AIza-test";
+// Routes resolve keys via getUserKeys(req) (BYOK — no env fallback). These
+// route tests exercise behavior *given* a working key set, so stub it with a
+// fixture instead of fabricating Supabase sessions.
+const { routeKeys } = vi.hoisted(() => ({
+  routeKeys: {
+    googlePlacesApiKey: "AIza-test",
+    geoapifyApiKey: "geo-key",
+    opencodeApiKey: "zen-key",
+    opencodeGoApiKey: "go-key",
+    overpassEndpoint: "",
+  },
+}));
+vi.mock("@/lib/user-keys", () => ({
+  getUserKeys: vi.fn(async () => ({ ...routeKeys })),
+}));
+
 
 function post(url: string, body: unknown): NextRequest {
   return new NextRequest(url, {
@@ -80,17 +93,18 @@ const googleSearchResponse = () =>
     ],
   });
 
+let sbFake: ReturnType<typeof makeSupabaseFake>;
+
 beforeEach(() => {
   isolatedStore();
-  setPhotoDir(path.join(process.env.TABI_DATA_DIR!, "photos"));
   clearWeatherCache();
-  process.env.GOOGLE_PLACES_API_KEY = KEY;
+  // photo/photos routes cache via Supabase (service role) — in-memory fake,
+  // one per test, so cache hits persist within a test.
+  sbFake = makeSupabaseFake();
+  setAdminForTests(() => sbFake.fake as never);
 });
 
 afterEach(() => {
-  delete process.env.GOOGLE_PLACES_API_KEY;
-  delete process.env.OPENCODE_API_KEY;
-  delete process.env.OPENCODE_GO_API_KEY;
   vi.unstubAllGlobals();
 });
 
@@ -301,7 +315,7 @@ describe("/api/geocode", () => {
 });
 
 describe("/api/photo", () => {
-  it("proxies and caches on disk (one google call for two requests)", async () => {
+  it("proxies and caches in Storage (one google call for two requests)", async () => {
     const fn = mockFetch([
       {
         match: urlContains("maps.googleapis.com/maps/api/place/photo"),
@@ -313,9 +327,11 @@ describe("/api/photo", () => {
     expect(first.status).toBe(200);
     const second = await photoGET(new NextRequest(url));
     expect(second.status).toBe(200);
-    expect(fn).toHaveBeenCalledTimes(1); // second served from disk
-    const cacheFile = path.join(process.env.TABI_DATA_DIR!, "photos", "g_p1__refA.jpg");
-    expect(existsSync(cacheFile)).toBe(true);
+    expect(fn).toHaveBeenCalledTimes(1); // second served from the storage cache
+    expect(sbFake.storage.size).toBe(1);
+    expect(new Uint8Array(await (await first.blob()).arrayBuffer())).toEqual(
+      new Uint8Array([1, 2, 3, 4])
+    );
   });
 
   it("rejects missing ref", async () => {
@@ -325,7 +341,7 @@ describe("/api/photo", () => {
 });
 
 describe("/api/photos", () => {
-  it("dedupes by content hash and marks the place verified", async () => {
+  it("collects refs, caps them, and marks the place verified", async () => {
     let detailsCalls = 0;
     mockFetch([
       {
@@ -334,7 +350,7 @@ describe("/api/photos", () => {
           detailsCalls++;
           return jsonResponse({
             status: "OK",
-            result: { photos: [{ photo_reference: "r1" }, { photo_reference: "r2" }, { photo_reference: "r3" }] },
+            result: { photos: [{ photo_reference: "r1" }, { photo_reference: "r2" }, { photo_reference: "r3" }, { photo_reference: "r4" }] },
           });
         },
       },
@@ -342,21 +358,21 @@ describe("/api/photos", () => {
         match: urlContains("place/photo"),
         response: (u: string) => {
           const ref = new URL(u).searchParams.get("photo_reference") ?? "";
-          return imageResponse(ref === "r3" ? [9, 9, 9] : [1, 2, 3]); // r1/r2 same image
+          return imageResponse(ref === "r3" ? [9, 9, 9] : [1, 2, 3]);
         },
       },
     ]);
-    upsertPlace({ id: "g_d1", source: "google", name: "Lugar", lat: 36, lng: 138, tags: ["park"], openNow: null });
+    await upsertPlace({ id: "g_d1", source: "google", name: "Lugar", lat: 36, lng: 138, tags: ["park"], openNow: null });
 
     const first = await photosGET(new NextRequest("http://localhost/api/photos?ids=g_d1"));
     const body = await first.json();
-    expect(body.photos.g_d1).toEqual(["r1", "r3"]); // r2 duplicated r1 → dropped
+    expect(body.photos.g_d1).toEqual(["r1", "r2", "r3"]); // capped at MAX_PHOTOS
     expect(detailsCalls).toBe(1);
 
     const second = await photosGET(new NextRequest("http://localhost/api/photos?ids=g_d1"));
     const body2 = await second.json();
-    expect(body2.photos.g_d1).toEqual(["r1", "r3"]);
-    expect(detailsCalls).toBe(1); // verified → skipped
+    expect(body2.photos.g_d1).toEqual(["r1", "r2", "r3"]);
+    expect(detailsCalls).toBe(1); // verified → Place Details skipped
   });
 });
 

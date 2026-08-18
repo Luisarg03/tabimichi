@@ -1,7 +1,13 @@
 /**
- * Server-side settings. API keys come exclusively from environment variables
- * (per-environment on Vercel) or per-user rows in Supabase `api_keys`.
- * There is no local config file.
+ * AppConfig — the shape of provider credentials the app can spend.
+ *
+ * BYOK: at request time keys come exclusively from the authenticated user's
+ * rows in Supabase `api_keys` (see src/lib/user-keys.ts). There is no
+ * operator env fallback — anonymous requests are keyless by design.
+ *
+ * `getConfig()` (env vars) survives only as a fixture seam for tests and
+ * defaults for code paths that receive no explicit config; in a BYOK
+ * deployment those env vars are never set, so it returns an empty config.
  */
 
 export interface AppConfig {

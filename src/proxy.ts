@@ -13,6 +13,20 @@ import type { NextRequest } from "next/server";
 
 const isDev = process.env.NODE_ENV === "development";
 
+/** Supabase origin as configured (hosted https or local http://127.0.0.1:54321)
+ *  plus its websocket sibling — the browser talks to both directly. */
+const supabaseOrigin = (() => {
+  const raw = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!raw) return "";
+  try {
+    const origin = new URL(raw).origin;
+    const ws = origin.replace(/^http/, "ws"); // http→ws, https→wss
+    return `${origin} ${ws}`;
+  } catch {
+    return "";
+  }
+})();
+
 export function proxy(request: NextRequest) {
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
 
@@ -21,12 +35,15 @@ export function proxy(request: NextRequest) {
     // 'strict-dynamic' lets nonce'd framework scripts load the rest.
     // 'unsafe-eval' is required by React's dev-mode debugging only.
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ""}`,
-    `style-src 'self' 'nonce-${nonce}'`,
+    // Leaflet writes dynamic inline styles (tile transforms, panes) that a
+    // nonce cannot cover. CSP3 ignores 'unsafe-inline' whenever a nonce is
+    // present, so style-src must carry ONLY 'unsafe-inline' (no nonce).
+    `style-src 'self' 'unsafe-inline'`,
     // map tiles (OSM/Carto/Esri) + photos proxied from /api/photo (self)
     "img-src 'self' data: blob: https:",
     "font-src 'self' data:",
-    // Supabase REST + realtime (wss) + Vercel Speed Insights beacon
-    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.vercel-insights.com",
+    // Supabase REST + realtime (ws) + Vercel Speed Insights beacon
+    `connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.vercel-insights.com${supabaseOrigin ? ` ${supabaseOrigin}` : ""}`,
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

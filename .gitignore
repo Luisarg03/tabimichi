@@ -12,6 +12,10 @@ openspec
 !.yarn/releases
 !.yarn/versions
 
+# local playwright install for the browser E2E (scripts/test-e2e.mjs)
+/scripts/node_modules
+/.npm-cache
+
 # testing
 /coverage
 
@@ -45,3 +49,4 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+AGENT-E2E-CONTEXT.md
