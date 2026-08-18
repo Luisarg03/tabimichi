@@ -11,17 +11,23 @@
 import { chromium } from "playwright";
 
 const BASE = process.argv[2] ?? "http://localhost:3000";
-const EMAIL = process.env.REPRO_EMAIL ?? "repro-1787083799@tabimichi.test";
-const PASSWORD = process.env.REPRO_PASS ?? "ReproPass1787083799!";
 const QUERY = process.env.QUERY ?? "Nara, Japón";
 
-// Against a remote deployment, partial env is a footgun: an unset variable
-// silently falls back to the localhost test credentials and the login fails
-// confusingly. Require BOTH explicitly for non-local targets.
+// Against a remote deployment, missing creds must not silently fall back to
+// the localhost test account — ask for them interactively instead.
 const isLocal = BASE.includes("localhost") || BASE.includes("127.0.0.1");
+let EMAIL = process.env.REPRO_EMAIL ?? "repro-1787083799@tabimichi.test";
+let PASSWORD = process.env.REPRO_PASS ?? "ReproPass1787083799!";
 if (!isLocal && (!process.env.REPRO_EMAIL || !process.env.REPRO_PASS)) {
-  console.error(`login creds required: REPRO_EMAIL=… REPRO_PASS=… node scripts/verify-keys-flow.mjs ${BASE}`);
-  process.exit(1);
+  const readline = await import("node:readline/promises");
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  EMAIL = await rl.question("Email de la cuenta en la app: ");
+  PASSWORD = await rl.question("Contraseña: ");
+  rl.close();
+  if (!EMAIL || !PASSWORD) {
+    console.error("email y password requeridos");
+    process.exit(1);
+  }
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
