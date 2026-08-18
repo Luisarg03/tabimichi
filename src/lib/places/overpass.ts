@@ -25,7 +25,9 @@ const MIRRORS = [
 export { MIRRORS };
 
 /** hard ceiling for the whole Overpass attempt — never let the fallback hang */
-const TOTAL_BUDGET_MS = 30000;
+// Kept under typical serverless function timeouts (Vercel ~30s): a keyless
+// discovery must complete (slowly) instead of hitting FUNCTION_INVOCATION_TIMEOUT.
+const TOTAL_BUDGET_MS = 20000;
 
 /**
  * Optional custom Overpass instance (e.g. self-hosted osm3s in Docker).

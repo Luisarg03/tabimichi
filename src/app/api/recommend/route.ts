@@ -6,6 +6,8 @@ import { getUserKeys } from "@/lib/user-keys";
 import type { RecommendInput } from "@/lib/types";
 
 export const runtime = "nodejs";
+// allow slow external calls (Overpass, Google, LLM) past the default function timeout
+export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   let body: RecommendInput;

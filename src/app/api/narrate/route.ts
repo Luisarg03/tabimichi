@@ -8,6 +8,8 @@ import { getUserKeys } from "@/lib/user-keys";
 import type { NarratePlaceInput, NarrateResponse } from "@/lib/types";
 
 export const runtime = "nodejs";
+// allow slow external calls (Overpass, Google, LLM) past the default function timeout
+export const maxDuration = 60;
 
 interface NarrateBody {
   lat: number;

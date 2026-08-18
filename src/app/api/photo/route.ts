@@ -5,6 +5,8 @@ import { enforceRateLimit } from "@/lib/security";
 import { getUserKeys } from "@/lib/user-keys";
 
 export const runtime = "nodejs";
+// allow slow external calls (Overpass, Google, LLM) past the default function timeout
+export const maxDuration = 60;
 
 /** 1×1 transparent GIF — served whenever a photo is unavailable (no key,
  *  broken key, expired ref). Photo proxying is best-effort: a missing image
