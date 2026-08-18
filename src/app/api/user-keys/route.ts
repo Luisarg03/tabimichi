@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { getSupabaseAdmin, getSupabaseForUser } from "@/lib/supabase/server";
 import type { AppConfig } from "@/lib/settings";
 
 export const runtime = "nodejs";
@@ -9,7 +9,8 @@ export const runtime = "nodejs";
  * POST /api/user-keys — Save current user's API keys
  *
  * Both require a valid Supabase JWT in the Authorization header.
- * RLS ensures users can only access their own keys.
+ * api_keys queries run with the user's JWT; RLS enforces isolation.
+ * The service-role client is used only to verify the JWT.
  */
 
 function extractToken(req: NextRequest): string | null {
@@ -41,19 +42,16 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const admin = getSupabaseAdmin();
-
     // Verify the JWT and get user
-    const { data: { user }, error: authError } = await admin.auth.getUser(token);
+    const { data: { user }, error: authError } = await getSupabaseAdmin().auth.getUser(token);
     if (authError || !user) {
       return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     }
 
-    // Query with user's JWT for RLS
-    const { data: keys, error } = await admin
+    // Query with the user's JWT; RLS restricts rows to this user
+    const { data: keys, error } = await getSupabaseForUser(token)
       .from("api_keys")
-      .select("key_name, key_value")
-      .eq("user_id", user.id);
+      .select("key_name, key_value");
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
@@ -88,20 +86,18 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const admin = getSupabaseAdmin();
-
     // Verify the JWT and get user
-    const { data: { user }, error: authError } = await admin.auth.getUser(token);
+    const { data: { user }, error: authError } = await getSupabaseAdmin().auth.getUser(token);
     if (authError || !user) {
       return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     }
 
-    // Upsert each key
+    // Upsert each key with the user's JWT; RLS with-check requires auth.uid() = user_id
     for (const [fieldName, value] of Object.entries(body)) {
       const keyName = REVERSE_MAP[fieldName as keyof AppConfig];
       if (!keyName) continue;
 
-      const { error } = await admin
+      const { error } = await getSupabaseForUser(token)
         .from("api_keys")
         .upsert(
           { user_id: user.id, key_name: keyName, key_value: value ?? "" },

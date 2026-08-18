@@ -2,14 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { recommend } from "@/lib/recommend";
 import { logEntry } from "@/lib/logger";
 import type { AppConfig } from "@/lib/settings";
-import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { getSupabaseAdmin, getSupabaseForUser } from "@/lib/supabase/server";
 import type { RecommendInput } from "@/lib/types";
 
 export const runtime = "nodejs";
 
 /**
  * Get API keys for the current user from Supabase.
- * Falls back to env vars / config file if no user is authenticated.
+ * api_keys queries run with the user's JWT; RLS enforces isolation.
+ * Falls back to env vars if no user is authenticated.
  */
 async function getKeysForRequest(req: NextRequest): Promise<AppConfig> {
   // Try to get user keys from Supabase
@@ -17,13 +18,11 @@ async function getKeysForRequest(req: NextRequest): Promise<AppConfig> {
   if (auth?.startsWith("Bearer ")) {
     const token = auth.slice(7);
     try {
-      const admin = getSupabaseAdmin();
-      const { data: { user } } = await admin.auth.getUser(token);
+      const { data: { user } } = await getSupabaseAdmin().auth.getUser(token);
       if (user) {
-        const { data: keys } = await admin
+        const { data: keys } = await getSupabaseForUser(token)
           .from("api_keys")
-          .select("key_name, key_value")
-          .eq("user_id", user.id);
+          .select("key_name, key_value");
 
         if (keys && keys.length > 0) {
           const KEY_MAP: Record<string, keyof AppConfig> = {
@@ -52,7 +51,7 @@ async function getKeysForRequest(req: NextRequest): Promise<AppConfig> {
     }
   }
 
-  // Fallback to env vars / config file
+  // Fallback to env vars
   const { getConfig } = await import("@/lib/settings");
   return getConfig();
 }

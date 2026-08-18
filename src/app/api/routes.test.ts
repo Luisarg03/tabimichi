@@ -5,7 +5,6 @@ import { existsSync } from "node:fs";
 import { POST as recommendPOST } from "@/app/api/recommend/route";
 import { POST as feedbackPOST, GET as feedbackGET } from "@/app/api/feedback/route";
 import { GET as profileGET, POST as profilePOST } from "@/app/api/profile/route";
-import { GET as settingsGET, POST as settingsPOST } from "@/app/api/settings/route";
 import { GET as geocodeGET } from "@/app/api/geocode/route";
 import { GET as photoGET } from "@/app/api/photo/route";
 import { GET as photosGET } from "@/app/api/photos/route";
@@ -220,16 +219,6 @@ describe("/api/feedback", () => {
   it("rejects invalid votes", async () => {
     const res = await feedbackPOST(post("http://localhost/api/feedback", { placeId: "" }));
     expect(res.status).toBe(400);
-  });
-});
-
-describe("/api/settings", () => {
-  it("persists keys and only exposes booleans", async () => {
-    const set = await settingsPOST(post("http://localhost/api/settings", { googlePlacesApiKey: "AIza-x" }));
-    expect(set.status).toBe(200);
-    const body = await set.json();
-    expect(body.googlePlacesApiKey).toBe(true);
-    expect(body.opencodeGoApiKey).toBe(false);
   });
 });
 
