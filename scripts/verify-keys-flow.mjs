@@ -15,6 +15,15 @@ const EMAIL = process.env.REPRO_EMAIL ?? "repro-1787083799@tabimichi.test";
 const PASSWORD = process.env.REPRO_PASS ?? "ReproPass1787083799!";
 const QUERY = process.env.QUERY ?? "Nara, Japón";
 
+// Against a remote deployment, partial env is a footgun: an unset variable
+// silently falls back to the localhost test credentials and the login fails
+// confusingly. Require BOTH explicitly for non-local targets.
+const isLocal = BASE.includes("localhost") || BASE.includes("127.0.0.1");
+if (!isLocal && (!process.env.REPRO_EMAIL || !process.env.REPRO_PASS)) {
+  console.error(`login creds required: REPRO_EMAIL=… REPRO_PASS=… node scripts/verify-keys-flow.mjs ${BASE}`);
+  process.exit(1);
+}
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const browser = await chromium.launch({ headless: true });
@@ -38,6 +47,14 @@ page.on("response", (res) => {
   }
 });
 
+// capture the sign-in call so a login failure shows GoTrue's exact answer
+let loginResponse = null;
+page.on("response", async (res) => {
+  if (res.url().includes("/auth/v1/token") && !loginResponse) {
+    loginResponse = { status: res.status(), body: (await res.text().catch(() => "")).slice(0, 200) };
+  }
+});
+
 // 1. Login
 await page.goto(`${BASE}/settings`, { waitUntil: "networkidle" });
 await sleep(1200);
@@ -48,15 +65,12 @@ await sleep(2500);
 const loggedIn = await page.getByText(/Sesi[oó]n activa/i).isVisible().catch(() => false);
 console.log(`login: ${loggedIn ? "OK" : "FAIL"} (${EMAIL})`);
 if (!loggedIn) {
-  // self-diagnose: dump any visible error message + the form's surroundings
-  const pageText = (await page.locator("body").innerText().catch(() => "")) || "";
-  const errorLines = pageText
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => /error|invalid|confirm|verif|no existe|not found|credencial|contrase|correo|email/i.test(l))
-    .slice(0, 6);
+  // self-diagnose: show the auth API's exact answer + any visible form text
   console.log("--- diagnóstico ---");
-  console.log(errorLines.length ? errorLines.join("\n") : "(sin mensaje de error visible)");
+  if (loginResponse) console.log(`auth API: HTTP ${loginResponse.status} → ${loginResponse.body}`);
+  const pageText = (await page.locator("body").innerText().catch(() => "")) || "";
+  const lines = pageText.split("\n").map((l) => l.trim()).filter(Boolean).slice(0, 15);
+  console.log(lines.length ? lines.join(" | ") : "(página sin texto visible)");
   await page.screenshot({ path: "/tmp/tabi-login-fail.png" });
   console.log("screenshot: /tmp/tabi-login-fail.png");
   await browser.close();
