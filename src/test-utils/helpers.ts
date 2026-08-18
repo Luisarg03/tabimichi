@@ -3,7 +3,6 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { setDataDir } from "@/lib/db";
-import { setConfigPath } from "@/lib/settings";
 import { setLogDir } from "@/lib/logger";
 
 export type Route = {
@@ -45,12 +44,11 @@ export function imageResponse(bytes: number[], status = 200): Response {
   });
 }
 
-/** Fresh temp dir + isolated DB/config/logs for a test; returns the dir. */
+/** Fresh temp dir + isolated DB/logs for a test; returns the dir. */
 export function isolatedStore(): string {
   const dir = mkdtempSync(path.join(tmpdir(), "tabi-test-"));
   process.env.TABI_DATA_DIR = dir;
   setDataDir(dir);
-  setConfigPath(path.join(dir, "config.json"));
   setLogDir(dir);
   return dir;
 }

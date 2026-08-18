@@ -4,7 +4,7 @@ import { narrateTop } from "@/lib/llm";
 import { jstHourStamp } from "@/lib/jst";
 import { logEntry } from "@/lib/logger";
 import type { AppConfig } from "@/lib/settings";
-import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { getSupabaseAdmin, getSupabaseForUser } from "@/lib/supabase/server";
 import type { NarratePlaceInput, NarrateResponse } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -27,13 +27,12 @@ async function getKeysForRequest(req: NextRequest): Promise<AppConfig> {
   if (auth?.startsWith("Bearer ")) {
     const token = auth.slice(7);
     try {
-      const admin = getSupabaseAdmin();
-      const { data: { user } } = await admin.auth.getUser(token);
+      const { data: { user } } = await getSupabaseAdmin().auth.getUser(token);
       if (user) {
-        const { data: keys } = await admin
+        // User-scoped client; RLS restricts rows to this user
+        const { data: keys } = await getSupabaseForUser(token)
           .from("api_keys")
-          .select("key_name, key_value")
-          .eq("user_id", user.id);
+          .select("key_name, key_value");
         if (keys && keys.length > 0) {
           const KEY_MAP: Record<string, keyof AppConfig> = {
             google_places: "googlePlacesApiKey",
