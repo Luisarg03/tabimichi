@@ -17,7 +17,9 @@ const TILE_ICONS: Record<string, string> = {
   satellite: "🛰️",
 };
 
-/** Tile-layer switcher (bottom-left): persists the choice per browser. */
+/** Tile-layer switcher (bottom-left): persists the choice per browser.
+ *  On mobile it renders compact (icons only) and moves to bottom-center so
+ *  it never hides behind the results column. */
 function TileSwitcher({
   tileId,
   onChange,
@@ -27,16 +29,17 @@ function TileSwitcher({
 }) {
   const { t } = useI18n();
   return (
-    <div className="absolute bottom-24 right-2 z-[1000] flex max-w-[calc(100%-1rem)] flex-wrap gap-0.5 rounded-xl border border-slate-200 bg-white/95 p-1 shadow-md backdrop-blur">
+    <div className="absolute bottom-24 right-2 z-[1000] flex max-w-[calc(100%-1rem)] flex-wrap gap-0.5 rounded-xl border border-slate-200 bg-white/95 p-1 shadow-md backdrop-blur md:right-2">
       {TILE_STYLES.map((s) => (
         <button
           key={s.id}
           onClick={() => onChange(s.id)}
           title={t(`map.tiles.${s.id}`)}
-          className={`flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium transition-colors ${
+          aria-label={t(`map.tiles.${s.id}`)}
+          className={`flex items-center gap-1 rounded-lg px-1.5 py-1.5 text-[11px] font-medium transition-colors min-h-[36px] sm:px-2 ${
             tileId === s.id
-              ? "bg-slate-900 text-white"
-              : "text-slate-600 hover:bg-slate-100"
+              ? "bg-brand-600 text-white"
+              : "text-slate-600 hover:bg-slate-100 active:bg-slate-200"
           }`}
         >
           <span>{TILE_ICONS[s.id] ?? "🗺️"}</span>
@@ -44,6 +47,27 @@ function TileSwitcher({
         </button>
       ))}
     </div>
+  );
+}
+
+/** "My location" floating button: re-centers the map on the input position
+ *  (Google-Maps-style crosshair FAB, stacked above the tile switcher). */
+function LocateButton({ center }: { center: LatLng }) {
+  const map = useMap();
+  const { t } = useI18n();
+  return (
+    <button
+      onClick={() => map.flyTo([center.lat, center.lng], Math.max(map.getZoom(), 13), { duration: 0.6 })}
+      aria-label={t("map.locate")}
+      title={t("map.locate")}
+      className="absolute bottom-44 right-2 z-[1000] flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-md backdrop-blur transition-colors hover:bg-slate-50 active:bg-slate-100"
+    >
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <circle cx="12" cy="12" r="6" />
+        <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
+        <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+      </svg>
+    </button>
   );
 }
 
@@ -234,6 +258,9 @@ export default function MapView({
           </Popup>
         </Marker>
       )}
+
+      {/* "my location" FAB — must live inside MapContainer to use useMap() */}
+      <LocateButton center={center} />
       </MapContainer>
       {/* switcher sits above the map but below the page overlay */}
       <TileSwitcher tileId={tileId} onChange={setTileId} />

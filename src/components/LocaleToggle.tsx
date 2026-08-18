@@ -9,13 +9,14 @@ export default function LocaleToggle() {
     { id: "en", label: "EN" },
   ];
   return (
-    <div className="flex overflow-hidden rounded-lg border border-slate-300 text-xs font-medium">
+    <div className="flex overflow-hidden rounded-full border border-slate-300 bg-white text-xs font-medium shadow-sm">
       {opts.map((o) => (
         <button
           key={o.id}
           onClick={() => setLocale(o.id)}
-          className={`px-2.5 py-1.5 transition-colors ${
-            locale === o.id ? "bg-slate-900 text-white" : "bg-white text-slate-600 hover:bg-slate-50"
+          aria-pressed={locale === o.id}
+          className={`px-2.5 py-1.5 transition-colors min-h-[36px] ${
+            locale === o.id ? "bg-brand-600 text-white" : "text-slate-600 hover:bg-slate-50"
           }`}
         >
           {o.label}
