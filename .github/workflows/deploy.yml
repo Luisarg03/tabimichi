@@ -20,7 +20,7 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v4
-      - uses: amondnet/vercel-action@v25
+      - uses: amondnet/vercel-action@v29
         with:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
@@ -45,10 +45,10 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: production
-      url: https://tabimichi.vercel.app
+      url: https://tabimichi-hiro-arg.vercel.app
     steps:
       - uses: actions/checkout@v4
-      - uses: amondnet/vercel-action@v25
+      - uses: amondnet/vercel-action@v29
         with:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
