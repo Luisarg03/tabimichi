@@ -47,3 +47,18 @@ body {
 .tabi-pulse-ring {
   animation: tabi-pulse 1.5s ease-out infinite;
 }
+
+/* Mobile perf: backdrop-filter is expensive on low-end GPUs. Panels keep
+   their translucent bg-white/95 backgrounds, so dropping the blur below the
+   md breakpoint is visually near-identical and much cheaper. */
+@media (max-width: 767px) {
+  .backdrop-blur,
+  .backdrop-blur-sm,
+  .backdrop-blur-md,
+  .backdrop-blur-lg,
+  .backdrop-blur-xl,
+  .backdrop-blur-2xl,
+  .backdrop-blur-3xl {
+    backdrop-filter: none !important;
+  }
+}

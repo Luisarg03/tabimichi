@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap, ZoomControl } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -111,6 +111,41 @@ function FlyToSelected({ place }: { place?: ScoredPlace | null }) {
   return null;
 }
 
+/** Memoized place markers: photo-batch re-renders of the parent (new `places`
+ *  array) still recreate these, but unrelated re-renders (selection, tile
+ *  switch) with a stable `places` reference skip Leaflet marker recreation. */
+const PlaceMarkers = memo(function PlaceMarkers({
+  places,
+  onSelect,
+}: {
+  places: ScoredPlace[];
+  onSelect: (id: string) => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <>
+      {places.map((p) => (
+        <Marker
+          key={p.id}
+          position={[p.lat, p.lng]}
+          icon={markerIcon(p)}
+          eventHandlers={{ click: () => onSelect(p.id) }}
+        >
+          <Popup>
+            <div className="text-sm">
+              <div className="font-semibold">{p.name}</div>
+              <div className="text-gray-600">
+                {t("card.travel", { min: p.travelMin })} ·{" "}
+                {p.rating !== undefined && t("card.rating", { r: p.rating.toFixed(1) })}
+              </div>
+            </div>
+          </Popup>
+        </Marker>
+      ))}
+    </>
+  );
+});
+
 export default function MapView({
   center,
   places,
@@ -178,24 +213,7 @@ export default function MapView({
         </Popup>
       </Marker>
 
-      {places.map((p) => (
-        <Marker
-          key={p.id}
-          position={[p.lat, p.lng]}
-          icon={markerIcon(p)}
-          eventHandlers={{ click: () => onSelect(p.id) }}
-        >
-          <Popup>
-            <div className="text-sm">
-              <div className="font-semibold">{p.name}</div>
-              <div className="text-gray-600">
-                {t("card.travel", { min: p.travelMin })} ·{" "}
-                {p.rating !== undefined && t("card.rating", { r: p.rating.toFixed(1) })}
-              </div>
-            </div>
-          </Popup>
-        </Marker>
-      ))}
+      <PlaceMarkers places={places} onSelect={onSelect} />
       {/* selected place: bigger highlighted marker rendered last → on top */}
       {selected && (
         <Marker

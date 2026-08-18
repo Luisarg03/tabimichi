@@ -7,8 +7,8 @@ import { logEntry } from "@/lib/logger";
 
 export const runtime = "nodejs";
 
-const MAX_ENRICH = 6;
-const MAX_UNIQUE_PHOTOS = 6;
+const MAX_ENRICH = 4;
+const MAX_UNIQUE_PHOTOS = 3;
 
 /**
  * Async photo enrichment with content-hash dedupe.
