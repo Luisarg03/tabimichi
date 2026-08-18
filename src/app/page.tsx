@@ -262,8 +262,11 @@ export default function HomePage() {
   // keep the selected card visible inside the floating results column
   useEffect(() => {
     if (!selectedId) return;
-    const el = document.getElementById(`card-${selectedId}`);
-    el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    const t = setTimeout(() => {
+      const el = document.getElementById(`card-${selectedId}`);
+      el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }, 150);
+    return () => clearTimeout(t);
   }, [selectedId]);
 
   return (
