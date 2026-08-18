@@ -1,15 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import DayPanel, { type DiscoverPayload } from "@/components/DayPanel";
-import RecommendationCard from "@/components/RecommendationCard";
-import WeatherCard from "@/components/WeatherCard";
+import ResultsList from "@/components/ResultsList";
 import LocaleToggle from "@/components/LocaleToggle";
+import SimTabs from "@/components/SimTabs";
+import BottomSheet from "@/components/BottomSheet";
+import MobileDetailSheet from "@/components/MobileDetailSheet";
+import SearchOverlay from "@/components/SearchOverlay";
+import PlaceDetailPanel from "@/components/PlaceDetailPanel";
 import { useI18n } from "@/lib/i18n";
-import type { PlaceProfile, RecommendResult, ScoredPlace } from "@/lib/types";
-import { EXPERIENCE_TYPES, EXPERIENCE_TYPE_MAP } from "@/lib/places/taxonomy";
+import { useAuth } from "@/lib/auth-context";
+import type { PlaceProfile, RecommendResult, TimeBudget, TransportMode } from "@/lib/types";
+import type { SheetSnap } from "@/lib/sheet";
 import { SIM_PRESETS, jstSimulatedDate } from "@/lib/jst";
 
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
@@ -21,18 +26,50 @@ interface SavedLocation {
   gps?: boolean;
 }
 
+const LAST_LOCATION_KEY = "tabi.lastLocation";
+
+/** localStorage-backed "last location" store, read via useSyncExternalStore:
+ *  - getServerSnapshot is always null, so the SSR HTML and the client's first
+ *    render both show the placeholder (no hydration mismatch);
+ *  - after hydration React re-reads getSnapshot and swaps in the saved
+ *    location when present.
+ *  The parsed object is cached so getSnapshot returns a stable reference
+ *  between renders (React compares snapshots with Object.is). */
+let lastLocationCache: SavedLocation | null = null;
+let lastLocationCacheKey: string | null = null;
+
+function readLastLocation(): SavedLocation | null {
+  let raw: string | null = null;
+  try {
+    raw = localStorage.getItem(LAST_LOCATION_KEY);
+  } catch {
+    raw = null; // private mode / SSR
+  }
+  if (raw !== lastLocationCacheKey) {
+    lastLocationCacheKey = raw;
+    try {
+      lastLocationCache = raw ? (JSON.parse(raw) as SavedLocation) : null;
+    } catch {
+      lastLocationCache = null; // corrupted value
+    }
+  }
+  return lastLocationCache;
+}
+
+/** Syncs across tabs (storage events fire only in *other* tabs; same-tab
+ *  writes dispatch one explicitly in handleDiscover). */
+function subscribeLastLocation(onChange: () => void): () => void {
+  window.addEventListener("storage", onChange);
+  return () => window.removeEventListener("storage", onChange);
+}
+
 export default function HomePage() {
   const { t, locale } = useI18n();
-  const [location, setLocation] = useState<SavedLocation | null>(() => {
-    if (typeof window === "undefined") return null;
-    try {
-      const raw = localStorage.getItem("tabi.lastLocation");
-      return raw ? (JSON.parse(raw) as SavedLocation) : null;
-    } catch {
-      return null;
-    }
-  });
-  const [mode, setMode] = useState<string>("transit");
+  const { getToken } = useAuth();
+  // Read the persisted location through useSyncExternalStore (server snapshot
+  // is always null) instead of a useState initializer, which read localStorage
+  // during the client's first render and broke hydration.
+  const location = useSyncExternalStore(subscribeLastLocation, readLastLocation, () => null);
   const [result, setResult] = useState<RecommendResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
@@ -44,6 +81,16 @@ export default function HomePage() {
   const [tastesOpen, setTastesOpen] = useState(false);
   /** time simulation: null = real now; else a SIM_PRESETS id (JST hour) */
   const [simPreset, setSimPreset] = useState<string | null>(null);
+  /** Search filters — lifted so they survive the mobile overlay remount and
+   *  stay shared between the desktop panel and the mobile overlay. */
+  const [budget, setBudget] = useState<TimeBudget>("afternoon");
+  const [mode, setMode] = useState<TransportMode>("transit");
+  const [types, setTypes] = useState<string[]>([]);
+  const [keyword, setKeyword] = useState("");
+  /** Mobile results bottom sheet: hidden until a discover runs. */
+  const [sheet, setSheet] = useState<SheetSnap>("hidden");
+  /** Mobile search overlay (full-screen form). */
+  const [searchOpen, setSearchOpen] = useState(false);
   const lastQueryRef = useRef<{
     lat: number;
     lng: number;
@@ -59,18 +106,34 @@ export default function HomePage() {
   >(null);
 
   useEffect(() => {
-    fetch("/api/feedback")
-      .then((r) => r.json())
-      .then((d) => setProfile(d.profile as PlaceProfile))
-      .catch(() => {});
-  }, []);
+    (async () => {
+      try {
+        const token = await getToken();
+        const res = await fetch(
+          "/api/feedback",
+          token ? { headers: { Authorization: `Bearer ${token}` } } : undefined
+        );
+        const d = (await res.json()) as { profile: PlaceProfile };
+        setProfile(d.profile);
+      } catch {
+        // profile stays null; voting still works
+      }
+    })();
+  }, [getToken]);
+
+  const origin = location ? { lat: location.lat, lng: location.lng } : null;
+  const selected = result?.places.find((p) => p.id === selectedId) ?? null;
 
   const handleFeedback = useCallback(async (placeId: string, liked: boolean, tags?: string[]) => {
     setVotes((v) => ({ ...v, [placeId]: liked ? "like" : "dislike" }));
     try {
+      const token = await getToken();
       const res = await fetch("/api/feedback", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ placeId, liked, tags }),
       });
       if (res.ok) {
@@ -80,10 +143,13 @@ export default function HomePage() {
     } catch {
       // optimistic vote stays; profile updates on next action
     }
-  }, []);
+  }, [getToken]);
 
   const handleDiscover = useCallback(
     async (payload: DiscoverPayload) => {
+      // Mobile: close the search overlay and open the results sheet.
+      setSearchOpen(false);
+      setSheet("peek");
       setLoading(true);
       setError(false);
       setResult(null);
@@ -91,12 +157,13 @@ export default function HomePage() {
       setGuideState("idle");
       try {
         const loc = { lat: payload.lat, lng: payload.lng, label: payload.label, gps: payload.gps === true };
-        setLocation(loc);
         setMode(payload.mode);
         try {
-          localStorage.setItem("tabi.lastLocation", JSON.stringify(loc));
+          localStorage.setItem(LAST_LOCATION_KEY, JSON.stringify(loc));
+          // storage events only fire in other tabs — notify this tab's store
+          window.dispatchEvent(new Event("storage"));
         } catch {
-          // ignore
+          // ignore (private mode / quota); in-memory location still updates
         }
 
         // time simulation: convert the preset to an ISO instant (JST hour)
@@ -189,9 +256,13 @@ export default function HomePage() {
     const next = Math.max(-5, Math.min(5, cur + delta));
     setProfile((p) => ({ ...(p ?? {}), [tag]: next }));
     try {
+      const token = await getToken();
       const res = await fetch("/api/profile", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ tag, weight: next }),
       });
       if (res.ok) {
@@ -201,15 +272,19 @@ export default function HomePage() {
     } catch {
       // optimistic value stays; next action reconciles
     }
-  }, [profile]);
+  }, [profile, getToken]);
 
   /** "Tus gustos": reset the whole learned profile. */
   const handleTasteReset = useCallback(async () => {
     setProfile({});
     try {
+      const token = await getToken();
       const res = await fetch("/api/profile", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ reset: true }),
       });
       if (res.ok) {
@@ -219,7 +294,7 @@ export default function HomePage() {
     } catch {
       // ignore
     }
-  }, []);
+  }, [getToken]);
 
   /** On-demand guide: narrates the current results (button, not automatic). */
   const narrateNow = useCallback(async () => {
@@ -259,15 +334,7 @@ export default function HomePage() {
     }
   }, [locale]);
 
-  // keep the selected card visible inside the floating results column
-  useEffect(() => {
-    if (!selectedId) return;
-    const t = setTimeout(() => {
-      const el = document.getElementById(`card-${selectedId}`);
-      el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    }, 150);
-    return () => clearTimeout(t);
-  }, [selectedId]);
+  const closeDetail = useCallback(() => setSelectedId(null), []);
 
   return (
     <div className="relative h-dvh w-full overflow-hidden">
@@ -288,49 +355,22 @@ export default function HomePage() {
         )}
       </div>
 
-      {/* floating UI over the map (Google-Maps style) */}
-      <div className="pointer-events-none absolute inset-0 z-10">
-        {/*
-          NOTE: this full-height container must stay pointer-events-none so
-          clicks/drag reach the map; only the actual panels re-enable events.
-          A pointer-events-auto full-screen div would freeze the map.
-        */}
-        <div className="pointer-events-none flex h-full flex-col gap-2 p-2 sm:p-3">
-          {/* header row: brand + sim tabs + locale/settings */}
-          <div className="pointer-events-auto flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white/95 px-3 py-2 shadow-sm backdrop-blur">
-              <span className="text-lg">🗾</span>
-              <span className="text-base font-bold text-slate-900">
+      {/* ============ DESKTOP (md+) ============ */}
+      <div className="pointer-events-none absolute inset-0 z-10 hidden md:block">
+        <div className="pointer-events-none flex h-full flex-col gap-2 p-3">
+          {/* header row: brand + locale/settings */}
+          <div className="pointer-events-auto flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white/95 px-2.5 py-1.5 shadow-sm">
+              <span className="text-base">🗾</span>
+              <span className="text-sm font-bold text-slate-900">
                 {t("app.name")} <span className="font-normal text-slate-400">旅</span>
               </span>
             </div>
-            <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white/95 px-1.5 py-1 shadow-sm backdrop-blur">
-              <button
-                onClick={() => setSimPreset(null)}
-                title={t("sim.now")}
-                className={`rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
-                  simPreset === null ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
-                }`}
-              >
-                {t("sim.now")}
-              </button>
-              {SIM_PRESETS.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => setSimPreset(p.id)}
-                  className={`rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
-                    simPreset === p.id ? "bg-sky-600 text-white" : "text-slate-600 hover:bg-slate-100"
-                  }`}
-                >
-                  {t(`sim.${p.labelKey}`)}
-                </button>
-              ))}
-            </div>
-            <div className="ml-auto flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5">
               <LocaleToggle />
               <Link
                 href="/settings"
-                className="rounded-lg border border-slate-300 bg-white/95 px-2.5 py-1.5 text-sm font-medium text-slate-700 shadow-sm backdrop-blur hover:bg-slate-50"
+                className="flex min-h-[36px] min-w-[36px] items-center justify-center rounded-lg border border-slate-300 bg-white/95 p-1.5 text-sm text-slate-700 shadow-sm backdrop-blur hover:bg-slate-50 active:bg-slate-100"
                 title={t("nav.settings")}
               >
                 ⚙️
@@ -338,190 +378,159 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* left column: search + results, floating over the map */}
-          <div className="pointer-events-auto flex h-[calc(100%-3.5rem)] w-full flex-col gap-2 md:w-[27rem]">
-            <DayPanel initialLocation={location} loading={loading} onDiscover={handleDiscover} />
-
-            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
-              {loading && (
-                <div className="rounded-xl border border-slate-200 bg-white/95 p-4 text-center text-sm text-slate-500 shadow-sm">
-                  <span className="inline-block animate-pulse">⏳ {t("status.discovering")}</span>
-                </div>
-              )}
-
-              {error && (
-                <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 shadow-sm">
-                  {t("status.error")}
-                </div>
-              )}
-
-              {result && !loading && (
-                <>
-                  <WeatherCard weather={result.weather} />
-                  {result.keywordMiss && (
-                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 shadow-sm">
-                      {t("status.keywordMiss", { kw: result.keyword ?? "" })}
-                    </div>
-                  )}
-                  {/* Tus gustos: manage the learned profile */}
-                  <button
-                    onClick={() => setTastesOpen((v) => !v)}
-                    className="w-full rounded-xl border border-slate-200 bg-white/95 px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm backdrop-blur transition-colors hover:bg-slate-50"
-                  >
-                    {tastesOpen ? "▾ " : "▸ "}
-                    {t("profile.title")}
-                    {profile && Object.values(profile).some((w) => w !== 0) && (
-                      <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
-                        {Object.entries(profile).filter(([, w]) => w !== 0).length}
-                      </span>
-                    )}
-                  </button>
-                  {tastesOpen && (
-                    <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-                      <p className="mb-2 text-xs text-slate-500">{t("profile.hint")}</p>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        {EXPERIENCE_TYPES.map((type) => {
-                          const w = profile?.[type.id] ?? 0;
-                          return (
-                            <div
-                              key={type.id}
-                              className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 px-2 py-1"
-                            >
-                              <span className="text-xs text-slate-700">
-                                {type.emoji} {t(`panel.type.${type.id}`)}
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <button
-                                  onClick={() => handleTaste(type.id, -1)}
-                                  disabled={w <= -5}
-                                  className="h-6 w-6 rounded-md border border-slate-300 text-sm leading-none text-slate-600 hover:bg-slate-100 disabled:opacity-30"
-                                >
-                                  −
-                                </button>
-                                <span
-                                  className={`w-6 text-center text-xs font-semibold ${
-                                    w > 0 ? "text-emerald-600" : w < 0 ? "text-rose-500" : "text-slate-400"
-                                  }`}
-                                >
-                                  {w}
-                                </span>
-                                <button
-                                  onClick={() => handleTaste(type.id, 1)}
-                                  disabled={w >= 5}
-                                  className="h-6 w-6 rounded-md border border-slate-300 text-sm leading-none text-slate-600 hover:bg-slate-100 disabled:opacity-30"
-                                >
-                                  +
-                                </button>
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                      <button
-                        onClick={handleTasteReset}
-                        className="mt-2 w-full rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-100"
-                      >
-                        {t("profile.reset")}
-                      </button>
-                    </div>
-                  )}
-                  {result.sourceNote === "none" ? (
-                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 shadow-sm">
-                      {t(`panel.source.${result.sourceNote}`)}
-                    </div>
-                  ) : (
-                    <>
-                      <div className="text-xs text-slate-500">{t(`panel.source.${result.sourceNote}`)}</div>
-                      {result.places.length > 0 && (
-                        <button
-                          onClick={narrateNow}
-                          disabled={guideState === "thinking"}
-                          className="w-full rounded-xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-sm font-medium text-sky-700 shadow-sm transition-colors hover:bg-sky-100 disabled:opacity-50"
-                        >
-                          {guideState === "thinking"
-                            ? t("status.guideThinking")
-                            : result.narrated
-                              ? t("card.guideRegenerate")
-                              : t("card.guideButton")}
-                        </button>
-                      )}
-                      {guideState === "thinking" && !result.summary && (
-                        <div className="rounded-xl border border-sky-100 bg-sky-50 p-4 text-sm text-slate-500 shadow-sm">
-                          <span className="inline-block animate-pulse">🧠 {t("status.guideThinking")}</span>
-                        </div>
-                      )}
-                      {result.summary && (
-                        <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-slate-800 shadow-sm">
-                          <div className="mb-1 flex items-center justify-between">
-                            <span className="text-xs font-medium uppercase tracking-wide text-sky-500">
-                              {t("card.summaryTitle")}
-                            </span>
-                            {result.narratedBy && (
-                              <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-medium text-sky-600">
-                                {result.narratedBy === "opencode-go" ? t("card.narrator.paid") : t("card.narrator.free")}
-                              </span>
-                            )}
-                          </div>
-                          {result.summary}
-                        </div>
-                      )}
-                      {result.places.length === 0 ? (
-                        <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500 shadow-sm">
-                          {result.emptyReason === "all_closed"
-                            ? t("status.emptyClosed")
-                            : result.emptyReason === "too_far"
-                              ? t("status.emptyFar")
-                              : t("status.empty")}
-                        </div>
-                      ) : (
-                        <>
-                          {profile && Object.keys(profile).some((k) => profile[k] !== 0) && (
-                            <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-2.5 text-xs text-slate-600 shadow-sm">
-                              <span className="font-medium text-emerald-700">{t("profile.title")}: </span>
-                              {Object.entries(profile)
-                                .filter(([, w]) => w !== 0)
-                                .map(([tag, w]) => (
-                                  <span key={tag} className="mr-2 inline-flex items-center gap-1">
-                                    {EXPERIENCE_TYPE_MAP[tag]?.emoji ?? ""}
-                                    {t(`panel.type.${tag}`)}
-                                    <span className={w > 0 ? "text-emerald-600" : "text-rose-500"}>
-                                      {w > 0 ? `+${w}` : w}
-                                    </span>
-                                  </span>
-                                ))}
-                            </div>
-                          )}
-                          <div className="space-y-2">
-                            {result.places.map((p: ScoredPlace) => (
-                              <RecommendationCard
-                                key={p.id}
-                                place={p}
-                                origin={{ lat: location!.lat, lng: location!.lng }}
-                                mode={mode}
-                                narratedBy={result.narratedBy}
-                                selected={selectedId === p.id}
-                                voted={votes[p.id] ?? null}
-                                onSelect={setSelectedId}
-                                onFeedback={handleFeedback}
-                              />
-                            ))}
-                          </div>
-                        </>
-                      )}
-                    </>
-                  )}
-                </>
-              )}
-
-              {!result && !loading && !error && (
-                <div className="rounded-xl border border-dashed border-slate-300 bg-white/70 p-6 text-center text-sm text-slate-400 shadow-sm backdrop-blur">
-                  {t("app.tagline")} 🌸
-                </div>
-              )}
+          {/* left column: sim + search + results */}
+          <div className="pointer-events-auto flex w-[26rem] min-h-0 flex-1 flex-col gap-2 overflow-hidden">
+            <div className="shrink-0 rounded-xl border border-slate-200 bg-white/95 px-1.5 py-1 shadow-sm">
+              <SimTabs preset={simPreset} onChange={setSimPreset} />
+            </div>
+            <DayPanel
+              initialLocation={location}
+              loading={loading}
+              onDiscover={handleDiscover}
+              budget={budget}
+              mode={mode}
+              types={types}
+              keyword={keyword}
+              onBudgetChange={setBudget}
+              onModeChange={setMode}
+              onTypesChange={setTypes}
+              onKeywordChange={setKeyword}
+            />
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain pr-1">
+              <ResultsList
+                loading={loading}
+                error={error}
+                result={result}
+                profile={profile}
+                mode={mode}
+                selectedId={selectedId}
+                onSelect={setSelectedId}
+                tastesOpen={tastesOpen}
+                onTastesToggle={() => setTastesOpen((v) => !v)}
+                onTaste={handleTaste}
+                onTasteReset={handleTasteReset}
+                onNarrate={narrateNow}
+                guideState={guideState}
+              />
             </div>
           </div>
         </div>
+
+        {/* right place-detail panel */}
+        {selected && origin && (
+          <PlaceDetailPanel
+            place={selected}
+            origin={origin}
+            mode={mode}
+            narratedBy={result?.narratedBy}
+            voted={votes[selected.id] ?? null}
+            onFeedback={handleFeedback}
+            onClose={closeDetail}
+          />
+        )}
       </div>
+
+      {/* ============ MOBILE (<md) ============ */}
+      <div className="pointer-events-none absolute inset-0 z-10 md:hidden">
+        <div className="pointer-events-none flex h-full flex-col gap-1.5 p-2 tabi-safe-top tabi-safe-x">
+          {/* top: search pill + locale/settings */}
+          <div className="pointer-events-auto flex items-center justify-between gap-2">
+            <button
+              onClick={() => setSearchOpen(true)}
+              className="flex min-w-0 flex-1 items-center gap-2 rounded-full border border-slate-200 bg-white/95 px-4 py-2.5 text-left shadow-sm min-h-[44px]"
+              aria-label={t("panel.where")}
+            >
+              <span className="text-base">📍</span>
+              <span className="truncate text-sm font-medium text-slate-700">
+                {location ? location.label : t("panel.where")}
+              </span>
+              {loading && <span className="animate-pulse text-xs">⏳</span>}
+            </button>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <LocaleToggle />
+              <Link
+                href="/settings"
+                className="flex min-h-[40px] min-w-[40px] items-center justify-center rounded-full border border-slate-300 bg-white/95 text-sm text-slate-700 shadow-sm hover:bg-slate-50 active:bg-slate-100"
+                title={t("nav.settings")}
+              >
+                ⚙️
+              </Link>
+            </div>
+          </div>
+
+          {/* time simulation chips */}
+          <div className="pointer-events-auto shrink-0 rounded-xl border border-slate-200 bg-white/95 px-1.5 py-1 shadow-sm">
+            <SimTabs preset={simPreset} onChange={setSimPreset} />
+          </div>
+        </div>
+      </div>
+
+      {/* mobile results sheet (hidden on desktop) */}
+      {sheet !== "hidden" && !searchOpen && (
+        <div className="md:hidden">
+          <BottomSheet
+            snap={sheet}
+            onSnapChange={setSheet}
+            title={t("sheet.results")}
+            summary={
+              result && !loading
+                ? `${t("sheet.placesCount", { n: result.places.length })} · ${result.weather.tempC}°C`
+                : undefined
+            }
+          >
+            <ResultsList
+              loading={loading}
+              error={error}
+              result={result}
+              profile={profile}
+              mode={mode}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              tastesOpen={tastesOpen}
+              onTastesToggle={() => setTastesOpen((v) => !v)}
+              onTaste={handleTaste}
+              onTasteReset={handleTasteReset}
+              onNarrate={narrateNow}
+              guideState={guideState}
+            />
+          </BottomSheet>
+        </div>
+      )}
+
+      {/* mobile place-detail sheet (hidden on desktop) */}
+      {selected && origin && !searchOpen && (
+        <div className="md:hidden">
+          <MobileDetailSheet
+            place={selected}
+            origin={origin}
+            mode={mode}
+            narratedBy={result?.narratedBy}
+            voted={votes[selected.id] ?? null}
+            onFeedback={handleFeedback}
+            onClose={closeDetail}
+          />
+        </div>
+      )}
+
+      {/* mobile search overlay (hidden on desktop) */}
+      {searchOpen && (
+        <div className="md:hidden">
+          <SearchOverlay
+            location={location}
+            loading={loading}
+            onDiscover={handleDiscover}
+            onClose={() => setSearchOpen(false)}
+            budget={budget}
+            mode={mode}
+            types={types}
+            keyword={keyword}
+            onBudgetChange={setBudget}
+            onModeChange={setMode}
+            onTypesChange={setTypes}
+            onKeywordChange={setKeyword}
+          />
+        </div>
+      )}
     </div>
   );
 }

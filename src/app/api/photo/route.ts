@@ -3,6 +3,7 @@ import { existsSync, statSync } from "node:fs";
 import { getConfig } from "@/lib/settings";
 import { googlePhotoBytes } from "@/lib/places/google";
 import { photoCachePath, readCachedPhoto, writeCachedPhoto, CACHE_TTL_MS } from "@/lib/photos";
+import { enforceRateLimit } from "@/lib/security";
 
 export const runtime = "nodejs";
 
@@ -16,6 +17,11 @@ export async function GET(req: NextRequest) {
   const ref = req.nextUrl.searchParams.get("ref");
   const id = req.nextUrl.searchParams.get("id") ?? "photo";
   if (!ref) return NextResponse.json({ error: "ref required" }, { status: 400 });
+
+  // Image loads can be frequent (gallery thumbnails); bound proxy abuse that
+  // would burn the operator's Google quota on cache misses.
+  const limited = enforceRateLimit(req, "photo", { perIp: 120 });
+  if (limited) return limited;
 
   const cachePath = photoCachePath(id, ref);
 
@@ -41,7 +47,7 @@ export async function GET(req: NextRequest) {
     return new Response(new Uint8Array(buf), {
       headers: { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=86400" },
     });
-  } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 502 });
+  } catch {
+    return NextResponse.json({ error: "photo_fetch_failed" }, { status: 502 });
   }
 }

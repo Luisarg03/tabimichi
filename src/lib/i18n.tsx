@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
 
 export type Locale = "es" | "en";
@@ -72,6 +72,7 @@ const es: Dict = {
     closed: "Cerrado ahora",
     rating: "{r}",
     reviews: "({n} reseñas)",
+    reviewsLabel: "reseñas",
     price: "{n}/5",
     openInMaps: "Cómo llegar",
     viewInMaps: "Ver en Maps",
@@ -85,6 +86,14 @@ const es: Dict = {
     voted: "¡Anotado!",
     guideButton: "🧠 Preguntale al guía",
     guideRegenerate: "🔁 Regenerar resumen del guía",
+  },
+  detail: {
+    close: "Cerrar",
+    back: "Volver",
+  },
+  sheet: {
+    results: "Resultados",
+    placesCount: "{n} lugares",
   },
   profile: {
     title: "Tus gustos",
@@ -130,7 +139,7 @@ const es: Dict = {
   settings: {
     title: "Ajustes",
     intro:
-      "Las API keys se guardan localmente en data/config.json y nunca salen de tu máquina. También podés usar variables de entorno (GOOGLE_PLACES_API_KEY, OPENCODE_API_KEY, OPENCODE_GO_API_KEY).",
+      "Con sesión, tus API keys se guardan por usuario en Supabase y solo vos podés verlas. Sin sesión usamos las variables de entorno del servidor.",
     google: "Google Places API key (opcional)",
     googleHelp:
       "Sin key usamos OpenStreetMap (gratis, sin registro). Con key obtenés ratings, horarios y fotos. Crédito mensual $200 (~6.000 consultas) — gratis de facto para uso personal.",
@@ -146,12 +155,99 @@ const es: Dict = {
     saved: "Guardado ✓",
     connected: "Conectado",
     notConnected: "No configurado",
+    remove: "Quitar",
+    removed: "Eliminada ✓",
+  },
+  auth: {
+    loginTitle: "🔑 Iniciar sesión",
+    registerTitle: "🆕 Crear cuenta",
+    forgotTitle: "🔁 Recuperar contraseña",
+    email: "Email",
+    password: "Contraseña",
+    passwordMin: "mínimo 8 caracteres",
+    login: "Iniciar sesión",
+    register: "Crear cuenta",
+    sendReset: "Enviar link de recuperación",
+    forgot: "¿Olvidaste tu contraseña?",
+    forgotHint:
+      "Te enviamos un link por email para elegir una contraseña nueva. Al hacer clic vas a poder cambiarla acá.",
+    resetSent:
+      "📬 Si existe una cuenta con ese email, te enviamos un link de recuperación.",
+    noAccount: "¿No tenés cuenta?",
+    createOne: "Crear una",
+    haveAccount: "¿Ya tenés cuenta?",
+    loginInstead: "Iniciar sesión",
+    backToLogin: "← Volver a iniciar sesión",
+    registerConfirm: "📬 Cuenta creada. Revisá tu email para confirmar.",
+    needLoginForKeys: "🔐 Inicia sesión para gestionar tus API keys",
+    needLoginForKeysHint: "Tus keys se guardan de forma segura y solo vos podés verlas.",
+    sessionActive: "✅ Sesión activa: {email}",
+    sessionActiveHint: "Tus API keys se guardan de forma segura en tu cuenta.",
+    signOut: "Cerrar sesión",
+  },
+  account: {
+    title: "Mi cuenta",
+    displayName: "Nombre",
+    displayNamePlaceholder: "Tu nombre",
+    save: "Guardar nombre",
+    saved: "Nombre guardado ✓",
+    changeEmail: "Cambiar email",
+    changeEmailHint: "Te enviamos un link de confirmación al email nuevo.",
+    newEmail: "Email nuevo",
+    emailChanged: "📬 Revisá tu email nuevo para confirmar el cambio.",
+    changePassword: "Cambiar contraseña",
+    changePasswordHint: "Elegí una contraseña nueva (mínimo 8 caracteres).",
+    newPassword: "Contraseña nueva",
+    confirmPassword: "Repetí la contraseña",
+    passwordsMismatch: "Las contraseñas no coinciden.",
+    passwordChanged: "Contraseña actualizada ✓",
+    passwordTooShort: "La contraseña debe tener al menos 8 caracteres.",
+    recoveryTitle: "🔑 Elegí tu contraseña nueva",
+    recoveryHint: "Estás acá porque pediste recuperar tu cuenta. Definí tu nueva contraseña:",
+    setPassword: "Guardar contraseña nueva",
+    dangerTitle: "Zona de peligro",
+    deleteTitle: "Eliminar cuenta",
+    deleteHint:
+      "Se borran tu cuenta, tus API keys, tus gustos y tus votos de forma permanente. Esta acción no se puede deshacer.",
+    deleteConfirm: "Escribí ELIMINAR para confirmar",
+    deleteWrong: "Escribí ELIMINAR para poder borrar la cuenta.",
+    deleteButton: "Eliminar mi cuenta",
+    deleting: "Eliminando…",
+    deleted: "Cuenta eliminada. ¡Hasta pronto!",
+  },
+  admin: {
+    title: "Administración",
+    backToSettings: "← Volver a Ajustes",
+    onlyAdmins: "⛔ Esta sección es solo para administradores.",
+    needLogin: "🔐 Iniciá sesión como administrador para ver esta sección.",
+    searchPlaceholder: "Buscar por email…",
+    search: "Buscar",
+    role: "Rol",
+    registered: "Registro",
+    lastSeen: "Último acceso",
+    status: "Estado",
+    active: "Activo",
+    banned: "Suspendido",
+    unconfirmed: "Sin confirmar",
+    actions: "Acciones",
+    promote: "Hacer admin",
+    demote: "Quitar admin",
+    ban: "Suspender",
+    unban: "Reactivar",
+    deleteUser: "Eliminar",
+    confirmDelete: "¿Eliminar a {email}? No se puede deshacer.",
+    you: " (vos)",
+    prev: "← Anterior",
+    next: "Siguiente →",
+    noUsers: "No hay usuarios.",
+    pageInfo: "Página {page}",
   },
   map: {
     nearby: "Cerca de tu zona",
     youAreHere: "Estás acá",
     approx: "Ubicación aproximada (dirección buscada)",
     exact: "Ubicación exacta (GPS)",
+    locate: "Centrar en mi ubicación",
     tiles: {
       esri: "Esri (EN)",
       osm: "OSM",
@@ -227,6 +323,7 @@ const en: Dict = {
     closed: "Closed now",
     rating: "{r}",
     reviews: "({n} reviews)",
+    reviewsLabel: "reviews",
     price: "{n}/5",
     openInMaps: "Directions",
     viewInMaps: "View on Maps",
@@ -240,6 +337,14 @@ const en: Dict = {
     voted: "Got it!",
     guideButton: "🧠 Ask the guide",
     guideRegenerate: "🔁 Regenerate guide summary",
+  },
+  detail: {
+    close: "Close",
+    back: "Back",
+  },
+  sheet: {
+    results: "Results",
+    placesCount: "{n} places",
   },
   profile: {
     title: "Your tastes",
@@ -285,7 +390,7 @@ const en: Dict = {
   settings: {
     title: "Settings",
     intro:
-      "API keys are stored locally in data/config.json and never leave your machine. You can also use environment variables (GOOGLE_PLACES_API_KEY, OPENCODE_API_KEY, OPENCODE_GO_API_KEY).",
+      "When signed in, your API keys are stored per-user in Supabase and only you can see them. Without a session we use the server environment variables.",
     google: "Google Places API key (optional)",
     googleHelp:
       "Without a key we use OpenStreetMap (free, no signup). With a key you get ratings, hours and photos. $200/month free credit (~6,000 calls) — effectively free for personal use.",
@@ -301,12 +406,99 @@ const en: Dict = {
     saved: "Saved ✓",
     connected: "Connected",
     notConnected: "Not configured",
+    remove: "Remove",
+    removed: "Removed ✓",
+  },
+  auth: {
+    loginTitle: "🔑 Sign in",
+    registerTitle: "🆕 Create account",
+    forgotTitle: "🔁 Reset password",
+    email: "Email",
+    password: "Password",
+    passwordMin: "minimum 8 characters",
+    login: "Sign in",
+    register: "Create account",
+    sendReset: "Send recovery link",
+    forgot: "Forgot your password?",
+    forgotHint:
+      "We'll email you a link to choose a new password. After clicking it you can change it here.",
+    resetSent:
+      "📬 If an account exists with that email, we sent you a recovery link.",
+    noAccount: "Don't have an account?",
+    createOne: "Create one",
+    haveAccount: "Already have an account?",
+    loginInstead: "Sign in",
+    backToLogin: "← Back to sign in",
+    registerConfirm: "📬 Account created. Check your email to confirm.",
+    needLoginForKeys: "🔐 Sign in to manage your API keys",
+    needLoginForKeysHint: "Your keys are stored securely and only you can see them.",
+    sessionActive: "✅ Active session: {email}",
+    sessionActiveHint: "Your API keys are stored securely in your account.",
+    signOut: "Sign out",
+  },
+  account: {
+    title: "My account",
+    displayName: "Name",
+    displayNamePlaceholder: "Your name",
+    save: "Save name",
+    saved: "Name saved ✓",
+    changeEmail: "Change email",
+    changeEmailHint: "We'll send a confirmation link to the new email.",
+    newEmail: "New email",
+    emailChanged: "📬 Check your new email to confirm the change.",
+    changePassword: "Change password",
+    changePasswordHint: "Choose a new password (minimum 8 characters).",
+    newPassword: "New password",
+    confirmPassword: "Repeat password",
+    passwordsMismatch: "Passwords don't match.",
+    passwordChanged: "Password updated ✓",
+    passwordTooShort: "Password must be at least 8 characters.",
+    recoveryTitle: "🔑 Choose your new password",
+    recoveryHint: "You're here because you asked to recover your account. Set your new password:",
+    setPassword: "Save new password",
+    dangerTitle: "Danger zone",
+    deleteTitle: "Delete account",
+    deleteHint:
+      "Your account, API keys, tastes and votes are permanently deleted. This cannot be undone.",
+    deleteConfirm: "Type DELETE to confirm",
+    deleteWrong: "Type DELETE to be able to delete the account.",
+    deleteButton: "Delete my account",
+    deleting: "Deleting…",
+    deleted: "Account deleted. Goodbye!",
+  },
+  admin: {
+    title: "Administration",
+    backToSettings: "← Back to Settings",
+    onlyAdmins: "⛔ This section is for administrators only.",
+    needLogin: "🔐 Sign in as an administrator to view this section.",
+    searchPlaceholder: "Search by email…",
+    search: "Search",
+    role: "Role",
+    registered: "Registered",
+    lastSeen: "Last seen",
+    status: "Status",
+    active: "Active",
+    banned: "Suspended",
+    unconfirmed: "Unconfirmed",
+    actions: "Actions",
+    promote: "Make admin",
+    demote: "Remove admin",
+    ban: "Suspend",
+    unban: "Reactivate",
+    deleteUser: "Delete",
+    confirmDelete: "Delete {email}? This cannot be undone.",
+    you: " (you)",
+    prev: "← Previous",
+    next: "Next →",
+    noUsers: "No users.",
+    pageInfo: "Page {page}",
   },
   map: {
     nearby: "Near your area",
     youAreHere: "You are here",
     approx: "Approximate position (searched address)",
     exact: "Exact position (GPS)",
+    locate: "Center on my location",
     tiles: {
       esri: "Esri (EN)",
       osm: "OSM",
@@ -347,19 +539,71 @@ interface I18nContextValue {
 
 const I18nContext = createContext<I18nContextValue | null>(null);
 
-export function I18nProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>(() => {
-    if (typeof window === "undefined") return "es";
-    return (localStorage.getItem("tabi.locale") as Locale) || "es";
-  });
+const LOCALE_KEY = "tabi.locale";
 
-  const setLocale = useCallback((l: Locale) => {
-    setLocaleState(l);
+/** Locale lives in BOTH a cookie and localStorage:
+ *  - the cookie lets the server (layout.tsx) render the page in the user's
+ *    language from the start, so the SSR HTML and the first client render
+ *    always agree (no hydration mismatch, no locale flash);
+ *  - localStorage keeps the pre-cookie behavior and cross-tab sync.
+ *  `readStoredLocale` returns null when nothing is stored, so the store can
+ *  fall back to the server-provided `initialLocale` (the cookie value). */
+function subscribeLocale(onChange: () => void): () => void {
+  window.addEventListener("storage", onChange);
+  return () => window.removeEventListener("storage", onChange);
+}
+
+function readStoredLocale(): Locale | null {
+  try {
+    const v = localStorage.getItem(LOCALE_KEY);
+    return v === "en" || v === "es" ? v : null;
+  } catch {
+    return null; // private mode
+  }
+}
+
+export function I18nProvider({
+  children,
+  initialLocale,
+}: {
+  children: ReactNode;
+  /** Locale the server rendered with (read from the `tabi.locale` cookie). */
+  initialLocale: Locale;
+}) {
+  // During SSR and hydration React uses getServerSnapshot — the same value the
+  // server rendered with — so the client's first render always matches the
+  // HTML. After hydration, getSnapshot (localStorage) may correct it.
+  const locale = useSyncExternalStore<Locale>(
+    subscribeLocale,
+    () => readStoredLocale() ?? initialLocale,
+    () => initialLocale
+  );
+
+  useEffect(() => {
+    // Keep <html lang> in sync after a client-side switch (the root layout's
+    // <html> is server-owned and doesn't re-render on the client).
+    document.documentElement.lang = locale;
+    // Migrate legacy users who set the locale before cookies existed: persist
+    // the stored value to the cookie so the NEXT full load renders correctly.
     try {
-      localStorage.setItem("tabi.locale", l);
+      const saved = readStoredLocale();
+      if (saved && saved !== initialLocale) {
+        document.cookie = `${LOCALE_KEY}=${saved}; path=/; max-age=31536000; SameSite=Lax`;
+      }
     } catch {
       // private mode
     }
+  }, [locale, initialLocale]);
+
+  const setLocale = useCallback((l: Locale) => {
+    try {
+      localStorage.setItem(LOCALE_KEY, l);
+      document.cookie = `${LOCALE_KEY}=${l}; path=/; max-age=31536000; SameSite=Lax`;
+    } catch {
+      // private mode
+    }
+    // `storage` events only fire in *other* tabs — notify this tab's store
+    window.dispatchEvent(new Event("storage"));
   }, []);
 
   const t = useCallback(

@@ -1,23 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseAdmin, getSupabaseForUser } from "@/lib/supabase/server";
+import { getSupabaseForUser } from "@/lib/supabase/server";
+import { extractToken, requireUser } from "@/lib/supabase/auth";
+import { enforceRateLimit, validateEndpoint } from "@/lib/security";
 import type { AppConfig } from "@/lib/settings";
 
 export const runtime = "nodejs";
 
 /**
  * GET /api/user-keys — Get current user's API keys
- * POST /api/user-keys — Save current user's API keys
+ * POST /api/user-keys — Save/clear current user's API keys
  *
  * Both require a valid Supabase JWT in the Authorization header.
  * api_keys queries run with the user's JWT; RLS enforces isolation.
  * The service-role client is used only to verify the JWT.
+ *
+ * POST body: { <field>: "<value>" | "" } — an empty string removes the key.
+ * Values are trimmed and capped at 2048 chars.
  */
-
-function extractToken(req: NextRequest): string | null {
-  const auth = req.headers.get("authorization");
-  if (!auth?.startsWith("Bearer ")) return null;
-  return auth.slice(7);
-}
 
 const KEY_MAP: Record<string, keyof AppConfig> = {
   google_places: "googlePlacesApiKey",
@@ -35,26 +34,23 @@ const REVERSE_MAP: Record<keyof AppConfig, string> = {
   opencodeGoApiKey: "opencode_go",
 };
 
+const MAX_VALUE_LENGTH = 2048;
+
 export async function GET(req: NextRequest) {
-  const token = extractToken(req);
-  if (!token) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
+  const auth = await requireUser(req);
+  if ("error" in auth) return auth.error;
 
+  const limited = enforceRateLimit(req, "user-keys", { perIp: 30, perUser: 60 });
+  if (limited) return limited;
+
+  const token = extractToken(req)!;
   try {
-    // Verify the JWT and get user
-    const { data: { user }, error: authError } = await getSupabaseAdmin().auth.getUser(token);
-    if (authError || !user) {
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-    }
-
-    // Query with the user's JWT; RLS restricts rows to this user
-    const { data: keys, error } = await getSupabaseForUser(token)
-      .from("api_keys")
-      .select("key_name, key_value");
+    const { data: keys, error } = await getSupabaseForUser(token).from("api_keys").select(
+      "key_name, key_value"
+    );
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ error: "could not load keys" }, { status: 500 });
     }
 
     // Convert to AppConfig format
@@ -67,50 +63,84 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json({ config });
-  } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 });
+  } catch {
+    return NextResponse.json({ error: "could not load keys" }, { status: 500 });
   }
 }
 
 export async function POST(req: NextRequest) {
-  const token = extractToken(req);
-  if (!token) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
+  const auth = await requireUser(req);
+  if ("error" in auth) return auth.error;
 
-  let body: Partial<AppConfig>;
+  const limited = enforceRateLimit(req, "user-keys", { perIp: 30, perUser: 60 });
+  if (limited) return limited;
+
+  let body: Record<string, unknown>;
   try {
-    body = (await req.json()) as Partial<AppConfig>;
+    body = (await req.json()) as Record<string, unknown>;
   } catch {
     return NextResponse.json({ error: "invalid json" }, { status: 400 });
   }
 
+  const token = extractToken(req)!;
   try {
-    // Verify the JWT and get user
-    const { data: { user }, error: authError } = await getSupabaseAdmin().auth.getUser(token);
-    if (authError || !user) {
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-    }
+    const client = getSupabaseForUser(token);
 
-    // Upsert each key with the user's JWT; RLS with-check requires auth.uid() = user_id
-    for (const [fieldName, value] of Object.entries(body)) {
+    for (const [fieldName, rawValue] of Object.entries(body)) {
       const keyName = REVERSE_MAP[fieldName as keyof AppConfig];
       if (!keyName) continue;
 
-      const { error } = await getSupabaseForUser(token)
-        .from("api_keys")
-        .upsert(
-          { user_id: user.id, key_name: keyName, key_value: value ?? "" },
+      if (typeof rawValue !== "string") {
+        return NextResponse.json(
+          { error: `invalid value for ${fieldName}: must be a string` },
+          { status: 400 }
+        );
+      }
+      const value = rawValue.trim();
+      if (value.length > MAX_VALUE_LENGTH) {
+        return NextResponse.json(
+          { error: `value for ${fieldName} is too long (max ${MAX_VALUE_LENGTH})` },
+          { status: 400 }
+        );
+      }
+
+      // The overpass endpoint is fetched server-side on the user's behalf:
+      // reject anything that could target internal/private infrastructure
+      // (https only, no credentials, no private IP literals). The hostname is
+      // re-verified against private ranges at request time (SSRF guard).
+      if (keyName === "overpass_endpoint" && value !== "") {
+        const check = validateEndpoint(value);
+        if (!check.ok) {
+          return NextResponse.json(
+            { error: `invalid overpass endpoint: ${check.reason}` },
+            { status: 400 }
+          );
+        }
+      }
+
+      if (value === "") {
+        // Empty value = remove the key.
+        const { error } = await client
+          .from("api_keys")
+          .delete()
+          .eq("user_id", auth.user.id)
+          .eq("key_name", keyName);
+        if (error) {
+          return NextResponse.json({ error: "could not clear key" }, { status: 500 });
+        }
+      } else {
+        const { error } = await client.from("api_keys").upsert(
+          { user_id: auth.user.id, key_name: keyName, key_value: value },
           { onConflict: "user_id,key_name" }
         );
-
-      if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        if (error) {
+          return NextResponse.json({ error: "could not save key" }, { status: 500 });
+        }
       }
     }
 
     return NextResponse.json({ ok: true });
-  } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 });
+  } catch {
+    return NextResponse.json({ error: "could not save keys" }, { status: 500 });
   }
 }

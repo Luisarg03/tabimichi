@@ -4,6 +4,7 @@ import { googlePlaceDetails, googlePhotoBytes } from "@/lib/places/google";
 import { getConfig } from "@/lib/settings";
 import { photoCachePath, readCachedPhoto, writeCachedPhoto, sha1Hex } from "@/lib/photos";
 import { logEntry } from "@/lib/logger";
+import { enforceRateLimit } from "@/lib/security";
 
 export const runtime = "nodejs";
 
@@ -25,6 +26,10 @@ export async function GET(req: NextRequest) {
     .map((s) => s.trim())
     .filter(Boolean)
     .slice(0, MAX_ENRICH);
+
+  // Enrichment downloads photos with the operator's Google key: bound abuse.
+  const limited = enforceRateLimit(req, "photos", { perIp: 30 });
+  if (limited) return limited;
 
   const key = getConfig().googlePlacesApiKey;
   const photos: Record<string, string[]> = {};
