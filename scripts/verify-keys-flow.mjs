@@ -6,11 +6,11 @@
  *   - the request completes (fast path via Google/Geoapify, not 30s Overpass)
  *   - no console errors (incl. the react-leaflet map crash)
  *
- * Usage: REPRO_EMAIL=… REPRO_PASS=… node scripts/verify-keys-flow.mjs
+ * Usage: REPRO_EMAIL=… REPRO_PASS=… node scripts/verify-keys-flow.mjs [baseUrl]
  */
 import { chromium } from "playwright";
 
-const BASE = "http://localhost:3000";
+const BASE = process.argv[2] ?? "http://localhost:3000";
 const EMAIL = process.env.REPRO_EMAIL ?? "repro-1787083799@tabimichi.test";
 const PASSWORD = process.env.REPRO_PASS ?? "ReproPass1787083799!";
 const QUERY = process.env.QUERY ?? "Nara, Japón";
