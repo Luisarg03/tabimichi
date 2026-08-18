@@ -64,6 +64,21 @@ vercel --prod                    # deploy to production
 
 **Security:** API keys live on Vercel's servers only — they never reach the browser. Preview deploys are created automatically for every PR.
 
+### 🧪 Sandbox environment
+
+Two Supabase environments exist: **sandbox** (Vercel Preview + sandbox Supabase project `rjsrzuqyoyxuonvcrpec`) and **production** (Vercel Production + prod Supabase project `yfwslmehyaftomzmkafs`). Preview deployments use Preview-scoped env vars pointing at the sandbox project.
+
+Migrations are applied per environment — sandbox first, production after validation:
+
+```bash
+supabase db push --project-ref rjsrzuqyoyxuonvcrpec   # sandbox first
+supabase db push --project-ref yfwslmehyaftomzmkafs   # production after validation
+```
+
+(`supabase db push` without `--project-ref` targets the linked project.)
+
+Keys are stored per-user in Supabase `api_keys` (RLS); anonymous users fall back to server env vars.
+
 ### 🔐 Multi-user API keys (Supabase)
 
 Each user manages their own API keys — no shared keys, no admin burden.
@@ -300,7 +315,7 @@ GET /api/logs?tail=N          # Recent entries
 GET /api/logs?trace=tr_...    # Full request journey
 ```
 
-**Testability hooks:** `TABI_DATA_DIR` env / `setDataDir()` / `setConfigPath()` / `setPhotoDir()` / `clearWeatherCache()` — tests run in temp dirs and never touch real data or API keys.
+**Testability hooks:** `TABI_DATA_DIR` env / `setDataDir()` / `setPhotoDir()` / `clearWeatherCache()` — tests run in temp dirs and never touch real data or API keys.
 
 ---
 
