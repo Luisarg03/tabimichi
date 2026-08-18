@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { applyFeedback, getProfile, placeById } from "@/lib/db";
+import { applyFeedback, getProfile } from "@/lib/db";
+import { placeById } from "@/lib/cache";
 import { getSupabaseForUser } from "@/lib/supabase/server";
 import { extractToken, verifyUser } from "@/lib/supabase/auth";
 import { enforceRateLimit } from "@/lib/security";
@@ -26,7 +27,7 @@ async function cloudApplyFeedback(
 ): Promise<Record<string, number>> {
   const client = getSupabaseForUser(token);
   const resolvedTags =
-    tags && tags.length > 0 ? tags : (placeById(placeId)?.tags ?? []);
+    tags && tags.length > 0 ? tags : ((await placeById(placeId))?.tags ?? []);
 
   const { error: insErr } = await client.from("feedback").insert({
     user_id: userId,
@@ -106,7 +107,7 @@ export async function POST(req: NextRequest) {
       const profile = await cloudApplyFeedback(token, user.id, placeId, liked, tags);
       return NextResponse.json({ profile, cloud: true });
     }
-    const profile = applyFeedback(placeId, liked, tags);
+    const profile = await applyFeedback(placeId, liked, tags);
     return NextResponse.json({ profile, cloud: false });
   } catch {
     return NextResponse.json({ error: "operation_failed" }, { status: 500 });

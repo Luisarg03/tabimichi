@@ -140,7 +140,10 @@ update public.profiles set role = 'admin' where email = 'tu@email.com';
 pnpm test          # Unit + integration (Vitest)
 pnpm test:watch    # TDD mode
 pnpm run test:e2e  # E2E smoke tests (needs live server)
+pnpm run test:e2e:browser  # Browser E2E: register → confirm → login → save keys → discover
 ```
+
+> The browser E2E (`scripts/test-e2e.mjs`, Playwright) needs `playwright` available to Node (it's imported from `scripts/node_modules` when installed there: `npm install --no-save --no-package-lock --prefix scripts playwright`) and a live stack: `next dev` + Supabase Local + inbucket (`supabase start`). It registers a throwaway user (`test-<ts>@tabimichi.test`), handles email confirmation via inbucket when confirmations are on, saves per-user API keys and verifies they persist.
 
 > Two smoke checks are skipped (with a `⚠` note) when `GOOGLE_PLACES_API_KEY` is absent: simulated opening-hours evaluation and interest-keyword discovery — both depend on Google Text Search data. Everything else runs against the free fallback stack (Overpass + local SQLite cache).
 
