@@ -48,6 +48,17 @@ await sleep(2500);
 const loggedIn = await page.getByText(/Sesi[oó]n activa/i).isVisible().catch(() => false);
 console.log(`login: ${loggedIn ? "OK" : "FAIL"} (${EMAIL})`);
 if (!loggedIn) {
+  // self-diagnose: dump any visible error message + the form's surroundings
+  const pageText = (await page.locator("body").innerText().catch(() => "")) || "";
+  const errorLines = pageText
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => /error|invalid|confirm|verif|no existe|not found|credencial|contrase|correo|email/i.test(l))
+    .slice(0, 6);
+  console.log("--- diagnóstico ---");
+  console.log(errorLines.length ? errorLines.join("\n") : "(sin mensaje de error visible)");
+  await page.screenshot({ path: "/tmp/tabi-login-fail.png" });
+  console.log("screenshot: /tmp/tabi-login-fail.png");
   await browser.close();
   process.exit(1);
 }
