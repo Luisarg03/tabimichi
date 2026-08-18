@@ -25,8 +25,8 @@ export function proxy(request: NextRequest) {
     // map tiles (OSM/Carto/Esri) + photos proxied from /api/photo (self)
     "img-src 'self' data: blob: https:",
     "font-src 'self' data:",
-    // Supabase REST + realtime (wss) are the only cross-origin fetches
-    "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+    // Supabase REST + realtime (wss) + Vercel Speed Insights beacon
+    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.vercel-insights.com",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
