@@ -1,5 +1,6 @@
 import type { Place } from "../types";
 import type { ExperienceType } from "./taxonomy";
+import { assertResolvedPublic } from "../security";
 
 interface OverpassElement {
   type: "node" | "way" | "relation";
@@ -27,11 +28,15 @@ const TOTAL_BUDGET_MS = 30000;
 /**
  * Optional custom Overpass instance (e.g. self-hosted osm3s in Docker).
  * When set, it is tried first; public mirrors remain as fallback.
+ *
+ * The endpoint travels as an explicit per-request option (never module state),
+ * so concurrent requests from different users cannot leak configuration into
+ * each other. Endpoints supplied by end users are SSRF-checked before use
+ * (`trusted: true` is reserved for operator-controlled env config).
  */
-let customEndpoint: string | null = null;
-
-export function setOverpassEndpoint(endpoint: string): void {
-  customEndpoint = endpoint.trim() || null;
+export interface OverpassOptions {
+  endpoint?: string;
+  trusted?: boolean;
 }
 
 const TIMEOUT_MS = 40000;
@@ -115,7 +120,8 @@ export async function overpassSearch(
   types: ExperienceType[],
   lat: number,
   lng: number,
-  radiusM: number
+  radiusM: number,
+  opts: OverpassOptions = {}
 ): Promise<Place[]> {
   const valid = types.filter((t) => t.overpass.length > 0);
   if (valid.length === 0) return [];
@@ -124,7 +130,23 @@ export async function overpassSearch(
   let lastErr: unknown = null;
   const startedAt = Date.now();
 
-  const endpoints = customEndpoint ? [customEndpoint, ...MIRRORS] : MIRRORS;
+  let endpoints: string[] = MIRRORS;
+  if (opts.endpoint) {
+    if (opts.trusted) {
+      // Operator-controlled (env): the operator is responsible for it.
+      endpoints = [opts.endpoint, ...MIRRORS];
+    } else {
+      // User-supplied: reject private/reserved targets (SSRF guard).
+      // On any guard failure we skip the custom endpoint and fall back to the
+      // public mirrors instead of failing the whole discovery.
+      const check = await assertResolvedPublic(opts.endpoint);
+      if (check.ok) {
+        endpoints = [opts.endpoint, ...MIRRORS];
+      } else {
+        console.warn(`[tabi] overpass endpoint rejected (${check.reason}), using mirrors`);
+      }
+    }
+  }
 
   for (const endpoint of endpoints) {
     if (Date.now() - startedAt > TOTAL_BUDGET_MS) break;

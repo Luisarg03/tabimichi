@@ -84,7 +84,7 @@ Keys are stored per-user in Supabase `api_keys` (RLS); anonymous users fall back
 Each user manages their own API keys — no shared keys, no admin burden.
 
 1. **Create a free Supabase project:** [supabase.com](https://supabase.com) → New Project
-2. **Run the migration:** paste `supabase/migrations/001_api_keys.sql` in SQL Editor
+2. **Run the migrations:** paste `supabase/migrations/001_api_keys.sql` **and** `supabase/migrations/002_profiles_feedback.sql` in SQL Editor (in that order).
 3. **Add env vars to Vercel:**
 
 | Variable | Where to find it |
@@ -96,6 +96,37 @@ Each user manages their own API keys — no shared keys, no admin burden.
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Settings → API → service_role (secret) |
 
 4. **Done.** Users sign up in the app → manage their own keys → keys stored per-user with RLS isolation.
+
+### 👤 User administration (self-service)
+
+Every signed-in user manages their own account from **⚙️ Ajustes**:
+
+- **Profile** — display name (stored in the `profiles` row)
+- **Change email** — confirmation link sent to the new address
+- **Change password** — also reachable via "¿Olvidaste tu contraseña?" on the login form (a recovery link is emailed and lands back on `/settings` to set the new password)
+- **Delete account** — permanently removes the account plus all per-user rows (`api_keys`, `profiles`, `feedback`, `profile_weights`) via FK cascade
+
+`profiles` is created automatically for every new auth user (trigger on `auth.users`), with a backfill for pre-existing users. Feedback 👍/👎 and "Tus gustos" weights are stored **per user** in Supabase (RLS); anonymous users fall back to the local SQLite store as before.
+
+### 🛠️ Admin console
+
+A built-in admin panel at **`/admin`** (linked from Ajustes when your role is `admin`):
+
+- List users (email, role, registration date, last sign-in, status) with email search + pagination
+- Promote / demote **admin** role
+- **Suspend / reactivate** a user (Supabase `ban_duration`)
+- **Delete** any user (hard delete, cascades to their data)
+
+How to make yourself admin:
+
+```sql
+-- in Supabase SQL Editor (or `supabase db push` a migration)
+update public.profiles set role = 'admin' where email = 'tu@email.com';
+```
+
+Role enforcement is server-side: every `/api/admin/*` route verifies the caller's JWT **and** their `profiles.role` with the service-role client — a client-supplied role claim is never trusted.
+
+> **Password-recovery links:** the `redirectTo` URL (`{origin}/settings`) must be in your Supabase project's allow-list (Dashboard → Authentication → URL Configuration → Redirect URLs). Local dev uses `supabase/config.toml` → `site_url` / `additional_redirect_urls`. Email confirmation/recovery emails are sent by Supabase — configure an SMTP provider (Dashboard → Authentication → SMTP) once you go to production for reliable delivery.
 
 ### 🔑 API keys (per-user)
 
@@ -261,25 +292,33 @@ src/
 │   │   ├── recommend/      # Discovery + scoring pipeline
 │   │   ├── narrate/        # LLM narrative (async phase 2)
 │   │   ├── photos/         # Photo enrichment (async)
-│   │   ├── feedback/       # 👍/👎 → profile update
-│   │   ├── profile/        # Tus gustos (manual weights)
+│   │   ├── feedback/       # 👍/👎 → profile update (per-user in Supabase)
+│   │   ├── profile/        # Tus gustos (manual weights, per-user)
+│   │   ├── user-keys/      # Per-user API keys (RLS)
+│   │   ├── me/             # Current user + profile (name, role)
+│   │   ├── account/delete/ # Self-service account deletion
+│   │   ├── admin/users/    # Admin console API (list, roles, ban, delete)
 │   │   ├── geocode/        # Location search
-│   │   ├── settings/       # API key management
 │   │   └── logs/           # Request tracing
 │   ├── page.tsx            # Main UI (map + cards)
-│   └── settings/page.tsx   # Settings form
+│   ├── settings/page.tsx   # Account + API key management
+│   └── admin/page.tsx      # Admin console (roles, suspend, delete)
 ├── components/
 │   ├── MapView.tsx         # Leaflet map with markers
 │   ├── DayPanel.tsx        # Search + filters panel
 │   ├── RecommendationCard.tsx  # Place card with gallery
+│   ├── AuthForm.tsx        # Login / register / password recovery
+│   ├── AccountPanel.tsx    # Display name, email, password, delete account
 │   ├── WeatherCard.tsx     # Weather display
 │   └── SettingsForm.tsx    # API key form
 └── lib/
+    ├── supabase/           # Browser / admin / per-user clients + auth helpers
+    ├── auth-context.tsx    # Session + account management (client)
     ├── recommend.ts        # End-to-end pipeline
     ├── scoring.ts          # Rule-based scoring engine
     ├── weather.ts          # Open-Meteo client
     ├── geo.ts              # Haversine + travel time
-    ├── db.ts               # node:sqlite cache + profile
+    ├── db.ts               # node:sqlite cache + anonymous profile
     ├── i18n.tsx            # ES/EN dictionaries
     ├── types.ts            # Shared TypeScript types
     ├── llm/                # Provider registry + narrate()
@@ -289,7 +328,7 @@ src/
     ├── photos.ts           # Photo proxy + disk cache
     ├── open-hours.ts       # Opening hours evaluation
     ├── jst.ts              # JST timezone helpers
-    └── settings.ts         # Local key storage
+    └── settings.ts         # Local key storage (env fallback)
 ```
 
 ---

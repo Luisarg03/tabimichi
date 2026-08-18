@@ -5,7 +5,7 @@ import { haversineKm } from "../geo";
 import { resolveTypes } from "./taxonomy";
 import { googleSearchAll } from "./google";
 import { geoapifySearch } from "./geoapify";
-import { overpassSearch, setOverpassEndpoint } from "./overpass";
+import { overpassSearch } from "./overpass";
 
 export interface DiscoverOptions {
   lat: number;
@@ -17,6 +17,9 @@ export interface DiscoverOptions {
   keyword?: string;
   /** per-user API keys (avoids reading from shared process.env) */
   config?: AppConfig;
+  /** true when `config` came from operator env vars (endpoints trusted);
+   *  false when it holds end-user values (endpoints get SSRF-checked) */
+  trustedEndpoint?: boolean;
 }
 
 export type SourceNote = "google" | "geoapify" | "overpass" | "cache" | "none";
@@ -53,7 +56,7 @@ export async function discover(
   // how many candidates came from the keyword query itself (0 = keyword miss)
   const gstats: { keywordResults?: number } = {};
 
-  if (config.overpassEndpoint) setOverpassEndpoint(config.overpassEndpoint);
+  const overpassEndpoint = config.overpassEndpoint?.trim() || undefined;
 
   // fast path: reuse a fresh local cache covering every requested type.
   // SKIPPED when an interest keyword is set — the cache is keyword-agnostic
@@ -99,7 +102,10 @@ export async function discover(
   if (places.length === 0) {
     try {
       // single combined query (custom endpoint first, then mirror failover)
-      places = await overpassSearch(experienceTypes, lat, lng, radiusM);
+      places = await overpassSearch(experienceTypes, lat, lng, radiusM, {
+        endpoint: overpassEndpoint,
+        trusted: opts.trustedEndpoint === true,
+      });
       if (places.length > 0) source = "overpass";
     } catch {
       // fall through to cache

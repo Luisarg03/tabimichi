@@ -112,6 +112,30 @@ export default function SettingsForm() {
     }
   }
 
+  async function clearKey(field: (typeof KEY_FIELDS)[number]["key"]) {
+    setSaving(true);
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch("/api/user-keys", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ [field]: "" }),
+      });
+      if (res.ok) {
+        setStatus((prev) => (prev ? { ...prev, [field]: false } : prev));
+        setValues((v) => ({ ...v, [field]: "" }));
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2500);
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="mx-auto max-w-xl space-y-5">
@@ -130,14 +154,25 @@ export default function SettingsForm() {
         <div key={f.key} className="rounded-xl border border-slate-200 bg-white p-4">
           <div className="flex items-center justify-between gap-2">
             <label className="text-sm font-medium text-slate-800">{t(f.labelKey)}</label>
-            <span
-              className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                status?.[f.key]
-                  ? "bg-emerald-100 text-emerald-700"
-                  : "bg-slate-100 text-slate-500"
-              }`}
-            >
-              {status?.[f.key] ? t("settings.connected") : t("settings.notConnected")}
+            <span className="flex items-center gap-2">
+              {status?.[f.key] && (
+                <button
+                  onClick={() => clearKey(f.key)}
+                  disabled={saving}
+                  className="rounded-full border border-slate-300 px-2 py-0.5 text-xs font-medium text-slate-500 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  {t("settings.remove")}
+                </button>
+              )}
+              <span
+                className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                  status?.[f.key]
+                    ? "bg-emerald-100 text-emerald-700"
+                    : "bg-slate-100 text-slate-500"
+                }`}
+              >
+                {status?.[f.key] ? t("settings.connected") : t("settings.notConnected")}
+              </span>
             </span>
           </div>
           {f.helpKey && <p className="mt-1 text-xs text-slate-500">{t(f.helpKey)}</p>}
@@ -146,7 +181,7 @@ export default function SettingsForm() {
             value={values[f.key] ?? ""}
             onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
             placeholder={status?.[f.key] ? "•••••••• (ya configurada)" : f.placeholder}
-            className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+            className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
           />
         </div>
       ))}
@@ -167,14 +202,14 @@ export default function SettingsForm() {
           value={endpoint}
           onChange={(e) => setEndpoint(e.target.value)}
           placeholder="http://localhost:8080/api/interpreter"
-          className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+          className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
         />
       </div>
 
       <button
         onClick={save}
         disabled={saving}
-        className="w-full rounded-xl bg-sky-600 px-4 py-3 font-semibold text-white hover:bg-sky-500 disabled:opacity-50"
+        className="w-full rounded-xl bg-brand-600 px-4 py-3.5 font-semibold text-white hover:bg-brand-500 active:bg-brand-700 disabled:opacity-50 min-h-[48px]"
       >
         {saved ? t("settings.saved") : t("settings.save")}
       </button>

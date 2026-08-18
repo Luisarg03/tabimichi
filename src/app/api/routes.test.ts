@@ -16,6 +16,18 @@ import { clearWeatherCache } from "@/lib/weather";
 import { setPhotoDir } from "@/lib/photos";
 import { mockFetch, jsonResponse, imageResponse, urlContains, isolatedStore } from "@/test-utils/helpers";
 
+// /api/logs is admin-only since the security audit; simulate an admin caller
+// so the route's log-reading behavior stays covered. Other auth helpers keep
+// their real implementations (extractToken/verifyUser drive the anonymous
+// paths used by the remaining route tests).
+vi.mock("@/lib/supabase/auth", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/supabase/auth")>();
+  return {
+    ...actual,
+    requireAdmin: vi.fn(async () => ({ user: { id: "admin-1", email: "admin@test" } })),
+  };
+});
+
 const KEY = "AIza-test";
 
 function post(url: string, body: unknown): NextRequest {
@@ -211,7 +223,7 @@ describe("/api/feedback", () => {
     const body = await res.json();
     expect(body.profile.onsen).toBe(1);
 
-    const get = await feedbackGET();
+    const get = await feedbackGET(new NextRequest("http://localhost/api/feedback"));
     const got = await get.json();
     expect(got.profile.onsen).toBe(1);
   });
@@ -350,7 +362,7 @@ describe("/api/photos", () => {
 
 describe("/api/profile", () => {
   it("reads the profile", async () => {
-    const res = await profileGET();
+    const res = await profileGET(new NextRequest("http://localhost/api/profile"));
     const body = await res.json();
     expect(body.profile).toEqual({});
   });
