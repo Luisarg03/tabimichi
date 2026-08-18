@@ -64,6 +64,8 @@ vercel --prod                    # deploy to production
 
 **Security:** API keys live on Vercel's servers only — they never reach the browser. Preview deploys are created automatically for every PR.
 
+**Env var rule:** only `NEXT_PUBLIC_*` values are compiled into the client bundle. Keep every real secret (`GOOGLE_PLACES_API_KEY`, `GEOAPIFY_API_KEY`, `OPENCODE_API_KEY`, `OPENCODE_GO_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `OVERPASS_ENDPOINT`…) without the `NEXT_PUBLIC_` prefix so it stays server-side. The only `NEXT_PUBLIC_*` vars in the project are the Supabase URL + anon key, which are public by design (RLS enforces access).
+
 ### 🧪 Sandbox environment
 
 Two Supabase environments exist: **sandbox** (Vercel Preview + sandbox Supabase project `rjsrzuqyoyxuonvcrpec`) and **production** (Vercel Production + prod Supabase project `yfwslmehyaftomzmkafs`). Preview deployments use Preview-scoped env vars pointing at the sandbox project.
