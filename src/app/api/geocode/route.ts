@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { logEntry } from "@/lib/logger";
+import { enforceRateLimit } from "@/lib/security";
 
 export const runtime = "nodejs";
 
@@ -51,6 +52,10 @@ export function geocodeVariants(q: string): string[] {
 export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams.get("q")?.trim();
   if (!q) return NextResponse.json({ error: "q required" }, { status: 400 });
+
+  // Free external service + per-request logging: bound anonymous abuse.
+  const limited = enforceRateLimit(req, "geocode", { perIp: 30 });
+  if (limited) return limited;
 
   const startedAt = performance.now();
   const variants = geocodeVariants(q);
