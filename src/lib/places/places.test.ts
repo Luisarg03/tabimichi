@@ -498,7 +498,7 @@ describe("discover — merged multi-source chain", () => {
     expect(interpreterCalls).toHaveLength(0); // and never even started
   });
 
-  it("drops an unrated OSM duplicate that sits next to a rated google place of the same type", async () => {
+  it("drops a real OSM duplicate (same name) next to a rated google place", async () => {
     mockFetch([
       {
         match: urlContains("googleapis.com"),
@@ -506,7 +506,6 @@ describe("discover — merged multi-source chain", () => {
           jsonResponse({
             status: "OK",
             results: [
-              // rated park at the anchor point
               { place_id: "g1", name: "Koen Park", geometry: { location: { lat: 36.65, lng: 138.19 } }, rating: 4.5 },
             ],
           }),
@@ -516,8 +515,7 @@ describe("discover — merged multi-source chain", () => {
         response: () =>
           jsonResponse({
             elements: [
-              // same park ~45m away in OSM, unrated, Japanese name
-              { type: "node", id: 77, lat: 36.6504, lon: 138.1904, tags: { leisure: "park", name: "公園" } },
+              { type: "node", id: 77, lat: 36.6502, lon: 138.1902, tags: { leisure: "park", name: "koen park" } },
             ],
           }),
       },
@@ -525,6 +523,61 @@ describe("discover — merged multi-source chain", () => {
     const { places, sources } = await discover({ lat: 36.65, lng: 138.19, radiusKm: 5, types: ["park"] });
     expect(places.map((p) => p.id)).toEqual(["g_g1"]);
     expect(sources).toEqual(["google"]);
+  });
+
+  it("drops a nameless OSM node (fallback name) beside the rated entry", async () => {
+    mockFetch([
+      {
+        match: urlContains("googleapis.com"),
+        response: () =>
+          jsonResponse({
+            status: "OK",
+            results: [
+              { place_id: "g1", name: "Koen Park", geometry: { location: { lat: 36.65, lng: 138.19 } }, rating: 4.5 },
+            ],
+          }),
+      },
+      {
+        match: urlContains("interpreter"),
+        response: () =>
+          jsonResponse({
+            elements: [
+              { type: "node", id: 77, lat: 36.6502, lon: 138.1902, tags: { leisure: "park" } },
+            ],
+          }),
+      },
+    ]);
+    const { places, sources } = await discover({ lat: 36.65, lng: 138.19, radiusKm: 5, types: ["park"] });
+    expect(places.map((p) => p.id)).toEqual(["g_g1"]);
+    expect(sources).toEqual(["google"]);
+  });
+
+  it("keeps a differently-named place of the same type next to a rated one (dense cluster)", async () => {
+    mockFetch([
+      {
+        match: urlContains("googleapis.com"),
+        response: () =>
+          jsonResponse({
+            status: "OK",
+            results: [
+              { place_id: "g1", name: "Ramen Ichiban", geometry: { location: { lat: 36.65, lng: 138.19 } }, rating: 4.3 },
+            ],
+          }),
+      },
+      {
+        match: urlContains("interpreter"),
+        response: () =>
+          jsonResponse({
+            elements: [
+              // ~28 m away but a DIFFERENT restaurant — must survive the merge
+              { type: "node", id: 88, lat: 36.6502, lon: 138.1902, tags: { amenity: "restaurant", name: "ラーメン山" } },
+            ],
+          }),
+      },
+    ]);
+    const { places, sources } = await discover({ lat: 36.65, lng: 138.19, radiusKm: 5, types: ["food"] });
+    expect(places.map((p) => p.id).sort()).toEqual(["g_g1", "o_node_88"]);
+    expect(sources).toEqual(["google", "overpass"]);
   });
 
   it("keeps a different-type place next to a rated one (park beside a restaurant)", async () => {

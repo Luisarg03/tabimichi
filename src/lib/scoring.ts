@@ -114,6 +114,12 @@ export function isHotelName(name: string): boolean {
   return HOTEL_RE.test(name);
 }
 
+/** One-way travel cap (minutes) per transport mode — the day budget must not
+ *  be spendable entirely on travel: walking means "around the point" (≤45 min
+ *  on foot ≈ 3.4 km), transit ≤90, car ≤120. Also never more than half the
+ *  day budget (a lunch outing has no 90-minute trips). */
+const MODE_TRAVEL_CAP_MIN: Record<TransportMode, number> = { walking: 45, transit: 90, car: 120 };
+
 /**
  * Rule-based "base fit" score (0-100) + human-readable reasons.
  * The LLM (next phase) will narrate, not score.
@@ -122,17 +128,19 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
   const { base, budgetMin, weather } = ctx;
   const out: ScoredPlace[] = [];
   const kwTokens = ctx.keywordTerms ?? (ctx.keyword ? keywordTokens(ctx.keyword) : []);
+  const travelCap = Math.min(budgetMin * 0.5, MODE_TRAVEL_CAP_MIN[ctx.mode ?? "transit"]);
 
   for (const p of places) {
     const distanceKm = haversineKm(base, p);
     const t = travelMin(distanceKm, ctx.mode);
 
-    // hard filters: beyond the discovery radius, or too far for the budget (25% slack)
+    // hard filters: beyond the discovery radius, or too far to reach on the
+    // day's budget + transport mode (walking is capped tight on purpose)
     if (ctx.maxDistKm !== undefined && distanceKm > ctx.maxDistKm) {
       ctx.stats && ctx.stats.tooFar++;
       continue;
     }
-    if (t > budgetMin * 1.25) {
+    if (t > travelCap) {
       ctx.stats && ctx.stats.tooFar++;
       continue;
     }

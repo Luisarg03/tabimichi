@@ -43,16 +43,28 @@ function dedupe(places: Place[]): Place[] {
 }
 
 /**
- * Second dedupe pass for near-duplicates with *different* names: OpenStreetMap
- * usually has the same place as Google a few meters away with a localized name
- * ("亀の湯" vs "Kame no Yu"), which the name+coord dedupe misses. A candidate is
- * dropped only when a higher-priority place within ~60 m shares a type tag AND
- * has a rating the candidate lacks — a rated place is the richer record. Two
- * rated places nearby (a mall with several restaurants) are never collapsed,
- * and an unrated park next to a rated restaurant (different tags) survives.
+ * Second dedupe pass for near-duplicates with *different* spellings: OpenStreetMap
+ * usually has the same place as Google a few meters away ("Ramen Ichiban" on both
+ * sides, or a nameless OSM node next to Google's rated entry). A candidate is
+ * dropped ONLY when it is really the same POI:
+ *   - same normalized name within ~40 m (same place, both sources), or
+ *   - a nameless OSM element (fallback name) beside a rated place of the same
+ *     type (OSM simply has no name for that POI).
+ * Deliberately NOT dropped: two differently-named places near each other — in a
+ * dense street that's two real local businesses, and dropping them silently
+ * removed exactly the nearby places the user wants to see.
  */
-const PROX_DUP_KM = 0.06;
+const PROX_DUP_KM = 0.04;
 const SOURCE_PRIORITY: Record<string, number> = { google: 0, geoapify: 1, overpass: 2 };
+
+function normName(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9\u3040-\u30ff\u4e00-\u9faf]+/g, "");
+}
+
+/** Overpass fallback name pattern: "Restaurante (node 123)", "Parque (way 9)". */
+function isFallbackName(name: string): boolean {
+  return /^.+\([a-z]+ \d+\)$/.test(name.trim());
+}
 
 function proximityDedupe(places: Place[]): Place[] {
   if (places.length < 2) return places;
@@ -64,7 +76,9 @@ function proximityDedupe(places: Place[]): Place[] {
     const isDup = kept.some((k) => {
       if (haversineKm(k, p) > PROX_DUP_KM) return false;
       if (!p.tags.some((t) => k.tags.includes(t))) return false; // different type = different POI
-      return p.rating === undefined && k.rating !== undefined;
+      if (normName(p.name) === normName(k.name)) return true; // same place, same name
+      // nameless OSM element beside a rated place of the same type: same POI
+      return isFallbackName(p.name) && p.rating === undefined && k.rating !== undefined;
     });
     if (!isDup) kept.push(p);
   }

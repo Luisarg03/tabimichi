@@ -49,6 +49,22 @@ describe("scorePlaces — hard filters", () => {
     expect(out).toHaveLength(0);
   });
 
+  it("drops far places in walking mode that transit would accept", () => {
+    const far = place({ lat: 36.69, lng: 138.23 }); // ~5.5 km
+    // walking: 5.5 km ≈ 73 min on foot > 45 min cap → dropped ("around me" only)
+    expect(scorePlaces([far], ctx({ mode: "walking", budgetMin: 300 }))).toHaveLength(0);
+    // transit: 5.5 km ≈ 20 min < 90 min cap → accepted
+    expect(scorePlaces([far], ctx({ mode: "transit", budgetMin: 300 }))).toHaveLength(1);
+  });
+
+  it("caps travel at half the day budget regardless of mode", () => {
+    // lunch = 90 min budget → cap = min(45, mode cap) = 45 min even for transit
+    const mid = place({ lat: 36.69, lng: 138.23 }); // ~5.5 km ≈ 20 min transit
+    const far = place({ lat: 36.78, lng: 138.42 }); // ~25 km ≈ 61 min transit
+    const out = scorePlaces([mid, far], ctx({ mode: "transit", budgetMin: 90 }));
+    expect(out.map((p) => p.id)).toEqual([mid.id]);
+  });
+
   it("never recommends closed places", () => {
     const closed = place({ openNow: false });
     const open = place({ openNow: true });

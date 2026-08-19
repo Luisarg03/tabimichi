@@ -37,8 +37,25 @@ export const BUDGET_MIN: Record<string, number> = {
   full_day: 600,
 };
 
-/** Discovery radius (km) per TimeBudget id and transport mode. */
+/**
+ * Discovery radius (km) per TimeBudget id and transport mode.
+ * The base radii are tuned for transit; walking means "explore AROUND the
+ * point" — a 5+ km walk is not "around me" — so walking uses explicit tight
+ * radii (1.5–3.5 km ≈ 20–47 min on foot). Car extends the reach.
+ */
 export function radiusForBudget(budget: string, mode: TransportMode = "transit"): number {
+  if (mode === "walking") {
+    switch (budget) {
+      case "lunch":
+        return 1.5;
+      case "afternoon":
+        return 2.5;
+      case "full_day":
+        return 3.5;
+      default:
+        return 2;
+    }
+  }
   const base = (() => {
     switch (budget) {
       case "lunch":
@@ -51,6 +68,5 @@ export function radiusForBudget(budget: string, mode: TransportMode = "transit")
         return 8;
     }
   })();
-  const factor = mode === "walking" ? 0.4 : mode === "car" ? 2 : 1;
-  return Math.round(base * factor * 10) / 10;
+  return mode === "car" ? base * 2 : base;
 }
