@@ -142,6 +142,30 @@ describe("googleSearch", () => {
     expect(urls.some((u) => u.includes("pagetoken=tok1"))).toBe(true);
   });
 
+  it("drops fuzzy text-search results whose Google types contradict the searched type", async () => {
+    mockFetch([
+      {
+        match: urlContains("textsearch"),
+        response: () =>
+          jsonResponse({
+            status: "OK",
+            results: [
+              // a park Google returned for the food query — must be dropped
+              // (would otherwise be mis-tagged 🍜 Comida)
+              { place_id: "park1", name: "Wakasato Park", geometry: { location: { lat: 36.65, lng: 138.19 } }, types: ["establishment", "park", "point_of_interest", "tourist_attraction"] },
+              { place_id: "ramen", name: "Ramen Ichiban", geometry: { location: { lat: 36.65, lng: 138.19 } }, types: ["restaurant", "food", "point_of_interest", "establishment"] },
+            ],
+          }),
+      },
+      {
+        match: urlContains("nearbysearch"),
+        response: () => jsonResponse({ status: "OK", results: [] }),
+      },
+    ]);
+    const places = await googleSearch(KEY, resolveTypes(["food"])[0], 36.65, 138.19, 5000, "es");
+    expect(places.map((p) => p.id)).toEqual(["g_ramen"]);
+  });
+
   it("queries every mapped google type, not just the first (food → restaurant + food)", async () => {
     const urls: string[] = [];
     mockFetch([
