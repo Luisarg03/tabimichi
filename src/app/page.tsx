@@ -173,10 +173,16 @@ export default function HomePage() {
           if (preset) now = jstSimulatedDate(preset.hour).toISOString();
         }
 
-        // phase 1 (fast): rules pipeline — weather, discovery, scoring
+        // phase 1 (fast): rules pipeline — weather, discovery, scoring.
+        // Send the session JWT so the server loads THIS user's API keys
+        // (Google/Geoapify/…) instead of falling back to operator env vars.
+        const token = await getToken();
         const res = await fetch("/api/recommend", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
           body: JSON.stringify({
             lat: payload.lat,
             lng: payload.lng,
@@ -200,7 +206,10 @@ export default function HomePage() {
             .slice(0, 6)
             .map((p) => p.id)
             .join(",");
-          fetch(`/api/photos?ids=${encodeURIComponent(topIds)}${data.traceId ? `&trace=${data.traceId}` : ""}`)
+          fetch(
+            `/api/photos?ids=${encodeURIComponent(topIds)}${data.traceId ? `&trace=${data.traceId}` : ""}`,
+            token ? { headers: { Authorization: `Bearer ${token}` } } : undefined
+          )
             .then((r) => (r.ok ? r.json() : null))
             .then((d) => {
               const map = d?.photos as Record<string, string[]> | undefined;
@@ -247,7 +256,7 @@ export default function HomePage() {
         setLoading(false);
       }
     },
-    [locale, simPreset]
+    [locale, simPreset, getToken]
   );
 
   /** "Tus gustos": set one tag weight directly (optimistic, then server truth). */

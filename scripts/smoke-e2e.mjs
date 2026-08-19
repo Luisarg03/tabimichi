@@ -5,6 +5,7 @@
  * recommend (real + simulated), feedback, geocode, photos, narrate.
  */
 const BASE = process.argv[2] ?? "http://localhost:3000";
+import { seedPlaceCache } from "./seed-cache.mjs";
 
 let failures = 0;
 function check(label, ok, detail = "") {
@@ -28,8 +29,10 @@ async function post(path, body) {
 async function main() {
   console.log(`E2E smoke against ${BASE}`);
 
-  // 1. real-mode recommend (Osaka, walking)
+  // 1. real-mode recommend (Osaka, walking) — seed the shared cache first so
+  //    discovery is deterministic (placeholder-free, no live Overpass needed)
   console.log("recommend (real mode):");
+  await seedPlaceCache(34.7048, 135.4944, "smoke-seed");
   let r = await post("/api/recommend", {
     lat: 34.7048, lng: 135.4944, budget: "afternoon", types: [], mode: "walking", lang: "es",
   });
@@ -50,27 +53,38 @@ async function main() {
   check("200", sim9 && Array.isArray(sim9.places));
   check("09:00 results never closed", (sim9.places ?? []).every((p) => p.openNow !== false));
   check("03:00 results never closed", (sim3.places ?? []).every((p) => p.openNow !== false));
-  check(
-    "opening hours evaluated at simulated hour (some place open=true)",
-    [...sim9.places, ...sim3.places].some((p) => p.openNow === true)
-  );
-
-  // 2b. interest keyword — should return 200 with places; keyword hits are a
-  // quality signal, warn (not fail) when the pool has no name matches
-  console.log("recommend (keyword):");
-  const kw = (await post("/api/recommend", {
-    lat: 35.681619, lng: 139.7653303, budget: "afternoon", types: [], mode: "transit", lang: "es",
-    keyword: "pokemon",
-  })).json;
-  check("keyword request 200 + places", kw && (kw.places ?? []).length > 0);
-  const kwHits = (kw.places ?? []).filter((p) => (p.reasons ?? []).some((x) => x.key === "keywordMatch")).length;
-  // 0 name matches is NOT a failure: Google's text search matches semantically
-  // (e.g. "pokemon" → Animate/card shops, none named "pokemon"). The pool
-  // being google-sourced with the keyword is the real signal.
-  if (kwHits === 0) {
-    console.log(`⚠ kw 'pokemon': 0 literal name matches (semantic matches ok — pool ${kw.sourceNote})`);
+  // Simulated open/closed needs Google opening hours: local sources (Overpass,
+  // cache) report hours as unknown, so every openNow is null without a key.
+  if (process.env.GOOGLE_PLACES_API_KEY) {
+    check(
+      "opening hours evaluated at simulated hour (some place open=true)",
+      [...sim9.places, ...sim3.places].some((p) => p.openNow === true)
+    );
   } else {
-    console.log(`✓ ${kwHits} literal name matches in top-${kw.places.length}`);
+    console.log("   ⚠ simulated opening hours skipped — needs GOOGLE_PLACES_API_KEY (local sources report hours unknown)");
+  }
+
+  // 2b. interest keyword — keyword discovery is Google Text Search only
+  // (Overpass has no text search, and the cache is keyword-agnostic by
+  // design), so without a key there is no pool to assert on.
+  console.log("recommend (keyword):");
+  if (!process.env.GOOGLE_PLACES_API_KEY) {
+    console.log("   ⚠ keyword skipped — needs GOOGLE_PLACES_API_KEY (keyword discovery is Google Text Search only)");
+  } else {
+    const kw = (await post("/api/recommend", {
+      lat: 35.681619, lng: 139.7653303, budget: "afternoon", types: [], mode: "transit", lang: "es",
+      keyword: "pokemon",
+    })).json;
+    check("keyword request 200 + places", kw && (kw.places ?? []).length > 0);
+    const kwHits = (kw.places ?? []).filter((p) => (p.reasons ?? []).some((x) => x.key === "keywordMatch")).length;
+    // 0 name matches is NOT a failure: Google's text search matches semantically
+    // (e.g. "pokemon" → Animate/card shops, none named "pokemon"). The pool
+    // being google-sourced with the keyword is the real signal.
+    if (kwHits === 0) {
+      console.log(`⚠ kw 'pokemon': 0 literal name matches (semantic matches ok — pool ${kw.sourceNote})`);
+    } else {
+      console.log(`✓ ${kwHits} literal name matches in top-${kw.places.length}`);
+    }
   }
 
   // 3. geocode

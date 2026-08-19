@@ -1,18 +1,11 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { DatabaseSync } from "node:sqlite";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
-import {
-  upsertPlace,
-  placeById,
-  cachePlaces,
-  freshNearby,
-  applyFeedback,
-  getProfile,
-  resetProfile,
-  setProfileWeight,
-  setDataDir,
-} from "@/lib/db";
+import { applyFeedback, getProfile, resetProfile, setProfileWeight, setDataDir } from "@/lib/db";
+import { upsertPlace, setAdminForTests } from "@/lib/cache";
 import { isolatedStore } from "@/test-utils/helpers";
+import { makeSupabaseFake } from "@/test-utils/supabase-fake";
 
 const p = (id: string, over: Record<string, unknown> = {}) => ({
   id,
@@ -25,63 +18,34 @@ const p = (id: string, over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-describe("places store", () => {
-  beforeEach(() => isolatedStore());
-
-  it("round-trips upsert → placeById", () => {
-    upsertPlace(p("a1", { rating: 4.2, userRatingsTotal: 300, photoRefs: ["r1", "r2"], tags: ["onsen"] }));
-    const back = placeById("a1");
-    expect(back?.name).toBe("Place a1");
-    expect(back?.rating).toBe(4.2);
-    expect(back?.userRatingsTotal).toBe(300);
-    expect(back?.photoRefs).toEqual(["r1", "r2"]);
-    expect(back?.photoRef).toBe("r1");
-    expect(back?.tags).toEqual(["onsen"]);
-  });
-
-  it("freshNearby returns only when every type is covered", () => {
-    cachePlaces([p("x1", { tags: ["park"] }), p("x2", { tags: ["museum"] })]);
-    const all = freshNearby(36.65, 138.19, 5, ["park", "museum"], 60_000);
-    expect(all).not.toBeNull();
-    const missing = freshNearby(36.65, 138.19, 5, ["park", "onsen"], 60_000);
-    expect(missing).toBeNull();
-  });
-
-  it("freshNearby ignores stale rows", () => {
-    cachePlaces([p("old1", { tags: ["park"] })]);
-    const d = new DatabaseSync(path.join(process.env.TABI_DATA_DIR!, "tabi.db"));
-    d.prepare("UPDATE places SET fetched_at = ? WHERE id = 'old1'").run(
-      new Date(Date.now() - 24 * 3600 * 1000).toISOString()
-    );
-    d.close();
-    expect(freshNearby(36.65, 138.19, 5, ["park"], 60_000)).toBeNull();
-  });
-});
-
 describe("feedback → profile", () => {
-  beforeEach(() => isolatedStore());
+  beforeEach(() => {
+    isolatedStore();
+    const sb = makeSupabaseFake();
+    setAdminForTests(() => sb.fake as never); // placeById fallback (Supabase cache)
+  });
 
-  it("accumulates likes and dislikes per tag", () => {
-    upsertPlace(p("f1", { tags: ["onsen", "food"] }));
-    applyFeedback("f1", true, ["onsen", "food"]);
-    applyFeedback("f1", true, ["onsen"]);
+  it("accumulates likes and dislikes per tag", async () => {
+    await upsertPlace(p("f1", { tags: ["onsen", "food"] }));
+    await applyFeedback("f1", true, ["onsen", "food"]);
+    await applyFeedback("f1", true, ["onsen"]);
     const profile = getProfile();
     expect(profile.onsen).toBe(2);
     expect(profile.food).toBe(1);
   });
 
-  it("uses the tags sent from the card over cached tags", () => {
-    upsertPlace(p("f2", { tags: ["park"] }));
-    applyFeedback("f2", true, ["onsen"]); // card said onsen
+  it("uses the tags sent from the card over cached tags", async () => {
+    await upsertPlace(p("f2", { tags: ["park"] }));
+    await applyFeedback("f2", true, ["onsen"]); // card said onsen
     expect(getProfile().onsen).toBe(1);
     expect(getProfile().park).toBeUndefined();
   });
 
-  it("clamps weights to ±5", () => {
-    upsertPlace(p("f3", { tags: ["onsen"] }));
-    for (let i = 0; i < 7; i++) applyFeedback("f3", true, ["onsen"]);
+  it("clamps weights to ±5", async () => {
+    await upsertPlace(p("f3", { tags: ["onsen"] }));
+    for (let i = 0; i < 7; i++) await applyFeedback("f3", true, ["onsen"]);
     expect(getProfile().onsen).toBe(5);
-    for (let i = 0; i < 10; i++) applyFeedback("f3", false, ["onsen"]);
+    for (let i = 0; i < 10; i++) await applyFeedback("f3", false, ["onsen"]);
     expect(getProfile().onsen).toBe(-5);
   });
 
@@ -100,6 +64,17 @@ describe("feedback → profile", () => {
     setProfileWeight("onsen", 2);
     setProfileWeight("food", -1);
     expect(Object.keys(resetProfile())).toHaveLength(0);
+    expect(getProfile()).toEqual({});
+  });
+
+  it("degrades to an empty profile when the store is unavailable (serverless read-only fs)", () => {
+    // point the store under an existing FILE so mkdir fails fast
+    const dir = mkdtempSync(path.join(tmpdir(), "tabi-store-"));
+    writeFileSync(path.join(dir, "blocker"), "x");
+    setDataDir(path.join(dir, "blocker", "sub"));
+    expect(getProfile()).toEqual({});
+    expect(resetProfile()).toEqual({});
+    setProfileWeight("onsen", 3);
     expect(getProfile()).toEqual({});
   });
 });
