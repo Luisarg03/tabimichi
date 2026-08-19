@@ -17,7 +17,12 @@ import { useAuth } from "@/lib/auth-context";
  * console noise.
  */
 const blobCache = new Map<string, string>(); // "ref|id" → blob URL
-const CACHE_CAP = 64;
+// Generous cap: a search shows 30 cards + galleries of up to 6 photos each.
+// Evicted entries are dropped from the map WITHOUT revoking — revoking a blob
+// URL that is still on screen (a card the user is looking at) breaks the
+// image; un-revoked URLs are tiny metadata and the bytes are GC'd by the
+// browser once the page stops referencing them.
+const CACHE_CAP = 256;
 
 function photoUrl(photoRef: string, placeId: string): string {
   return `/api/photo?ref=${encodeURIComponent(photoRef)}&id=${encodeURIComponent(placeId)}`;
@@ -60,12 +65,10 @@ export default function PlacePhoto({
         if (cancelled) return;
         const url = URL.createObjectURL(blob);
         if (blobCache.size >= CACHE_CAP) {
+          // drop the oldest WITHOUT revoking — the URL may still be on screen
+          // (its component keeps it in `urls` state); new renders re-fetch.
           const oldest = blobCache.keys().next().value;
-          if (oldest !== undefined) {
-            const oldUrl = blobCache.get(oldest);
-            blobCache.delete(oldest);
-            if (oldUrl) URL.revokeObjectURL(oldUrl);
-          }
+          if (oldest !== undefined) blobCache.delete(oldest);
         }
         blobCache.set(cacheKey, url);
         setUrls((prev) => ({ ...prev, [cacheKey]: url }));

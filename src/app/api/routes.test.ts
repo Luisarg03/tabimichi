@@ -368,12 +368,12 @@ describe("/api/photos", () => {
 
     const first = await photosGET(new NextRequest("http://localhost/api/photos?ids=g_d1"));
     const body = await first.json();
-    expect(body.photos.g_d1).toEqual(["r1", "r2", "r3"]); // capped at MAX_PHOTOS
+    expect(body.photos.g_d1).toEqual(["r1", "r2", "r3", "r4"]); // capped at MAX_PHOTOS=6
     expect(detailsCalls).toBe(1);
 
     const second = await photosGET(new NextRequest("http://localhost/api/photos?ids=g_d1"));
     const body2 = await second.json();
-    expect(body2.photos.g_d1).toEqual(["r1", "r2", "r3"]);
+    expect(body2.photos.g_d1).toEqual(["r1", "r2", "r3", "r4"]);
     expect(detailsCalls).toBe(1); // verified → Place Details skipped
   });
 });
