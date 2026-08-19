@@ -17,9 +17,9 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 // The results list now shows 30 cards — enrich the visible top with photos
-// (BYOK cost: each id is one Place Details call + ≤3 photo downloads).
+// (BYOK cost: each id is one Place Details call + ≤6 photo downloads).
 const MAX_ENRICH = 12;
-const MAX_PHOTOS = 3;
+const MAX_PHOTOS = 6;
 
 /**
  * Async photo enrichment (BYOK): pulls extra refs from Google Place Details

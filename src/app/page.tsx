@@ -201,12 +201,15 @@ export default function HomePage() {
 
         // photo enrichment (async, non-blocking): search APIs give ~1 photo,
         // Place Details up to 8 — cards update when the refs arrive.
-        // Top-12 matches MAX_ENRICH on /api/photos (the visible slice gets photos).
+        // Enrich only photo-capable places (google-sourced): OSM/Geoapify
+        // places have no photo source, so they'd waste the enrichment slots.
         if (data.places.length > 0) {
           const topIds = data.places
+            .filter((p) => (p.photoRefs?.length ?? 0) > 0 || Boolean(p.photoRef))
             .slice(0, 12)
             .map((p) => p.id)
             .join(",");
+          if (topIds) {
           fetch(
             `/api/photos?ids=${encodeURIComponent(topIds)}${data.traceId ? `&trace=${data.traceId}` : ""}`,
             token ? { headers: { Authorization: `Bearer ${token}` } } : undefined
@@ -230,6 +233,7 @@ export default function HomePage() {
               });
             })
             .catch(() => {});
+          }
         }
 
         if (data.places.length > 0) {
