@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { emptyReasonFor, diversify, recommend } from "@/lib/recommend";
+import { emptyReasonFor, diversify, recommend, RESULT_LIMIT } from "@/lib/recommend";
 import { clearWeatherCache } from "@/lib/weather";
 import { readLogTail } from "@/lib/logger";
 import { mockFetch, jsonResponse, urlContains, isolatedStore } from "@/test-utils/helpers";
@@ -89,6 +89,7 @@ describe("recommend — pipeline outcomes", () => {
           ]),
       },
       { match: urlContains("nearbysearch"), response: () => jsonResponse({ status: "OK", results: [] }) },
+      { match: urlContains("interpreter"), response: () => jsonResponse({ elements: [] }) },
     ]);
     const r = await recommend({ lat: 36.65, lng: 138.19, budget: "afternoon", types: ["park"], mode: "walking" });
     expect(r.places.map((p) => p.id)).toEqual(["g_p1", "g_p2"]);
@@ -290,18 +291,25 @@ describe("recommend — pipeline outcomes", () => {
     expect(r.places.map((p) => p.id)).toContain("g_local1");
   });
 
-  it("drops low-relevance keyword results (rank ≥ 3) so junk can't mask a miss", async () => {
+  it("drops low-relevance keyword results (rank ≥ 10) so junk can't mask a miss", async () => {
     mockFetch([
       { match: urlContains("open-meteo.com"), response: weatherFixture },
       {
         match: urlContains("textsearch"),
         response: () =>
           googleSearch([
-            // Google's top-3: real Snoopy places, but all out of reach
+            // Google's top-10: real Snoopy places, but all out of reach
             result("far1", "SNOOPY Chaya", { geometry: { location: { lat: 36.9, lng: 138.3 } }, opening_hours: { open_now: true } }),
             result("far2", "Snoopy Museum", { geometry: { location: { lat: 36.95, lng: 138.4 } }, opening_hours: { open_now: true } }),
             result("far3", "Snoopy Town", { geometry: { location: { lat: 36.98, lng: 138.5 } }, opening_hours: { open_now: true } }),
-            // rank 4+: loose match near the user — must be dropped as noise
+            result("far4", "Snoopy Café", { geometry: { location: { lat: 37.0, lng: 138.6 } }, opening_hours: { open_now: true } }),
+            result("far5", "Snoopy Park", { geometry: { location: { lat: 37.1, lng: 138.7 } }, opening_hours: { open_now: true } }),
+            result("far6", "Snoopy Shop", { geometry: { location: { lat: 37.2, lng: 138.8 } }, opening_hours: { open_now: true } }),
+            result("far7", "Snoopy Plaza", { geometry: { location: { lat: 37.3, lng: 138.9 } }, opening_hours: { open_now: true } }),
+            result("far8", "Snoopy Tower", { geometry: { location: { lat: 37.4, lng: 139.0 } }, opening_hours: { open_now: true } }),
+            result("far9", "Snoopy Garden", { geometry: { location: { lat: 37.5, lng: 139.1 } }, opening_hours: { open_now: true } }),
+            result("far10", "Snoopy Land", { geometry: { location: { lat: 37.6, lng: 139.2 } }, opening_hours: { open_now: true } }),
+            // rank 11+: loose match near the user — must be dropped as noise
             result("junk1", "THANK YOU MART", { opening_hours: { open_now: true } }),
           ]),
       },
@@ -345,6 +353,7 @@ describe("recommend — pipeline outcomes", () => {
             },
           }),
       },
+      { match: urlContains("interpreter"), response: () => jsonResponse({ elements: [] }) },
     ]);
     // Sunday 21:00 JST → café closed
     const r = await recommend({
@@ -360,11 +369,46 @@ describe("recommend — pipeline outcomes", () => {
       { match: urlContains("open-meteo.com"), response: weatherFixture },
       { match: urlContains("googleapis.com"), response: () => jsonResponse({}, 500) },
       { match: urlContains("api.geoapify.com"), response: () => jsonResponse({}, 500) },
-      { match: urlContains("interpreter"), response: () => jsonResponse({}, 500) },
+      { match: urlContains("interpreter"), response: () => jsonResponse({ elements: [] }) },
     ]);
     const r = await recommend({ lat: 36.65, lng: 138.19, budget: "afternoon", types: ["park"], mode: "walking" });
     expect(r.places).toHaveLength(0);
     expect(r.emptyReason).toBe("no_results");
+  });
+
+  it("returns more than the old cap of 10 when the pool has more (RESULT_LIMIT=30)", async () => {
+    const many = Array.from({ length: 12 }, (_, i) =>
+      result(`p${i}`, `Museo ${i}`, { opening_hours: { open_now: true } })
+    );
+    mockFetch([
+      { match: urlContains("open-meteo.com"), response: weatherFixture },
+      { match: urlContains("textsearch"), response: () => googleSearch(many) },
+      { match: urlContains("nearbysearch"), response: () => jsonResponse({ status: "OK", results: [] }) },
+      { match: urlContains("interpreter"), response: () => jsonResponse({ elements: [] }) },
+    ]);
+    const r = await recommend({ lat: 36.65, lng: 138.19, budget: "afternoon", types: ["museum"], mode: "walking" });
+    expect(r.places).toHaveLength(12); // 12 > 10 → the UI cap was raised
+  });
+
+  it("exposes the merged sources in the result", async () => {
+    mockFetch([
+      { match: urlContains("open-meteo.com"), response: weatherFixture },
+      {
+        match: urlContains("googleapis.com"),
+        response: () =>
+          googleSearch([result("p1", "Museo A", { opening_hours: { open_now: true } })]),
+      },
+      { match: urlContains("api.geoapify.com"), response: () => jsonResponse({}, 500) },
+      {
+        match: urlContains("interpreter"),
+        response: () =>
+          // 111 m away from the google place — outside the 60 m proximity
+          // window, so the OSM museum survives the merge
+          jsonResponse({ elements: [{ type: "node", id: 9, lat: 36.651, lon: 138.19, tags: { tourism: "museum" } }] }),
+      },
+    ]);
+    const r = await recommend({ lat: 36.65, lng: 138.19, budget: "afternoon", types: ["museum"], mode: "walking" });
+    expect(r.sources).toEqual(["google", "overpass"]);
   });
 });
 
@@ -402,5 +446,17 @@ describe("diversify", () => {
     ];
     const out = diversify(items, 4);
     expect(out.map((o) => o.id)).toEqual(["a", "d", "b", "c"]);
+  });
+
+  it("fills RESULT_LIMIT slots across types (the UI shows 30 options, not 10)", () => {
+    const tags = ["viewpoint", "temple", "park", "food", "museum"];
+    const items = Array.from({ length: 60 }, (_, i) => ({
+      id: `x${i}`,
+      score: 100 - i,
+      tags: [tags[i % tags.length]],
+    }));
+    const out = diversify(items, RESULT_LIMIT);
+    expect(out.length).toBe(RESULT_LIMIT);
+    expect(new Set(out.map((o) => o.tags[0])).size).toBe(tags.length); // variety kept
   });
 });

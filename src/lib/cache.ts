@@ -87,7 +87,8 @@ export async function cachePlaces(places: Place[]): Promise<void> {
     // Same place can arrive from text + nearby search with slightly different
     // name/coords (discover's name-based dedupe misses it) — a bulk upsert
     // must not contain duplicate ids ("ON CONFLICT cannot affect row twice").
-    const rows = [...new Map(places.slice(0, 500).map((p) => [p.id, placeRow(p)])).values()];
+    // Cap matches discover()'s merged-pool cap so a dense discovery fits.
+    const rows = [...new Map(places.slice(0, 600).map((p) => [p.id, placeRow(p)])).values()];
     const { error } = await admin().from(PLACE_TABLE).upsert(rows, { onConflict: "id" });
     if (error) console.warn(`[tabi] place_cache bulk upsert failed: ${error.message}`);
   } catch (e) {
@@ -137,6 +138,8 @@ export async function cachedNear(
  * Fresh-cache check for discovery: places fetched within maxAgeMs near a point,
  * filtered to those whose tags cover every requested type. Returns null when
  * coverage is incomplete — the caller should hit live sources instead.
+ * The row limit matches discover()'s pool cap so a type with few results in a
+ * big pool is not lost among the newest-N rows.
  */
 export async function freshNearby(
   lat: number,
@@ -146,7 +149,7 @@ export async function freshNearby(
   maxAgeMs: number
 ): Promise<Place[] | null> {
   const since = new Date(Date.now() - maxAgeMs).toISOString();
-  const places = await queryNear(lat, lng, radiusKm, 300, since);
+  const places = await queryNear(lat, lng, radiusKm, 600, since);
   for (const type of types) {
     if (!places.some((p) => p.tags.includes(type))) return null;
   }

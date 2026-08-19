@@ -200,10 +200,11 @@ export default function HomePage() {
         setLoading(false);
 
         // photo enrichment (async, non-blocking): search APIs give ~1 photo,
-        // Place Details up to 8 — cards update when the refs arrive
+        // Place Details up to 8 — cards update when the refs arrive.
+        // Top-12 matches MAX_ENRICH on /api/photos (the visible slice gets photos).
         if (data.places.length > 0) {
           const topIds = data.places
-            .slice(0, 6)
+            .slice(0, 12)
             .map((p) => p.id)
             .join(",");
           fetch(
@@ -242,7 +243,8 @@ export default function HomePage() {
             keyword: payload.keyword,
             traceId: data.traceId,
           };
-          lastPlacesRef.current = data.places.map((p) => ({
+          // /api/narrate caps the payload at 12 places — send the visible top
+          lastPlacesRef.current = data.places.slice(0, 12).map((p) => ({
             id: p.id,
             name: p.name,
             distanceKm: p.distanceKm,

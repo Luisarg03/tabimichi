@@ -121,6 +121,9 @@ export interface RecommendResult {
   generatedAt: string;
   radiusKm: number;
   sourceNote: "google" | "geoapify" | "overpass" | "cache" | "none";
+  /** every source that contributed to this result (merged discovery), in
+   *  priority order — the UI shows a combined label when there is more than one */
+  sources?: Array<"google" | "geoapify" | "overpass" | "cache">;
   /** whether an LLM narrative was attached (provider configured) */
   narrated: boolean;
   /** which provider tier narrated: "opencode-zen" (free) | "opencode-go" (paid) */

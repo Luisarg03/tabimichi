@@ -31,6 +31,7 @@ interface GeoapifyResponse {
  */
 const GEOAPIFY_CATEGORIES: Record<string, string> = {
   viewpoint: "tourism.attraction",
+  temple: "religion.place_of_worship", // validated live (Nagano) — real shrines/temples
   food: "catering.restaurant",
   museum: "entertainment.museum",
   park: "leisure.park",
@@ -55,7 +56,7 @@ export async function geoapifySearch(
         apiKey,
         filter: `circle:${lng.toFixed(5)},${lat.toFixed(5)},${Math.min(radiusM, 50000)}`,
         bias: `proximity:${lng.toFixed(5)},${lat.toFixed(5)}`,
-        limit: "20",
+        limit: "50",
         lang: lang === "es" ? "es" : "en",
       });
       const categories = GEOAPIFY_CATEGORIES[type.id];

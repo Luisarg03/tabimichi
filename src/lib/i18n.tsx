@@ -45,6 +45,13 @@ const es: Dict = {
       overpass: "Datos: OpenStreetMap",
       cache: "Datos: cache local",
       none: "Datos no disponibles: OpenStreetMap está saturado. Probá de nuevo en un momento o configurá Google Places en Ajustes.",
+      multi: "Datos: {sources}",
+    },
+    sourceName: {
+      google: "Google Places",
+      geoapify: "Geoapify",
+      overpass: "OpenStreetMap",
+      cache: "cache local",
     },
   },
   weather: {
@@ -296,6 +303,13 @@ const en: Dict = {
       overpass: "Data: OpenStreetMap",
       cache: "Data: local cache",
       none: "No data available: OpenStreetMap is overloaded. Try again in a moment or configure Google Places in Settings.",
+      multi: "Data: {sources}",
+    },
+    sourceName: {
+      google: "Google Places",
+      geoapify: "Geoapify",
+      overpass: "OpenStreetMap",
+      cache: "local cache",
     },
   },
   weather: {

@@ -16,7 +16,9 @@ export const runtime = "nodejs";
 // allow slow external calls (Overpass, Google, LLM) past the default function timeout
 export const maxDuration = 60;
 
-const MAX_ENRICH = 4;
+// The results list now shows 30 cards — enrich the visible top with photos
+// (BYOK cost: each id is one Place Details call + ≤3 photo downloads).
+const MAX_ENRICH = 12;
 const MAX_PHOTOS = 3;
 
 /**
