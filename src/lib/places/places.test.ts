@@ -558,6 +558,33 @@ describe("discover — merged multi-source chain", () => {
     expect(places.map((p) => p.name)).toEqual(["Miyashita Park"]);
   });
 
+  it("keyed user re-discovers when the cached pool has no google data", async () => {
+    // an anonymous search cached an OSM-only pool for this area
+    await upsertPlace({
+      id: "osm1", source: "overpass", name: "Miyashita Park", lat: 36.65, lng: 138.19,
+      tags: ["park"], openNow: null,
+    });
+    mockFetch([
+      overpassEmpty(),
+      {
+        match: urlContains("googleapis.com"),
+        response: () =>
+          jsonResponse({
+            status: "OK",
+            results: [
+              { place_id: "g1", name: "Koen Park", geometry: { location: { lat: 36.65, lng: 138.19 } }, rating: 4.5 },
+            ],
+          }),
+      },
+    ]);
+    // GOOGLE_PLACES_API_KEY is set in beforeEach → the OSM-only cache must NOT
+    // be served as-is; the keyed re-discovery merges Google in
+    const { places, source, sources } = await discover({ lat: 36.65, lng: 138.19, radiusKm: 5, types: ["park"] });
+    expect(source).toBe("google");
+    expect(sources).toEqual(["google"]);
+    expect(places.some((p) => p.source === "google")).toBe(true);
+  });
+
   it("keeps a differently-named place of the same type next to a rated one (dense cluster)", async () => {
     mockFetch([
       {

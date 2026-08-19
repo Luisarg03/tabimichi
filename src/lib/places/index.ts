@@ -7,8 +7,13 @@ import { googleSearchAll } from "./google";
 import { geoapifySearch } from "./geoapify";
 import { overpassSearch, TOTAL_BUDGET_MS, SUPPLEMENTARY_BUDGET_MS } from "./overpass";
 
-/** Shared cache TTL: places rarely change — discover each area once a day. */
-export const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+/**
+ * Shared cache TTL: places rarely change, but the POOL must not stay frozen
+ * for a whole day — a single discovery where one source failed (e.g. Overpass
+ * mirrors down) would otherwise serve a partial area for 24 h. 6 h bounds the
+ * stale window while keeping repeat searches instant.
+ */
+export const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 
 /** Hard cap on the merged pool that gets cached — the UI shows the scored
  *  top of it, the rest is kept for repeat visits. */
@@ -122,7 +127,15 @@ export async function discover(
       const matched = fresh.filter(
         (p) => !isFallbackName(p.name) && p.tags.some((t) => typeIds.includes(t))
       );
-      if (matched.length > 0) return { places: matched, source: "cache", sources: ["cache"] };
+      // A keyed user must NOT be served a pool that lacks Google data — e.g.
+      // an area first cached by an anonymous search (OSM-only), or by a search
+      // where Google failed. The whole point of the key is the rich merge
+      // (ratings/photos/hours); re-discover to add it instead of freezing the
+      // thin pool. Anonymous users happily reuse any pool.
+      const hasGoogle = matched.some((p) => p.source === "google");
+      if (matched.length > 0 && (!config.googlePlacesApiKey || hasGoogle)) {
+        return { places: matched, source: "cache", sources: ["cache"] };
+      }
     }
   }
 
