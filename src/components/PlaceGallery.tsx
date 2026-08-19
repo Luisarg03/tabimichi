@@ -53,6 +53,22 @@ export default function PlaceGallery({
         alt={alt}
         className={imgClassName}
       />
+      {/* preload the neighbors so swiping between photos is instant: PlacePhoto
+          fetches + caches the blob on mount, even when display:none */}
+      {photoRefs.length > 1 && (
+        <div className="hidden" aria-hidden>
+          <PlacePhoto
+            photoRef={photoRefs[(activeIdx + 1) % photoRefs.length]!}
+            placeId={placeId}
+            alt=""
+          />
+          <PlacePhoto
+            photoRef={photoRefs[(activeIdx - 1 + photoRefs.length) % photoRefs.length]!}
+            placeId={placeId}
+            alt=""
+          />
+        </div>
+      )}
       {photoRefs.length > 1 && (
         <>
           <span
