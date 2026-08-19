@@ -26,6 +26,14 @@ function admin(): AdminClient {
 const PLACE_TABLE = "place_cache";
 const PHOTO_BUCKET = "photos";
 
+/**
+ * Google's `open_now` is a point-in-time snapshot valid only at fetch time —
+ * persisting it for the whole place TTL makes everything look closed all day
+ * (a row cached at 08:30 stays "closed" at 13:00). Treat it as unknown once it
+ * is older than this window; the scoring then neither penalizes nor boosts it.
+ */
+const OPEN_NOW_FRESH_MS = 60 * 60 * 1000;
+
 function rowToPlace(r: Record<string, unknown>): Place {
   let photoRefs: string[] | undefined;
   try {
@@ -33,6 +41,12 @@ function rowToPlace(r: Record<string, unknown>): Place {
     if (Array.isArray(parsed)) photoRefs = parsed as string[];
   } catch {
     // ignore
+  }
+  let openNow: boolean | null | undefined;
+  if (r.open_now != null) {
+    const fetched = new Date(String(r.fetched_at ?? "")).getTime();
+    const fresh = !Number.isFinite(fetched) || Date.now() - fetched <= OPEN_NOW_FRESH_MS;
+    openNow = fresh ? Boolean(r.open_now) : undefined; // stale snapshot → unknown
   }
   return {
     id: String(r.id),
@@ -44,7 +58,7 @@ function rowToPlace(r: Record<string, unknown>): Place {
     rating: r.rating == null ? undefined : Number(r.rating),
     userRatingsTotal: r.user_ratings_total == null ? undefined : Number(r.user_ratings_total),
     priceLevel: r.price_level == null ? undefined : Number(r.price_level),
-    openNow: r.open_now == null ? undefined : Boolean(r.open_now),
+    openNow,
     address: r.address ? String(r.address) : undefined,
     photoRef: photoRefs?.[0] ?? (r.photo_ref ? String(r.photo_ref) : undefined),
     photoRefs,

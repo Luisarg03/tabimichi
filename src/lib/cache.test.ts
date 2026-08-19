@@ -45,6 +45,13 @@ describe("place cache (Supabase)", () => {
     expect(back?.tags).toEqual(["onsen"]);
   });
 
+  it("treats a stale cached open_now as unknown (it is a point-in-time snapshot)", async () => {
+    await upsertPlace(p("x1", { openNow: false }));
+    expect((await placeById("x1"))?.openNow).toBe(false); // fresh → honored
+    sb.places.get("x1")!.fetched_at = new Date(Date.now() - 3 * 3600 * 1000).toISOString();
+    expect((await placeById("x1"))?.openNow).toBeUndefined(); // stale → unknown
+  });
+
   it("freshNearby returns only when every type is covered", async () => {
     await cachePlaces([p("x1", { tags: ["park"] }), p("x2", { tags: ["museum"] })]);
     const all = await freshNearby(36.65, 138.19, 5, ["park", "museum"], 60_000);
