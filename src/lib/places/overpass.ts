@@ -117,21 +117,25 @@ function assignTypes(
   return out;
 }
 
-function fallbackName(typeId: string): string {
-  const names: Record<string, string> = {
-    onsen: "Onsen",
-    temple: "Templo",
-    viewpoint: "Mirador",
-    food: "Restaurante",
-    market: "Mercado",
-    museum: "Museo",
-    park: "Parque",
-    trekking: "Sendero",
-    sakura: "Atracción",
-    shopping: "Zona de compras",
-    nightlife: "Bar",
-  };
-  return names[typeId] ?? "Lugar";
+function toPlace(e: OverpassElement, matched: string[]): Place | null {
+  const lat2 = e.lat ?? e.center?.lat;
+  const lng2 = e.lon ?? e.center?.lon;
+  if (lat2 === undefined || lng2 === undefined) return null;
+  const tags = e.tags ?? {};
+  const name = tags.name || tags["name:en"] || tags["name:ja"];
+  // Nameless OSM elements are bare coordinates, not places — without a name
+  // they show up as anonymous pins ("Parque (way 123)") with no photos that
+  // just drop a coordinate into Google Maps. The user wants real options.
+  if (!name) return null;
+  return {
+    id: `o_${e.type}_${e.id}`,
+    source: "overpass" as const,
+    name,
+    lat: lat2,
+    lng: lng2,
+    tags: matched,
+    openNow: null,
+  } satisfies Place;
 }
 
 /**
@@ -193,27 +197,7 @@ export async function overpassSearch(
     // stale/partial coverage — it loses the race so a data-bearing mirror
     // can still win.
     if (assigned.length === 0) throw new Error("overpass-empty");
-    return assigned
-      .map(({ element: e, matched }): Place | null => {
-        const lat2 = e.lat ?? e.center?.lat;
-        const lng2 = e.lon ?? e.center?.lon;
-        if (lat2 === undefined || lng2 === undefined) return null;
-        const tags = e.tags ?? {};
-        return {
-          id: `o_${e.type}_${e.id}`,
-          source: "overpass" as const,
-          name:
-            tags.name ||
-            tags["name:en"] ||
-            tags["name:ja"] ||
-            `${fallbackName(matched[0])} (${e.type} ${e.id})`,
-          lat: lat2,
-          lng: lng2,
-          tags: matched,
-          openNow: null,
-        } satisfies Place;
-      })
-      .filter((p): p is Place => p !== null);
+    return assigned.map(({ element: e, matched }) => toPlace(e, matched)).filter((p): p is Place => p !== null);
   });
 
   try {

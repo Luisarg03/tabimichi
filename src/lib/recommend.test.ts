@@ -402,9 +402,9 @@ describe("recommend — pipeline outcomes", () => {
       {
         match: urlContains("interpreter"),
         response: () =>
-          // 111 m away from the google place — outside the 60 m proximity
+          // 111 m away from the google place — outside the 40 m proximity
           // window, so the OSM museum survives the merge
-          jsonResponse({ elements: [{ type: "node", id: 9, lat: 36.651, lon: 138.19, tags: { tourism: "museum" } }] }),
+          jsonResponse({ elements: [{ type: "node", id: 9, lat: 36.651, lon: 138.19, tags: { tourism: "museum", name: "Nagano Museum" } }] }),
       },
     ]);
     const r = await recommend({ lat: 36.65, lng: 138.19, budget: "afternoon", types: ["museum"], mode: "walking" });
