@@ -114,6 +114,7 @@ describe("/api/recommend", () => {
       { match: urlContains("open-meteo.com"), response: weatherFixture },
       { match: urlContains("textsearch"), response: googleSearchResponse },
       { match: urlContains("nearbysearch"), response: () => jsonResponse({ status: "OK", results: [] }) },
+      { match: urlContains("interpreter"), response: () => jsonResponse({ elements: [] }) },
     ]);
     const res = await recommendPOST(
       post("http://localhost/api/recommend", { lat: 36.65, lng: 138.19, budget: "afternoon", types: ["park", "museum"], mode: "walking" })
@@ -192,6 +193,7 @@ describe("/api/recommend", () => {
           });
         },
       },
+      { match: urlContains("interpreter"), response: () => jsonResponse({ elements: [] }) },
     ]);
     // Sunday 21:00 JST — encoded as the client does: Date.UTC(y,m,d,hourJST)
     const res = await recommendPOST(

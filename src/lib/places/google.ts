@@ -213,8 +213,11 @@ export async function googleSearch(
     fromKeyword: boolean;
     promise: Promise<GoogleResult[]>;
   }> = [{ fromKeyword: Boolean(keyword), promise: textSearch(apiKey, type, lat, lng, radiusM, keyword, stats) }];
-  if ((type.googleTypes?.length ?? 0) > 0) {
-    jobs.push({ fromKeyword: false, promise: nearbySearch(apiKey, type, lat, lng, radiusM, lang) });
+  // Nearby Search for EVERY mapped category, not just the first: in dense
+  // cities a single category is a prominence-biased sample, and types like
+  // food (restaurant + food) or shopping (3 categories) double/triple the pool.
+  for (const gtype of type.googleTypes ?? []) {
+    jobs.push({ fromKeyword: false, promise: nearbySearch(apiKey, type, lat, lng, radiusM, lang, gtype) });
   }
   if (keyword && type.id === "food") {
     jobs.push({ fromKeyword: false, promise: nearbySearch(apiKey, type, lat, lng, radiusM, lang, "cafe") });
@@ -225,10 +228,11 @@ export async function googleSearch(
   const out: Place[] = [];
   settled.forEach((r, i) => {
     if (r.status !== "fulfilled") return;
-    // Google returns text results relevance-ordered: with a keyword, only its
-    // TOP-3 matches are kept — lower-ranked hits (e.g. a convenience store
-    // Google loosely matched for "snoopy") are dropped as noise.
-    const kwRank = jobs[i].fromKeyword ? 3 : Infinity;
+    // Google returns text results relevance-ordered: with a keyword, its
+    // TOP-10 matches are kept — the user wants options, and lower-ranked
+    // hits (e.g. a convenience store Google loosely matched for "snoopy")
+    // still join the pool where scoring can rank them honestly.
+    const kwRank = jobs[i].fromKeyword ? 10 : Infinity;
     for (const [idx, gr] of r.value.entries()) {
       if (gr.business_status && gr.business_status !== "OPERATIONAL") continue;
       if (isNoiseForType(gr, type)) continue;

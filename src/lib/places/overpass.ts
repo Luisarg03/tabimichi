@@ -27,7 +27,19 @@ export { MIRRORS };
 /** hard ceiling for the whole Overpass attempt — never let the fallback hang */
 // Kept under typical serverless function timeouts (Vercel ~30s): a keyless
 // discovery must complete (slowly) instead of hitting FUNCTION_INVOCATION_TIMEOUT.
-const TOTAL_BUDGET_MS = 20000;
+export const TOTAL_BUDGET_MS = 20000;
+
+/**
+ * Supplementary budget used when Google/Geoapify already produced volume:
+ * Overpass is the "find everything" add-on in that case, so it gets a shorter
+ * ceiling and the request stays fast for keyed users.
+ */
+export const SUPPLEMENTARY_BUDGET_MS = 12000;
+
+/** Per-type output cap. A single global `out center N` lets one voluminous
+ *  type (food in a dense city) eat the whole budget and starve every other
+ *  type — capping per type guarantees a broad pool instead. */
+const PER_TYPE_OUT = 250;
 
 /**
  * Optional custom Overpass instance (e.g. self-hosted osm3s in Docker).
@@ -40,25 +52,32 @@ const TOTAL_BUDGET_MS = 20000;
  */
 export interface OverpassOptions {
   endpoint?: string;
+  /** hard ceiling for this attempt (defaults to TOTAL_BUDGET_MS); keyed
+   *  discovery already has Google volume, so callers pass a shorter
+   *  supplementary budget for the Overpass add-on. */
+  budgetMs?: number;
 }
 
 const TIMEOUT_MS = 40000;
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-/** Build one Overpass QL query covering every tag spec of every type. */
+/**
+ * Build one Overpass QL query covering every tag spec of every type.
+ * Each type gets its own named set + `out` with PER_TYPE_OUT, so one type's
+ * volume cannot starve the others (a global cap would let food eat it all).
+ */
 function buildQuery(types: ExperienceType[], lat: number, lng: number, radiusM: number): string {
-  const parts: string[] = [];
-  for (const type of types) {
-    for (const spec of type.overpass) {
-      const keyExpr = spec.value.startsWith("~")
-        ? `${spec.key}~"${spec.value.slice(1)}"`
-        : `${spec.key}="${spec.value}"`;
-      parts.push(`node(around:${radiusM},${lat},${lng})[${keyExpr}];`);
-      parts.push(`way(around:${radiusM},${lat},${lng})[${keyExpr}];`);
-    }
-  }
-  return `[out:json][timeout:25];(${parts.join("")});out center 120;`;
+  const groups = types.map((type, i) => {
+    const specs = type.overpass
+      .map((spec) => {
+        const keyExpr = spec.value.startsWith("~")
+          ? `${spec.key}~"${spec.value.slice(1)}"`
+          : `${spec.key}="${spec.value}"`;
+        return `node(around:${radiusM},${lat},${lng})[${keyExpr}];way(around:${radiusM},${lat},${lng})[${keyExpr}];`;
+      })
+      .join("");
+    return `(${specs})->.t${i};.t${i} out center ${PER_TYPE_OUT};`;
+  });
+  return `[out:json][timeout:25];${groups.join("")}`;
 }
 
 /** Assign experience type ids by matching each element's tags against the specs. */
@@ -117,7 +136,10 @@ function fallbackName(typeId: string): string {
 
 /**
  * OpenStreetMap search via Overpass. Free, no key, best-effort:
- * one combined query, mirror failover with retries and timeouts.
+ * one combined query, ALL mirrors raced concurrently — the first mirror that
+ * answers with matching elements wins, so a couple of dead/overloaded mirrors
+ * can no longer burn the whole budget (sequential failover with retries let
+ * one hanging mirror eat 15+ s before reaching a working one).
  */
 export async function overpassSearch(
   types: ExperienceType[],
@@ -130,8 +152,7 @@ export async function overpassSearch(
   if (valid.length === 0) return [];
 
   const query = buildQuery(valid, lat, lng, radiusM);
-  let lastErr: unknown = null;
-  let sawEmpty = false;
+  const totalBudget = opts.budgetMs ?? TOTAL_BUDGET_MS;
   const startedAt = Date.now();
 
   let endpoints: string[] = MIRRORS;
@@ -147,65 +168,62 @@ export async function overpassSearch(
     }
   }
 
-  for (const endpoint of endpoints) {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      // Real hard ceiling: shrink the per-request timeout to whatever budget
-      // remains, so an in-flight mirror can never blow past TOTAL_BUDGET_MS.
-      const remaining = TOTAL_BUDGET_MS - (Date.now() - startedAt);
-      if (remaining <= 0) break;
-      try {
-        const res = await fetch(endpoint, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/x-www-form-urlencoded",
-            // Overpass rejects requests without a recognizable User-Agent (406)
-            "User-Agent": "tabi-local/0.1 (personal travel discovery app)",
-          },
-          body: new URLSearchParams({ data: query }),
-          signal: AbortSignal.timeout(Math.min(TIMEOUT_MS, remaining)),
-        });
-        if (!res.ok) throw new Error(`overpass-http-${res.status}`);
-        const data = (await res.json()) as OverpassResponse;
+  // Each mirror races with its own timeout (shrunk to the remaining budget, so
+  // an in-flight request can never blow past the total). Rejections are how a
+  // loser exits the race: HTTP errors, timeouts, or "200 but zero matches"
+  // (thin mirrors like osm.ch for Asia answer valid-but-empty).
+  const attempts = endpoints.map(async (endpoint): Promise<Place[]> => {
+    const remaining = totalBudget - (Date.now() - startedAt);
+    if (remaining <= 0) throw new Error("overpass-budget");
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        // Overpass rejects requests without a recognizable User-Agent (406)
+        "User-Agent": "tabi-local/0.1 (personal travel discovery app)",
+      },
+      body: new URLSearchParams({ data: query }),
+      signal: AbortSignal.timeout(Math.min(TIMEOUT_MS, remaining)),
+    });
+    if (!res.ok) throw new Error(`overpass-http-${res.status}`);
+    const data = (await res.json()) as OverpassResponse;
 
-        const assigned = assignTypes(data.elements, valid);
-        // A mirror that answers 200 with zero matching elements usually has
-        // stale/partial coverage (osm.ch is chronically thin for Asia). Keep
-        // the failover alive instead of short-circuiting the whole attempt.
-        if (assigned.length === 0) {
-          sawEmpty = true;
-          break; // no point retrying the same mirror — move to the next one
-        }
-        return assigned
-          .map(({ element: e, matched }): Place | null => {
-            const lat2 = e.lat ?? e.center?.lat;
-            const lng2 = e.lon ?? e.center?.lon;
-            if (lat2 === undefined || lng2 === undefined) return null;
-            const tags = e.tags ?? {};
-            return {
-              id: `o_${e.type}_${e.id}`,
-              source: "overpass" as const,
-              name:
-                tags.name ||
-                tags["name:en"] ||
-                tags["name:ja"] ||
-                `${fallbackName(matched[0])} (${e.type} ${e.id})`,
-              lat: lat2,
-              lng: lng2,
-              tags: matched,
-              openNow: null,
-            } satisfies Place;
-          })
-          .filter((p): p is Place => p !== null);
-      } catch (err) {
-        lastErr = err;
-        // keep retry backoff inside the remaining budget too
-        await sleep(Math.min(1200 * (attempt + 1), Math.max(0, TOTAL_BUDGET_MS - (Date.now() - startedAt))));
-      }
-    }
+    const assigned = assignTypes(data.elements, valid);
+    // A mirror that answers 200 with zero matching elements usually has
+    // stale/partial coverage — it loses the race so a data-bearing mirror
+    // can still win.
+    if (assigned.length === 0) throw new Error("overpass-empty");
+    return assigned
+      .map(({ element: e, matched }): Place | null => {
+        const lat2 = e.lat ?? e.center?.lat;
+        const lng2 = e.lon ?? e.center?.lon;
+        if (lat2 === undefined || lng2 === undefined) return null;
+        const tags = e.tags ?? {};
+        return {
+          id: `o_${e.type}_${e.id}`,
+          source: "overpass" as const,
+          name:
+            tags.name ||
+            tags["name:en"] ||
+            tags["name:ja"] ||
+            `${fallbackName(matched[0])} (${e.type} ${e.id})`,
+          lat: lat2,
+          lng: lng2,
+          tags: matched,
+          openNow: null,
+        } satisfies Place;
+      })
+      .filter((p): p is Place => p !== null);
+  });
+
+  try {
+    return await Promise.any(attempts);
+  } catch (agg) {
+    const reasons = (agg as AggregateError).errors ?? [];
+    // Every mirror exhausted. One that answered valid-but-empty means "nothing
+    // matches here" (return []); total unreachability is an error (throw →
+    // callers fall back to the cache).
+    if (reasons.some((e) => (e as Error)?.message === "overpass-empty")) return [];
+    throw (reasons[0] as Error) ?? new Error("overpass-unreachable");
   }
-  // Every mirror exhausted. A mirror that answered is a valid "nothing matches
-  // here" (return []); only total unreachability is an error (throw → callers
-  // fall back to the cache).
-  if (sawEmpty) return [];
-  throw lastErr ?? new Error("overpass-unreachable");
 }

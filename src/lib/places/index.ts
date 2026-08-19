@@ -5,10 +5,14 @@ import { haversineKm } from "../geo";
 import { resolveTypes } from "./taxonomy";
 import { googleSearchAll } from "./google";
 import { geoapifySearch } from "./geoapify";
-import { overpassSearch } from "./overpass";
+import { overpassSearch, TOTAL_BUDGET_MS, SUPPLEMENTARY_BUDGET_MS } from "./overpass";
 
 /** Shared cache TTL: places rarely change — discover each area once a day. */
 export const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+/** Hard cap on the merged pool that gets cached — the UI shows the scored
+ *  top of it, the rest is kept for repeat visits. */
+const POOL_CAP = 600;
 
 export interface DiscoverOptions {
   lat: number;
@@ -23,6 +27,8 @@ export interface DiscoverOptions {
 }
 
 export type SourceNote = "google" | "geoapify" | "overpass" | "cache" | "none";
+/** Sources that actually contributed (never "none"). */
+export type ContributingSource = Exclude<SourceNote, "none">;
 
 function dedupe(places: Place[]): Place[] {
   const seen = new Set<string>();
@@ -37,22 +43,58 @@ function dedupe(places: Place[]): Place[] {
 }
 
 /**
- * Multi-source discovery orchestrator, tried in priority order:
- *   1. Google Places          — when a key is configured (rich: ratings, hours, photos)
- *   2. Geoapify               — when a free key is configured (curated OSM categories)
- *   3. OpenStreetMap Overpass — custom osm3s endpoint if set, else public mirrors
- *   4. local SQLite cache     — last resort (type-filtered)
- * The first source that returns places wins. Results are cached.
+ * Second dedupe pass for near-duplicates with *different* names: OpenStreetMap
+ * usually has the same place as Google a few meters away with a localized name
+ * ("亀の湯" vs "Kame no Yu"), which the name+coord dedupe misses. A candidate is
+ * dropped only when a higher-priority place within ~60 m shares a type tag AND
+ * has a rating the candidate lacks — a rated place is the richer record. Two
+ * rated places nearby (a mall with several restaurants) are never collapsed,
+ * and an unrated park next to a rated restaurant (different tags) survives.
+ */
+const PROX_DUP_KM = 0.06;
+const SOURCE_PRIORITY: Record<string, number> = { google: 0, geoapify: 1, overpass: 2 };
+
+function proximityDedupe(places: Place[]): Place[] {
+  if (places.length < 2) return places;
+  const sorted = [...places].sort(
+    (a, b) => (SOURCE_PRIORITY[a.source] ?? 9) - (SOURCE_PRIORITY[b.source] ?? 9)
+  );
+  const kept: Place[] = [];
+  for (const p of sorted) {
+    const isDup = kept.some((k) => {
+      if (haversineKm(k, p) > PROX_DUP_KM) return false;
+      if (!p.tags.some((t) => k.tags.includes(t))) return false; // different type = different POI
+      return p.rating === undefined && k.rating !== undefined;
+    });
+    if (!isDup) kept.push(p);
+  }
+  return kept;
+}
+
+/**
+ * Multi-source discovery, run in PARALLEL and MERGED (not first-wins):
+ *   1. Google Places   — when a key is configured (rich: ratings, hours, photos)
+ *   2. Geoapify        — when a free key is configured (curated OSM categories)
+ *   3. OpenStreetMap Overpass — always (free; the "find every POI" engine,
+ *      with per-type output caps so no single type starves the others;
+ *      skipped only for keyword-intent searches with a Google key)
+ * The first source that returns places used to win — that meant Overpass
+ * (the only unbounded, popularity-unbiased engine) NEVER ran for keyed users.
+ * Now every source contributes and the scoring layer ranks the merged pool by
+ * mobility/weather/profile, so prominence bias stops limiting the options.
+ *
+ * Latency guard: Overpass gets a full 20 s budget only when it is the sole
+ * source (anonymous); with keys it is a supplementary add-on capped at 12 s.
+ * Keyword-intent searches skip Overpass when a Google key answered — the
+ * keyword is the point, not generic OSM volume.
  */
 export async function discover(
   opts: DiscoverOptions
-): Promise<{ places: Place[]; source: SourceNote; keywordResults?: number }> {
+): Promise<{ places: Place[]; source: SourceNote; keywordResults?: number; sources: ContributingSource[] }> {
   const { lat, lng, radiusKm, types, lang = "es", keyword, config: userConfig } = opts;
   const radiusM = Math.round(radiusKm * 1000);
   const experienceTypes = resolveTypes(types);
   const config = userConfig ?? getConfig();
-  let places: Place[] = [];
-  let source: SourceNote = "none";
   // how many candidates came from the keyword query itself (0 = keyword miss)
   const gstats: { keywordResults?: number } = {};
 
@@ -67,66 +109,68 @@ export async function discover(
     if (fresh && fresh.length > 0) {
       // only return places that match the requested types
       const matched = fresh.filter((p) => p.tags.some((t) => typeIds.includes(t)));
-      if (matched.length > 0) return { places: matched, source: "cache" };
+      if (matched.length > 0) return { places: matched, source: "cache", sources: ["cache"] };
     }
   }
 
-  if (config.googlePlacesApiKey) {
-    try {
-      // concurrency-limited so the burst never trips Google's QPS cap
-      places = await googleSearchAll(
-        config.googlePlacesApiKey!,
-        experienceTypes,
-        lat,
-        lng,
-        radiusM,
-        lang,
-        keyword,
-        gstats
-      );
-      if (places.length > 0) source = "google";
-    } catch {
-      // fall through
-    }
-  }
+  const hasKey = Boolean(config.googlePlacesApiKey || config.geoapifyApiKey);
+  // Keyword + Google key = intent mode: the keyword query is the whole point,
+  // generic OSM volume adds latency without intent value — skip Overpass.
+  const runOverpass = !(keyword && Boolean(config.googlePlacesApiKey));
 
-  if (places.length === 0 && config.geoapifyApiKey) {
-    try {
-      places = await geoapifySearch(config.geoapifyApiKey, experienceTypes, lat, lng, radiusM, lang);
-      if (places.length > 0) source = "geoapify";
-    } catch {
-      // fall through
-    }
-  }
+  const [g, geo, ov] = await Promise.allSettled([
+    config.googlePlacesApiKey
+      ? googleSearchAll(config.googlePlacesApiKey!, experienceTypes, lat, lng, radiusM, lang, keyword, gstats)
+      : Promise.resolve([]),
+    config.geoapifyApiKey
+      ? geoapifySearch(config.geoapifyApiKey, experienceTypes, lat, lng, radiusM, lang)
+      : Promise.resolve([]),
+    runOverpass
+      ? overpassSearch(experienceTypes, lat, lng, radiusM, {
+          endpoint: overpassEndpoint,
+          budgetMs: hasKey ? SUPPLEMENTARY_BUDGET_MS : TOTAL_BUDGET_MS,
+        })
+      : Promise.resolve([]),
+  ]);
 
-  if (places.length === 0) {
-    try {
-      // single combined query (custom endpoint first, then mirror failover)
-      places = await overpassSearch(experienceTypes, lat, lng, radiusM, {
-        endpoint: overpassEndpoint,
-      });
-      if (places.length > 0) source = "overpass";
-    } catch {
-      // fall through to cache
-    }
-  }
+  const googlePlaces = g.status === "fulfilled" ? g.value : [];
+  const geoapifyPlaces = geo.status === "fulfilled" ? geo.value : [];
+  const overpassPlaces = ov.status === "fulfilled" ? ov.value : [];
 
-  if (places.length === 0 && !keyword) {
-    // last-resort fallback; also skipped for keywords (cache is keyword-agnostic)
+  // merge: higher-priority sources first so proximity dedupe keeps the richer record
+  const all = [...googlePlaces, ...geoapifyPlaces, ...overpassPlaces];
+  let bounded = proximityDedupe(dedupe(all)).filter(
+    (p) => haversineKm({ lat, lng }, p) <= radiusKm * 1.5
+  );
+
+  // last resort: cached places near the point (type-filtered) when every live
+  // source failed; also skipped for keywords (cache is keyword-agnostic)
+  let fromCache = false;
+  if (bounded.length === 0 && !keyword) {
     const cached = await cachedNear(lat, lng, radiusKm * 2);
-    places = types.length > 0 ? cached.filter((p) => p.tags.some((t) => types.includes(t))) : cached;
-    if (places.length > 0) source = "cache";
+    bounded = types.length > 0 ? cached.filter((p) => p.tags.some((t) => types.includes(t))) : cached;
+    fromCache = bounded.length > 0;
   }
 
-  const deduped = dedupe(places);
-  // Google Text Search can leak world-famous places outside the radius even
-  // with strictbounds — hard-drop anything beyond 1.5× the discovery radius
-  // so global results never become candidates (or pollute the cache)
-  const bounded = deduped.filter((p) => haversineKm({ lat, lng }, p) <= radiusKm * 1.5);
-  if (bounded.length > 0) await cachePlaces(bounded);
+  const pool = bounded.slice(0, POOL_CAP);
+  if (pool.length > 0) await cachePlaces(pool);
+
+  // sources in priority order (display), source = dominant contributor (stats)
+  const sources: ContributingSource[] = fromCache
+    ? ["cache"]
+    : (["google", "geoapify", "overpass"] as const).filter((s) => pool.some((p) => p.source === s));
+  let source: SourceNote = "none";
+  if (fromCache) {
+    source = "cache";
+  } else if (pool.length > 0) {
+    const byCount = new Map<string, number>();
+    for (const p of pool) byCount.set(p.source, (byCount.get(p.source) ?? 0) + 1);
+    source = [...byCount.entries()].sort((a, b) => b[1] - a[1])[0][0] as SourceNote;
+  }
+
   // keywordResults = keyword-query candidates that survived the radius bound:
   // Google may return relevant places (e.g. Snoopy cafés 70 km away) that are
   // out of reach — the UI must not pretend they exist nearby
   const keywordResults = keyword ? bounded.filter((p) => p.fromKeyword).length : gstats.keywordResults;
-  return { places: bounded, source, keywordResults };
+  return { places: pool, source, keywordResults, sources };
 }

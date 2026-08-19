@@ -39,6 +39,16 @@ export default function ResultsList({
   guideState: "idle" | "thinking" | "done";
 }) {
   const { t } = useI18n();
+  // Merged discovery: a combined label when several sources contributed
+  // (e.g. "Datos: Google Places + OpenStreetMap"), the plain label otherwise.
+  const multiSources = (result?.sources?.length ?? 0) > 1;
+  const sourceLabel = multiSources
+    ? t("panel.source.multi", {
+        sources: result!.sources!.map((s) => t(`panel.sourceName.${s}`)).join(" + "),
+      })
+    : result
+      ? t(`panel.source.${result.sourceNote}`)
+      : "";
 
   return (
     <div className="space-y-2">
@@ -134,7 +144,7 @@ export default function ResultsList({
             </div>
           ) : (
             <>
-              <div className="text-xs text-slate-500">{t(`panel.source.${result.sourceNote}`)}</div>
+              <div className="text-xs text-slate-500">{sourceLabel}</div>
               {result.places.length > 0 && (
                 <button
                   onClick={onNarrate}

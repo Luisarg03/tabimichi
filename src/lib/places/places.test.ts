@@ -142,6 +142,24 @@ describe("googleSearch", () => {
     expect(urls.some((u) => u.includes("pagetoken=tok1"))).toBe(true);
   });
 
+  it("queries every mapped google type, not just the first (food → restaurant + food)", async () => {
+    const urls: string[] = [];
+    mockFetch([
+      {
+        match: (u) => u.includes("textsearch") || u.includes("nearbysearch"),
+        response: (u) => {
+          urls.push(u);
+          return jsonResponse({ status: "OK", results: [] });
+        },
+      },
+    ]);
+    await googleSearch(KEY, resolveTypes(["food"])[0], 36.65, 138.19, 5000, "es");
+    const nearby = urls.filter((u) => u.includes("nearbysearch"));
+    expect(nearby).toHaveLength(2);
+    expect(nearby.some((u) => u.includes("type=restaurant"))).toBe(true);
+    expect(nearby.some((u) => u.includes("type=food"))).toBe(true);
+  });
+
   it("drops hotels (lodging) from food results but keeps ryokan-onsen", async () => {
     mockFetch([
       {
@@ -240,9 +258,9 @@ describe("geoapifySearch", () => {
     const places = await geoapifySearch("geo-key", resolveTypes(["food"]), 36.65, 138.19, 5000, "es");
     expect(places).toHaveLength(1);
     expect(places[0].source).toBe("geoapify");
-    // temple has no geoapify mapping → no request, empty result
-    const temple = await geoapifySearch("geo-key", resolveTypes(["temple"]), 36.65, 138.19, 5000, "es");
-    expect(temple).toHaveLength(0);
+    // trekking has no geoapify mapping → no request, empty result
+    const trekking = await geoapifySearch("geo-key", resolveTypes(["trekking"]), 36.65, 138.19, 5000, "es");
+    expect(trekking).toHaveLength(0);
   });
 });
 
@@ -271,7 +289,7 @@ describe("overpassSearch", () => {
     expect(places.find((p) => p.id === "o_node_2")?.name).toContain("Mirador"); // fallback name
   });
 
-  it("sends a single combined query with every tag spec", async () => {
+  it("sends a single combined query with every tag spec and per-type output caps", async () => {
     const fn = mockFetch([
       {
         match: urlContains("interpreter"),
@@ -283,15 +301,28 @@ describe("overpassSearch", () => {
     // the failover (osm.ch is thin for Asia — later mirrors may have data)
     expect(fn).toHaveBeenCalledTimes(MIRRORS.length);
     const called = fn.mock.calls[0];
-    const sent = decodeURIComponent(String(called[1]?.body ?? ""));
+    const sent = decodeURIComponent(String(called[1]?.body ?? "")).replace(/\+/g, " ");
     expect(sent).toContain('leisure="hot_spring"');
     expect(sent).toContain('name~"温泉"');
     expect(sent).toContain('historic="temple"');
+    // per-type named sets + independent out caps: one type's volume cannot
+    // starve the other (a global `out center 120` would)
+    expect(sent).toContain("->.t0;.t0 out center 250;");
+    expect(sent).toContain("->.t1;.t1 out center 250;");
   });
 });
 
-describe("discover — source chain", () => {
+describe("discover — merged multi-source chain", () => {
   let sb: ReturnType<typeof makeSupabaseFake>;
+
+  // Overpass now runs in parallel with Google/Geoapify — tests that don't
+  // assert Overpass behavior mock it as "no elements" (fast, deterministic);
+  // without this, the mirror retry backoff burns the whole supplementary
+  // budget (~12 s of sleeps) per discover call.
+  const overpassEmpty = () => ({
+    match: urlContains("interpreter"),
+    response: () => jsonResponse({ elements: [] }),
+  });
 
   beforeEach(() => {
     isolatedStore();
@@ -311,6 +342,7 @@ describe("discover — source chain", () => {
 
   it("uses google when it returns places", async () => {
     mockFetch([
+      overpassEmpty(),
       {
         match: urlContains("googleapis.com"),
         response: () =>
@@ -322,13 +354,15 @@ describe("discover — source chain", () => {
           }),
       },
     ]);
-    const { places, source } = await discover({ lat: 36.65, lng: 138.19, radiusKm: 5, types: ["park"] });
+    const { places, source, sources } = await discover({ lat: 36.65, lng: 138.19, radiusKm: 5, types: ["park"] });
     expect(source).toBe("google");
+    expect(sources).toEqual(["google"]);
     expect(places).toHaveLength(1);
   });
 
   it("drops world-famous places that text search leaks beyond the radius", async () => {
     mockFetch([
+      overpassEmpty(),
       {
         match: urlContains("googleapis.com"),
         response: () =>
@@ -349,6 +383,7 @@ describe("discover — source chain", () => {
 
   it("falls back to geoapify when google fails", async () => {
     mockFetch([
+      overpassEmpty(),
       { match: urlContains("googleapis.com"), response: () => jsonResponse({}, 500) },
       {
         match: urlContains("api.geoapify.com"),
@@ -377,8 +412,9 @@ describe("discover — source chain", () => {
           }),
       },
     ]);
-    const { places, source } = await discover({ lat: 36.65, lng: 138.19, radiusKm: 5, types: ["park"] });
+    const { places, source, sources } = await discover({ lat: 36.65, lng: 138.19, radiusKm: 5, types: ["park"] });
     expect(source).toBe("overpass");
+    expect(sources).toEqual(["overpass"]);
     expect(places).toHaveLength(1);
   });
 
@@ -387,7 +423,7 @@ describe("discover — source chain", () => {
       id: "c1", source: "google", name: "Cached Park", lat: 36.65, lng: 138.19,
       tags: ["park"], openNow: null,
     });
-    mockFetch([{ match: () => true, response: () => jsonResponse({}, 500) }]);
+    mockFetch([overpassEmpty(), { match: () => true, response: () => jsonResponse({}, 500) }]);
     const { places, source } = await discover({ lat: 36.65, lng: 138.19, radiusKm: 5, types: ["park"] });
     expect(source).toBe("cache");
     expect(places[0].name).toBe("Cached Park");
@@ -398,9 +434,154 @@ describe("discover — source chain", () => {
       id: "c1", source: "google", name: "Cached Park", lat: 36.65, lng: 138.19,
       tags: ["park"], openNow: null,
     });
-    mockFetch([{ match: () => true, response: () => jsonResponse({}, 500) }]);
+    mockFetch([overpassEmpty(), { match: () => true, response: () => jsonResponse({}, 500) }]);
     const { places, source } = await discover({ lat: 36.65, lng: 138.19, radiusKm: 5, types: ["park", "museum"] });
     expect(source).toBe("cache");
     expect(places.map((p) => p.tags)).toEqual([["park"]]);
+  });
+
+  it("merges google + overpass in parallel (no more first-source-wins)", async () => {
+    mockFetch([
+      {
+        match: urlContains("googleapis.com"),
+        response: () =>
+          jsonResponse({
+            status: "OK",
+            results: [
+              { place_id: "g1", name: "Parque Central", geometry: { location: { lat: 36.65, lng: 138.19 } }, rating: 4.5 },
+              { place_id: "g2", name: "Jardín Este", geometry: { location: { lat: 36.66, lng: 138.2 } }, rating: 4.2 },
+            ],
+          }),
+      },
+      {
+        match: urlContains("interpreter"),
+        response: () =>
+          jsonResponse({
+            elements: [
+              { type: "node", id: 1, lat: 36.651, lon: 138.191, tags: { leisure: "park" } },
+              { type: "way", id: 2, center: { lat: 36.7, lon: 138.23 }, tags: { leisure: "park" } },
+            ],
+          }),
+      },
+    ]);
+    const { places, source, sources } = await discover({ lat: 36.65, lng: 138.19, radiusKm: 5, types: ["park"] });
+    // both OSM spots survive: the node is ~120m from g1 (outside the 60m
+    // proximity window) and the way is farther — google dominates by count
+    expect(source).toBe("google");
+    expect(sources).toEqual(["google", "overpass"]);
+    expect(places.length).toBe(4);
+  });
+
+  it("skips overpass entirely for keyword searches when a google key answered", async () => {
+    const fn = mockFetch([
+      {
+        match: urlContains("googleapis.com"),
+        response: () =>
+          jsonResponse({
+            status: "OK",
+            results: [
+              { place_id: "k1", name: "Neko Café Naru", geometry: { location: { lat: 36.65, lng: 138.19 } }, rating: 4.8 },
+            ],
+          }),
+      },
+      {
+        match: urlContains("interpreter"),
+        response: () => jsonResponse({ elements: [{ type: "node", id: 1, lat: 36.65, lon: 138.19, tags: { tourism: "attraction" } }] }),
+      },
+    ]);
+    const { sources } = await discover({
+      lat: 36.65, lng: 138.19, radiusKm: 5, types: ["food"],
+      keyword: "gatos",
+    });
+    expect(sources).toEqual(["google"]); // overpass results discarded
+    const interpreterCalls = fn.mock.calls.filter((c) => String(c[0]).includes("interpreter"));
+    expect(interpreterCalls).toHaveLength(0); // and never even started
+  });
+
+  it("drops an unrated OSM duplicate that sits next to a rated google place of the same type", async () => {
+    mockFetch([
+      {
+        match: urlContains("googleapis.com"),
+        response: () =>
+          jsonResponse({
+            status: "OK",
+            results: [
+              // rated park at the anchor point
+              { place_id: "g1", name: "Koen Park", geometry: { location: { lat: 36.65, lng: 138.19 } }, rating: 4.5 },
+            ],
+          }),
+      },
+      {
+        match: urlContains("interpreter"),
+        response: () =>
+          jsonResponse({
+            elements: [
+              // same park ~45m away in OSM, unrated, Japanese name
+              { type: "node", id: 77, lat: 36.6504, lon: 138.1904, tags: { leisure: "park", name: "公園" } },
+            ],
+          }),
+      },
+    ]);
+    const { places, sources } = await discover({ lat: 36.65, lng: 138.19, radiusKm: 5, types: ["park"] });
+    expect(places.map((p) => p.id)).toEqual(["g_g1"]);
+    expect(sources).toEqual(["google"]);
+  });
+
+  it("keeps a different-type place next to a rated one (park beside a restaurant)", async () => {
+    mockFetch([
+      {
+        match: urlContains("googleapis.com"),
+        response: () =>
+          jsonResponse({
+            status: "OK",
+            results: [
+              { place_id: "g1", name: "Ramen Ichiban", geometry: { location: { lat: 36.65, lng: 138.19 } }, rating: 4.3 },
+            ],
+          }),
+      },
+      {
+        match: urlContains("interpreter"),
+        response: () =>
+          jsonResponse({
+            elements: [
+              { type: "node", id: 88, lat: 36.6504, lon: 138.1904, tags: { leisure: "park" } },
+            ],
+          }),
+      },
+    ]);
+    const { places, sources } = await discover({ lat: 36.65, lng: 138.19, radiusKm: 5, types: ["food", "park"] });
+    expect(places.map((p) => p.id).sort()).toEqual(["g_g1", "o_node_88"]);
+    expect(sources).toEqual(["google", "overpass"]);
+  });
+
+  it("keeps the whole merged pool (no small cap) up to POOL_CAP", async () => {
+    const results = Array.from({ length: 25 }, (_, i) => ({
+      place_id: `g${i}`,
+      name: `Lugar ${i}`,
+      geometry: { location: { lat: 36.65 + i * 0.001, lng: 138.19 } },
+      rating: 4.0,
+    }));
+    mockFetch([
+      {
+        match: urlContains("googleapis.com"),
+        response: () => jsonResponse({ status: "OK", results }),
+      },
+      {
+        match: urlContains("interpreter"),
+        response: () =>
+          jsonResponse({
+            elements: Array.from({ length: 25 }, (_, i) => ({
+              type: "node" as const,
+              id: 100 + i,
+              lat: 36.65 + i * 0.001,
+              lon: 138.19 + 0.001,
+              tags: { leisure: "park" },
+            })),
+          }),
+      },
+    ]);
+    const { places, sources } = await discover({ lat: 36.65, lng: 138.19, radiusKm: 5, types: ["park"] });
+    expect(places.length).toBe(50);
+    expect(sources).toEqual(["google", "overpass"]);
   });
 });

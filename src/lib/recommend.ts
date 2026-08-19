@@ -20,6 +20,13 @@ export interface RecommendOptions extends RecommendInput {
 }
 
 /**
+ * How many places the user sees. "Llenar de opciones y que el usuario decida"
+ * is the product's core value — discovery now returns a big merged pool, so
+ * the UI shows a generous slice of the scored top instead of just 10.
+ */
+export const RESULT_LIMIT = 30;
+
+/**
  * Spread the top picks across experience types so a generic "discover" shows
  * variety (a park, a museum, a shrine, food...) instead of 10 similar places.
  * Within each type, score order is preserved; the global best still comes first.
@@ -83,7 +90,7 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
     ? [...keywordTokens(keyword), ...(translated && translated !== keyword ? keywordTokens(translated) : [])]
     : undefined;
 
-  const [weatherRaw, { places, source, keywordResults }] = await Promise.all([
+  const [weatherRaw, { places, source, keywordResults, sources }] = await Promise.all([
     getWeather(input.lat, input.lng),
     discover({
       lat: input.lat,
@@ -159,9 +166,9 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
     const rest = scored.filter(
       (p) => !p.fromKeyword && !p.reasons.some((r) => r.key === "keywordMatch")
     );
-    top = [...fromQuery, ...nameOnly, ...rest].slice(0, 10);
+    top = [...fromQuery, ...nameOnly, ...rest].slice(0, RESULT_LIMIT);
   } else {
-    top = diversify(scored, 10).sort(
+    top = diversify(scored, RESULT_LIMIT).sort(
       (a, b) => b.score - a.score || a.travelMin - b.travelMin
     );
   }
@@ -177,6 +184,7 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
     mode,
     sim: simulated !== null,
     source,
+    sources: sources ?? [source],
     candidates: candidates.length,
     filters: { closed: stats.closed, tooFar: stats.tooFar, nameMatches: stats.nameMatches },
     scored: top.length,
@@ -210,6 +218,7 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
     generatedAt: new Date().toISOString(),
     radiusKm,
     sourceNote: source,
+    sources: sources ?? [source],
     narrated: false,
     emptyReason,
     traceId,
