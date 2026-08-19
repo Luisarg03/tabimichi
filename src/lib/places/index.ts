@@ -45,14 +45,10 @@ function dedupe(places: Place[]): Place[] {
 /**
  * Second dedupe pass for near-duplicates with *different* spellings: OpenStreetMap
  * usually has the same place as Google a few meters away ("Ramen Ichiban" on both
- * sides, or a nameless OSM node next to Google's rated entry). A candidate is
- * dropped ONLY when it is really the same POI:
- *   - same normalized name within ~40 m (same place, both sources), or
- *   - a nameless OSM element (fallback name) beside a rated place of the same
- *     type (OSM simply has no name for that POI).
- * Deliberately NOT dropped: two differently-named places near each other — in a
- * dense street that's two real local businesses, and dropping them silently
- * removed exactly the nearby places the user wants to see.
+ * sides). A candidate is dropped only when it is really the same POI — the same
+ * normalized name within ~40 m. Two differently-named places near each other are
+ * deliberately NOT dropped: in a dense street that's two real local businesses,
+ * and dropping them silently removed exactly the nearby options the user wants.
  */
 const PROX_DUP_KM = 0.04;
 const SOURCE_PRIORITY: Record<string, number> = { google: 0, geoapify: 1, overpass: 2 };
@@ -61,7 +57,9 @@ function normName(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9\u3040-\u30ff\u4e00-\u9faf]+/g, "");
 }
 
-/** Overpass fallback name pattern: "Restaurante (node 123)", "Parque (way 9)". */
+/** Old Overpass fallback-name pattern ("Parque (node 123)", "Zona de compras
+ *  (way 9)") — bare coordinates with a generic label. Overpass no longer emits
+ *  these, but stale cache rows still carry them: hide them defensively. */
 function isFallbackName(name: string): boolean {
   return /^.+\([a-z]+ \d+\)$/.test(name.trim());
 }
@@ -76,9 +74,7 @@ function proximityDedupe(places: Place[]): Place[] {
     const isDup = kept.some((k) => {
       if (haversineKm(k, p) > PROX_DUP_KM) return false;
       if (!p.tags.some((t) => k.tags.includes(t))) return false; // different type = different POI
-      if (normName(p.name) === normName(k.name)) return true; // same place, same name
-      // nameless OSM element beside a rated place of the same type: same POI
-      return isFallbackName(p.name) && p.rating === undefined && k.rating !== undefined;
+      return normName(p.name) === normName(k.name); // same place, same name
     });
     if (!isDup) kept.push(p);
   }
@@ -121,8 +117,11 @@ export async function discover(
   if (!keyword) {
     const fresh = await freshNearby(lat, lng, radiusKm, typeIds, CACHE_TTL_MS);
     if (fresh && fresh.length > 0) {
-      // only return places that match the requested types
-      const matched = fresh.filter((p) => p.tags.some((t) => typeIds.includes(t)));
+      // only return places that match the requested types (and hide stale
+      // generic-named rows, e.g. "Parque (way 123)" cached before the fix)
+      const matched = fresh.filter(
+        (p) => !isFallbackName(p.name) && p.tags.some((t) => typeIds.includes(t))
+      );
       if (matched.length > 0) return { places: matched, source: "cache", sources: ["cache"] };
     }
   }
@@ -151,8 +150,11 @@ export async function discover(
   const geoapifyPlaces = geo.status === "fulfilled" ? geo.value : [];
   const overpassPlaces = ov.status === "fulfilled" ? ov.value : [];
 
-  // merge: higher-priority sources first so proximity dedupe keeps the richer record
-  const all = [...googlePlaces, ...geoapifyPlaces, ...overpassPlaces];
+  // merge: higher-priority sources first so proximity dedupe keeps the richer
+  // record; generic-named rows (stale cache "Parque (way 123)") are hidden
+  const all = [...googlePlaces, ...geoapifyPlaces, ...overpassPlaces].filter(
+    (p) => !isFallbackName(p.name)
+  );
   let bounded = proximityDedupe(dedupe(all)).filter(
     (p) => haversineKm({ lat, lng }, p) <= radiusKm * 1.5
   );
@@ -162,7 +164,9 @@ export async function discover(
   let fromCache = false;
   if (bounded.length === 0 && !keyword) {
     const cached = await cachedNear(lat, lng, radiusKm * 2);
-    bounded = types.length > 0 ? cached.filter((p) => p.tags.some((t) => types.includes(t))) : cached;
+    const matched = (types.length > 0 ? cached.filter((p) => p.tags.some((t) => types.includes(t))) : cached)
+      .filter((p) => !isFallbackName(p.name));
+    bounded = matched;
     fromCache = bounded.length > 0;
   }
 

@@ -267,7 +267,7 @@ describe("geoapifySearch", () => {
 describe("overpassSearch", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it("assigns types by tag match and falls back to a generic name", async () => {
+  it("assigns types by tag match and keeps only NAMED elements", async () => {
     mockFetch([
       {
         match: urlContains("interpreter"),
@@ -275,8 +275,8 @@ describe("overpassSearch", () => {
           jsonResponse({
             elements: [
               { type: "node", id: 1, lat: 36.65, lon: 138.19, tags: { leisure: "hot_spring", name: "Kame no Yu" } },
-              { type: "node", id: 2, lat: 36.66, lon: 138.2, tags: { tourism: "viewpoint" } },
-              { type: "way", id: 3, center: { lat: 36.67, lon: 138.21 }, tags: { leisure: "park" } },
+              { type: "node", id: 2, lat: 36.66, lon: 138.2, tags: { tourism: "viewpoint", name: "Lookout Hill" } },
+              { type: "way", id: 3, center: { lat: 36.67, lon: 138.21 }, tags: { leisure: "park", name: "Koen Park" } },
             ],
           }),
       },
@@ -286,7 +286,26 @@ describe("overpassSearch", () => {
     expect(places.find((p) => p.id === "o_node_1")?.tags).toEqual(["onsen"]);
     expect(places.find((p) => p.id === "o_node_2")?.tags).toEqual(["viewpoint"]);
     expect(places.find((p) => p.id === "o_way_3")?.tags).toEqual(["park"]);
-    expect(places.find((p) => p.id === "o_node_2")?.name).toContain("Mirador"); // fallback name
+    expect(places.find((p) => p.id === "o_node_2")?.name).toBe("Lookout Hill");
+  });
+
+  it("excludes nameless OSM elements (a bare coordinate is not a POI)", async () => {
+    mockFetch([
+      {
+        match: urlContains("interpreter"),
+        response: () =>
+          jsonResponse({
+            elements: [
+              { type: "node", id: 1, lat: 36.65, lon: 138.19, tags: { leisure: "park", name: "Koen Park" } },
+              // no name → dropped (was "Parque (node 2)" before the fix)
+              { type: "node", id: 2, lat: 36.66, lon: 138.2, tags: { leisure: "park" } },
+              { type: "way", id: 3, center: { lat: 36.67, lon: 138.21 }, tags: { leisure: "park" } },
+            ],
+          }),
+      },
+    ]);
+    const places = await overpassSearch(resolveTypes(["park"]), 36.65, 138.19, 5000);
+    expect(places.map((p) => p.id)).toEqual(["o_node_1"]);
   });
 
   it("sends a single combined query with every tag spec and per-type output caps", async () => {
@@ -408,7 +427,7 @@ describe("discover — merged multi-source chain", () => {
         match: urlContains("interpreter"),
         response: () =>
           jsonResponse({
-            elements: [{ type: "node", id: 9, lat: 36.65, lon: 138.19, tags: { leisure: "park" } }],
+            elements: [{ type: "node", id: 9, lat: 36.65, lon: 138.19, tags: { leisure: "park", name: "Koen Park" } }],
           }),
       },
     ]);
@@ -458,8 +477,8 @@ describe("discover — merged multi-source chain", () => {
         response: () =>
           jsonResponse({
             elements: [
-              { type: "node", id: 1, lat: 36.651, lon: 138.191, tags: { leisure: "park" } },
-              { type: "way", id: 2, center: { lat: 36.7, lon: 138.23 }, tags: { leisure: "park" } },
+              { type: "node", id: 1, lat: 36.651, lon: 138.191, tags: { leisure: "park", name: "Miyashita Park" } },
+              { type: "way", id: 2, center: { lat: 36.7, lon: 138.23 }, tags: { leisure: "park", name: "Ueno Park" } },
             ],
           }),
       },
@@ -525,31 +544,18 @@ describe("discover — merged multi-source chain", () => {
     expect(sources).toEqual(["google"]);
   });
 
-  it("drops a nameless OSM node (fallback name) beside the rated entry", async () => {
-    mockFetch([
-      {
-        match: urlContains("googleapis.com"),
-        response: () =>
-          jsonResponse({
-            status: "OK",
-            results: [
-              { place_id: "g1", name: "Koen Park", geometry: { location: { lat: 36.65, lng: 138.19 } }, rating: 4.5 },
-            ],
-          }),
-      },
-      {
-        match: urlContains("interpreter"),
-        response: () =>
-          jsonResponse({
-            elements: [
-              { type: "node", id: 77, lat: 36.6502, lon: 138.1902, tags: { leisure: "park" } },
-            ],
-          }),
-      },
-    ]);
-    const { places, sources } = await discover({ lat: 36.65, lng: 138.19, radiusKm: 5, types: ["park"] });
-    expect(places.map((p) => p.id)).toEqual(["g_g1"]);
-    expect(sources).toEqual(["google"]);
+  it("hides stale cache rows with generic fallback names (pre-fix data)", async () => {
+    await upsertPlace({
+      id: "stale1", source: "overpass", name: "Parque (node 11104266343)", lat: 36.65, lng: 138.19,
+      tags: ["park"], openNow: null,
+    });
+    await upsertPlace({
+      id: "good1", source: "overpass", name: "Miyashita Park", lat: 36.65, lng: 138.19,
+      tags: ["park"], openNow: null,
+    });
+    mockFetch([overpassEmpty(), { match: () => true, response: () => jsonResponse({}, 500) }]);
+    const { places } = await discover({ lat: 36.65, lng: 138.19, radiusKm: 5, types: ["park"] });
+    expect(places.map((p) => p.name)).toEqual(["Miyashita Park"]);
   });
 
   it("keeps a differently-named place of the same type next to a rated one (dense cluster)", async () => {
@@ -597,7 +603,7 @@ describe("discover — merged multi-source chain", () => {
         response: () =>
           jsonResponse({
             elements: [
-              { type: "node", id: 88, lat: 36.6504, lon: 138.1904, tags: { leisure: "park" } },
+              { type: "node", id: 88, lat: 36.6504, lon: 138.1904, tags: { leisure: "park", name: "Chuo Park" } },
             ],
           }),
       },
@@ -628,7 +634,7 @@ describe("discover — merged multi-source chain", () => {
               id: 100 + i,
               lat: 36.65 + i * 0.001,
               lon: 138.19 + 0.001,
-              tags: { leisure: "park" },
+              tags: { leisure: "park", name: `Pocket Park ${i}` },
             })),
           }),
       },
