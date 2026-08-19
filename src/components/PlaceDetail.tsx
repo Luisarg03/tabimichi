@@ -4,7 +4,7 @@ import type { Reason, ScoredPlace } from "@/lib/types";
 import { EXPERIENCE_TYPE_MAP } from "@/lib/places/taxonomy";
 import { useI18n } from "@/lib/i18n";
 import { fmtCount } from "@/lib/format";
-import { dirsUrl as dirsUrlFor, placeUrl as placeUrlFor, placeQueryFor } from "@/lib/maps-urls";
+import { dirsUrl as dirsUrlFor, placeUrl as placeUrlFor } from "@/lib/maps-urls";
 import PlaceGallery from "@/components/PlaceGallery";
 
 function renderReason(r: Reason, t: ReturnType<typeof useI18n>["t"]): string {
@@ -41,9 +41,9 @@ export default function PlaceDetail({
 }) {
   const { t } = useI18n();
   const googlePlaceId = place.id.startsWith("g_") ? place.id.slice(2) : null;
-  const query = placeQueryFor(googlePlaceId, place.lat, place.lng);
-  const dirsUrl = dirsUrlFor({ lat: origin.lat, lng: origin.lng }, query, mode);
-  const mapsUrl = placeUrlFor(query);
+  const mapsPlace = { name: place.name, googlePlaceId, lat: place.lat, lng: place.lng };
+  const dirsUrl = dirsUrlFor({ lat: origin.lat, lng: origin.lng }, mapsPlace, mode);
+  const mapsUrl = placeUrlFor(mapsPlace);
   const photoRefs = place.photoRefs && place.photoRefs.length > 0 ? place.photoRefs : place.photoRef ? [place.photoRef] : [];
 
   return (

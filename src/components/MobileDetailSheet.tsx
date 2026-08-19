@@ -5,8 +5,13 @@ import type { ScoredPlace } from "@/lib/types";
 import { useI18n } from "@/lib/i18n";
 import PlaceDetail from "@/components/PlaceDetail";
 
-/** Mobile place-detail sheet: full-height overlay above the results sheet,
- *  swipe-down (or ✕) to close. */
+/**
+ * Mobile place-detail sheet: a BOTTOM sheet that leaves the top of the map
+ * visible and interactive — tap another marker and the sheet switches to it
+ * (no back-and-forth). Swipe-down (or ✕) to close. The container is
+ * pointer-events-none so taps above the sheet reach the map; only the sheet
+ * itself captures pointer events.
+ */
 export default function MobileDetailSheet({
   place,
   origin,
@@ -30,20 +35,14 @@ export default function MobileDetailSheet({
   const [closing, setClosing] = useState(false);
 
   return (
-    <div className="fixed inset-0 z-40">
-      <div
-        className="absolute inset-0 bg-black/30"
-        onClick={onClose}
-        aria-hidden
-        style={{ opacity: 1 - Math.min(0.6, dy / 500) }}
-      />
+    <div className="pointer-events-none fixed inset-0 z-40">
       <div
         role="dialog"
         aria-label={place.name}
-        className={`absolute inset-x-0 bottom-0 flex flex-col overflow-hidden rounded-t-2xl bg-white shadow-panel-lg ${
+        className={`pointer-events-auto absolute inset-x-0 bottom-0 flex flex-col overflow-hidden rounded-t-2xl bg-white shadow-panel-lg ${
           closing ? "transition-transform duration-200" : "tabi-rise-in"
         }`}
-        style={{ height: "100dvh", transform: `translateY(${Math.max(0, dy)}px)` }}
+        style={{ height: "75dvh", transform: `translateY(${Math.max(0, dy)}px)` }}
       >
         {/* top bar: drag-to-close + back button */}
         <div
