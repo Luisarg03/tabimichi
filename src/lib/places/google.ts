@@ -194,6 +194,52 @@ function isNoiseForType(r: GoogleResult, type: ExperienceType): boolean {
 }
 
 /**
+ * Google result `types` → experience types. Google's text search is fuzzy: the
+ * food query "local food restaurant" can return a park (Wakasato Park has
+ * types ["park", "tourist_attraction", …]). A result whose Google types map to
+ * experience types OTHER than the one being searched is a fuzzy mismatch —
+ * drop it instead of mis-tagging (a park shown as 🍜 Comida). Results with no
+ * mapping (e.g. only ["point_of_interest", "establishment"]) are ambiguous →
+ * kept, tagged with the searched type as before.
+ */
+const GOOGLE_TYPE_TO_EXPERIENCE: Record<string, string[]> = {
+  park: ["park", "sakura", "trekking"],
+  garden: ["park"],
+  tourist_attraction: ["viewpoint", "trekking", "sakura"],
+  natural_feature: ["viewpoint", "trekking"],
+  museum: ["museum"],
+  art_gallery: ["museum"],
+  restaurant: ["food"],
+  food: ["food", "market"],
+  cafe: ["food"],
+  bar: ["food", "nightlife"],
+  night_club: ["nightlife"],
+  bakery: ["food"],
+  meal_takeaway: ["food"],
+  meal_delivery: ["food"],
+  supermarket: ["market"],
+  shopping_mall: ["market", "shopping"],
+  department_store: ["shopping"],
+  clothing_store: ["shopping"],
+  store: ["market", "shopping"],
+  spa: ["onsen"],
+  place_of_worship: ["temple"],
+  church: ["temple"],
+  hindu_temple: ["temple"],
+  mosque: ["temple"],
+  synagogue: ["temple"],
+};
+
+function contradictsType(gr: GoogleResult, type: ExperienceType): boolean {
+  const compatible = new Set<string>();
+  for (const gt of gr.types ?? []) {
+    for (const et of GOOGLE_TYPE_TO_EXPERIENCE[gt] ?? []) compatible.add(et);
+  }
+  if (compatible.size === 0) return false; // ambiguous → keep
+  return !compatible.has(type.id);
+}
+
+/**
  * Google Places discovery for one experience type:
  * text search + nearby search (when the type maps to a category), merged & deduped.
  */
@@ -236,6 +282,9 @@ export async function googleSearch(
     for (const [idx, gr] of r.value.entries()) {
       if (gr.business_status && gr.business_status !== "OPERATIONAL") continue;
       if (isNoiseForType(gr, type)) continue;
+      // Google's text search is fuzzy — a result whose own types contradict
+      // the searched type (a park in a food query) would be mis-tagged
+      if (contradictsType(gr, type)) continue;
       if (jobs[i].fromKeyword && idx >= kwRank) continue;
       if (seen.has(gr.place_id)) continue;
       seen.add(gr.place_id);
