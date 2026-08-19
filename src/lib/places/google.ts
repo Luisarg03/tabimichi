@@ -288,6 +288,77 @@ interface DetailsResponse {
   };
 }
 
+/**
+ * Reconcile an OSM/Geoapify place against Google so it can carry Google's
+ * photos + rating. Two strategies:
+ *   1. Location-first: Nearby Search at the OSM point (50 m) — the nearest
+ *      candidate within ~40 m is the same POI even when the NAME differs
+ *      (OSM "龍昇園" vs Google "Chinese restaurant Shortuen" at 6 m).
+ *   2. Name fallback: Text Search `"<name>" near lat,lng` strictbounds — the
+ *      matched Google result must sit within `maxDistM` of the OSM point.
+ * Returns null when Google has no such place.
+ */
+export async function googleReconcile(
+  apiKey: string,
+  name: string,
+  lat: number,
+  lng: number,
+  maxDistM = 250
+): Promise<GoogleResult | null> {
+  // 1) location-first: nearest nearby candidate within ~40 m
+  try {
+    const params = new URLSearchParams({
+      location: `${lat.toFixed(5)},${lng.toFixed(5)}`,
+      radius: "50",
+      key: apiKey,
+    });
+    const res = await fetch(
+      `https://maps.googleapis.com/maps/api/place/nearbysearch/json?${params}`,
+      { signal: AbortSignal.timeout(20000) }
+    );
+    if (res.ok) {
+      const data = (await res.json()) as GoogleResponse;
+      if (data.status === "OK" && data.results?.length) {
+        let best: { d: number; r: GoogleResult } | null = null;
+        for (const r of data.results) {
+          const d = Math.hypot(
+            (r.geometry.location.lat - lat) * 111.32,
+            (r.geometry.location.lng - lng) * 90.6
+          );
+          if (d <= 0.04 && (!best || d < best.d)) best = { d, r };
+        }
+        if (best) return best.r;
+      }
+    }
+  } catch {
+    // fall through to the name search
+  }
+
+  // 2) name fallback: Text Search with strictbounds keeps Google's own result
+  const params = new URLSearchParams({
+    query: `${name} near ${lat.toFixed(4)},${lng.toFixed(4)}`,
+    location: `${lat.toFixed(5)},${lng.toFixed(5)}`,
+    radius: String(Math.min(Math.max(maxDistM, 200), 2000)),
+    strictbounds: "true",
+    key: apiKey,
+  });
+  const res = await fetch(
+    `https://maps.googleapis.com/maps/api/place/textsearch/json?${params}`,
+    { signal: AbortSignal.timeout(20000) }
+  );
+  if (!res.ok) throw new Error(`reconcile-http-${res.status}`);
+  const data = (await res.json()) as GoogleResponse;
+  if (data.status !== "OK" || !data.results?.length) return null;
+  const hit = data.results[0];
+  // sanity: the matched geometry must be near the OSM point (d in km)
+  const dKm = Math.hypot(
+    (hit.geometry.location.lat - lat) * 111.32,
+    (hit.geometry.location.lng - lng) * 90.6
+  );
+  if (dKm * 1000 > maxDistM) return null;
+  return hit;
+}
+
 /** Google photo bytes (follows the CDN redirect). Shared by proxy + enrichment. */
 export async function googlePhotoBytes(
   apiKey: string,

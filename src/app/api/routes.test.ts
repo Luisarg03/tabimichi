@@ -9,7 +9,7 @@ import { GET as photosGET } from "@/app/api/photos/route";
 import { GET as logsGET } from "@/app/api/logs/route";
 import { geocodeVariants } from "@/app/api/geocode/route";
 import { logEntry } from "@/lib/logger";
-import { upsertPlace, setAdminForTests } from "@/lib/cache";
+import { upsertPlace, placeById, setAdminForTests } from "@/lib/cache";
 import { clearWeatherCache } from "@/lib/weather";
 import { mockFetch, jsonResponse, imageResponse, urlContains, isolatedStore } from "@/test-utils/helpers";
 import { makeSupabaseFake } from "@/test-utils/supabase-fake";
@@ -375,6 +375,52 @@ describe("/api/photos", () => {
     const body2 = await second.json();
     expect(body2.photos.g_d1).toEqual(["r1", "r2", "r3", "r4"]);
     expect(detailsCalls).toBe(1); // verified → Place Details skipped
+  });
+
+  it("reconciles an OSM place against Google: photos + rating for the next search", async () => {
+    await upsertPlace({
+      id: "o_node_1", source: "overpass", name: "Ramen Ichiban", lat: 36.65, lng: 138.19,
+      tags: ["food"], openNow: null,
+    });
+    mockFetch([
+      {
+        match: urlContains("nearbysearch"),
+        response: () =>
+          jsonResponse({
+            status: "OK",
+            results: [
+              {
+                place_id: "gx1",
+                name: "Ramen Ichiban",
+                geometry: { location: { lat: 36.6501, lng: 138.1901 } },
+                rating: 4.5,
+                user_ratings_total: 321,
+                photos: [{ photo_reference: "rx1" }, { photo_reference: "rx2" }],
+              },
+            ],
+          }),
+      },
+      {
+        match: urlContains("details/json"),
+        response: () =>
+          jsonResponse({
+            status: "OK",
+            result: { photos: [{ photo_reference: "rx3" }] },
+          }),
+      },
+      {
+        match: urlContains("place/photo"),
+        response: () => imageResponse([1, 2, 3]),
+      },
+    ]);
+    const res = await photosGET(new NextRequest("http://localhost/api/photos?ids=o_node_1"));
+    const body = await res.json();
+    expect(body.photos.o_node_1).toEqual(["rx1", "rx2", "rx3"]);
+    // the cached row now carries the Google rating/reviews for the next search
+    const row = await placeById("o_node_1");
+    expect(row?.rating).toBe(4.5);
+    expect(row?.userRatingsTotal).toBe(321);
+    expect(row?.photoRefs).toEqual(["rx1", "rx2", "rx3"]);
   });
 });
 

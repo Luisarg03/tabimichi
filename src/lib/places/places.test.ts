@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { googleSearch } from "@/lib/places/google";
+import { googleSearch, googleReconcile } from "@/lib/places/google";
 import { geoapifySearch } from "@/lib/places/geoapify";
 import { overpassSearch, MIRRORS } from "@/lib/places/overpass";
 import { discover } from "@/lib/places";
@@ -158,6 +158,79 @@ describe("googleSearch", () => {
     expect(nearby).toHaveLength(2);
     expect(nearby.some((u) => u.includes("type=restaurant"))).toBe(true);
     expect(nearby.some((u) => u.includes("type=food"))).toBe(true);
+  });
+
+  it("reconciles an OSM place via nearby search (location-first, name agnostic)", async () => {
+    mockFetch([
+      {
+        match: urlContains("nearbysearch"),
+        response: () =>
+          jsonResponse({
+            status: "OK",
+            results: [
+              // OSM "龍昇園" vs Google "Chinese restaurant Shortuen" at 6 m
+              { place_id: "g1", name: "Chinese restaurant Shortuen", geometry: { location: { lat: 36.630146, lng: 138.191154 } }, rating: 3.6 },
+              // farther away → not chosen
+              { place_id: "g2", name: "Dōro", geometry: { location: { lat: 36.63045, lng: 138.1911 } } },
+            ],
+          }),
+      },
+    ]);
+    const hit = await googleReconcile(KEY, "龍昇園", 36.6302, 138.1911);
+    expect(hit?.place_id).toBe("g1"); // the 6 m candidate, name differs
+  });
+
+  it("falls back to name search when nothing is within 40 m", async () => {
+    mockFetch([
+      {
+        match: urlContains("nearbysearch"),
+        response: () => jsonResponse({ status: "OK", results: [] }),
+      },
+      {
+        match: urlContains("textsearch"),
+        response: () =>
+          jsonResponse({
+            status: "OK",
+            results: [
+              { place_id: "g1", name: "Ramen Ichiban", geometry: { location: { lat: 36.65, lng: 138.19 } }, rating: 4.5 },
+            ],
+          }),
+      },
+    ]);
+    const hit = await googleReconcile(KEY, "Ramen Ichiban", 36.65, 138.19);
+    expect(hit?.place_id).toBe("g1");
+
+    // a Google hit far from the OSM point is NOT the same place → null
+    mockFetch([
+      {
+        match: urlContains("nearbysearch"),
+        response: () => jsonResponse({ status: "OK", results: [] }),
+      },
+      {
+        match: urlContains("textsearch"),
+        response: () =>
+          jsonResponse({
+            status: "OK",
+            results: [
+              { place_id: "g9", name: "Ramen Ichiban", geometry: { location: { lat: 36.9, lng: 138.5 } } },
+            ],
+          }),
+      },
+    ]);
+    expect(await googleReconcile(KEY, "Ramen Ichiban", 36.65, 138.19)).toBeNull();
+
+    // Google knows nothing → null
+    mockFetch([
+      {
+        match: urlContains("nearbysearch"),
+        response: () => jsonResponse({ status: "OK", results: [] }),
+      },
+      {
+        match: urlContains("textsearch"),
+        response: () => jsonResponse({ status: "ZERO_RESULTS", results: [] }),
+      },
+    ]);
+    expect(await googleReconcile(KEY, "Ramen Ichiban", 36.65, 138.19)).toBeNull();
   });
 
   it("drops hotels (lodging) from food results but keeps ryokan-onsen", async () => {

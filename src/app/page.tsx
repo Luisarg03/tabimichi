@@ -199,13 +199,11 @@ export default function HomePage() {
         setResult(data);
         setLoading(false);
 
-        // photo enrichment (async, non-blocking): search APIs give ~1 photo,
-        // Place Details up to 8 — cards update when the refs arrive.
-        // Enrich only photo-capable places (google-sourced): OSM/Geoapify
-        // places have no photo source, so they'd waste the enrichment slots.
+        // photo enrichment (async, non-blocking): google-sourced places get
+        // their refs topped up to 6; OSM/Geoapify places are reconciled
+        // against Google by name+coords so they get Google photos too.
         if (data.places.length > 0) {
           const topIds = data.places
-            .filter((p) => (p.photoRefs?.length ?? 0) > 0 || Boolean(p.photoRef))
             .slice(0, 12)
             .map((p) => p.id)
             .join(",");
