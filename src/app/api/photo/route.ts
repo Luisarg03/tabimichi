@@ -1,53 +1,66 @@
 import { NextRequest, NextResponse } from "next/server";
-import { existsSync, statSync } from "node:fs";
-import { getConfig } from "@/lib/settings";
 import { googlePhotoBytes } from "@/lib/places/google";
-import { photoCachePath, readCachedPhoto, writeCachedPhoto, CACHE_TTL_MS } from "@/lib/photos";
+import { readCachedPhoto, writeCachedPhoto } from "@/lib/cache";
 import { enforceRateLimit } from "@/lib/security";
+import { getUserKeys } from "@/lib/user-keys";
 
 export const runtime = "nodejs";
+// allow slow external calls (Overpass, Google, LLM) past the default function timeout
+export const maxDuration = 60;
+
+/** 1×1 transparent GIF — served whenever a photo is unavailable (no key,
+ *  broken key, expired ref). Photo proxying is best-effort: a missing image
+ *  must never be an HTTP error (broken-image icons, console noise). */
+const TRANSPARENT_GIF = Buffer.from(
+  "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+  "base64"
+);
+
+function gifResponse(): Response {
+  return new Response(new Uint8Array(TRANSPARENT_GIF), {
+    headers: { "Content-Type": "image/gif", "Cache-Control": "public, max-age=86400" },
+  });
+}
+
+function jpegResponse(buf: Buffer): Response {
+  return new Response(new Uint8Array(buf), {
+    headers: { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=86400" },
+  });
+}
 
 /**
- * Google Places photo proxy with on-disk cache.
- * The API key never reaches the client: we fetch the photo server-side
- * (counts against the $200 monthly credit), cache it under data/photos/,
- * and serve the cached file afterwards. One fetch per photo, then local.
+ * Google Places photo proxy with a shared Supabase Storage cache.
+ * BYOK: with a session, the requesting user's own Google key is used (they
+ * control what they spend); anonymous requests are keyless (placeholder).
+ * Each photo is downloaded once (whoever fetches it first) and served from
+ * the shared cache afterwards — no per-user re-fetch, no quota burn.
  */
 export async function GET(req: NextRequest) {
   const ref = req.nextUrl.searchParams.get("ref");
   const id = req.nextUrl.searchParams.get("id") ?? "photo";
   if (!ref) return NextResponse.json({ error: "ref required" }, { status: 400 });
 
-  // Image loads can be frequent (gallery thumbnails); bound proxy abuse that
-  // would burn the operator's Google quota on cache misses.
+  // Image loads can be frequent (gallery thumbnails); bound proxy abuse.
   const limited = enforceRateLimit(req, "photo", { perIp: 120 });
   if (limited) return limited;
 
-  const cachePath = photoCachePath(id, ref);
+  const cached = await readCachedPhoto(id, ref);
+  if (cached) return jpegResponse(cached);
 
-  // serve from disk cache when fresh
-  if (existsSync(cachePath)) {
-    const age = Date.now() - statSync(cachePath).mtimeMs;
-    if (age < CACHE_TTL_MS) {
-      const buf = readCachedPhoto(cachePath);
-      if (buf) {
-        return new Response(new Uint8Array(buf), {
-          headers: { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=86400" },
-        });
-      }
-    }
+  const config = await getUserKeys(req);
+  const key = config.googlePlacesApiKey;
+  if (!key) {
+    // No key (anonymous) → transparent placeholder. Nothing is cached —
+    // a later keyed session proxies for real.
+    return gifResponse();
   }
-
-  const key = getConfig().googlePlacesApiKey;
-  if (!key) return NextResponse.json({ error: "no key" }, { status: 503 });
 
   try {
     const buf = await googlePhotoBytes(key, ref);
-    writeCachedPhoto(cachePath, buf);
-    return new Response(new Uint8Array(buf), {
-      headers: { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=86400" },
-    });
+    await writeCachedPhoto(id, ref, buf);
+    return jpegResponse(buf);
   } catch {
-    return NextResponse.json({ error: "photo_fetch_failed" }, { status: 502 });
+    // Broken key / expired photo ref → graceful placeholder, never an error.
+    return gifResponse();
   }
 }

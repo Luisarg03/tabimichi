@@ -15,10 +15,8 @@ import { translateEsEn } from "./translate";
 type Candidate = Place & { periods?: OpenPeriod[] };
 
 export interface RecommendOptions extends RecommendInput {
-  /** per-user API keys — avoids reading from shared process.env */
+  /** the requesting user's API keys (BYOK) — empty for anonymous */
   config?: AppConfig;
-  /** true when `config` came from operator env vars (endpoints trusted) */
-  trustedEndpoint?: boolean;
 }
 
 /**
@@ -95,7 +93,6 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
       lang: input.lang,
       keyword: searchTerm,
       config: input.config,
-      trustedEndpoint: input.trustedEndpoint,
     }),
   ]);
 

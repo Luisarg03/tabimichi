@@ -1,11 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { googleSearch } from "@/lib/places/google";
 import { geoapifySearch } from "@/lib/places/geoapify";
-import { overpassSearch } from "@/lib/places/overpass";
+import { overpassSearch, MIRRORS } from "@/lib/places/overpass";
 import { discover } from "@/lib/places";
 import { resolveTypes } from "@/lib/places/taxonomy";
-import { upsertPlace } from "@/lib/db";
+import { upsertPlace, setAdminForTests } from "@/lib/cache";
 import { mockFetch, jsonResponse, urlContains, isolatedStore } from "@/test-utils/helpers";
+import { makeSupabaseFake } from "@/test-utils/supabase-fake";
 
 const KEY = "AIza-test";
 
@@ -278,7 +279,9 @@ describe("overpassSearch", () => {
       },
     ]);
     await overpassSearch(resolveTypes(["onsen", "temple"]), 36.65, 138.19, 5000);
-    expect(fn).toHaveBeenCalledTimes(1); // one combined query, not one per type
+    // one combined query per mirror; an empty mirror no longer short-circuits
+    // the failover (osm.ch is thin for Asia — later mirrors may have data)
+    expect(fn).toHaveBeenCalledTimes(MIRRORS.length);
     const called = fn.mock.calls[0];
     const sent = decodeURIComponent(String(called[1]?.body ?? ""));
     expect(sent).toContain('leisure="hot_spring"');
@@ -288,8 +291,15 @@ describe("overpassSearch", () => {
 });
 
 describe("discover — source chain", () => {
+  let sb: ReturnType<typeof makeSupabaseFake>;
+
   beforeEach(() => {
     isolatedStore();
+    // discover() reads/writes the shared cache via Supabase — install an
+    // in-memory fake (one per test) so cache checks are deterministic and no
+    // real client is ever constructed in unit tests.
+    sb = makeSupabaseFake();
+    setAdminForTests(() => sb.fake as never);
     process.env.GOOGLE_PLACES_API_KEY = KEY;
     process.env.GEOAPIFY_API_KEY = "geo-key";
   });
@@ -373,7 +383,7 @@ describe("discover — source chain", () => {
   });
 
   it("serves the local cache when everything fails and it covers the types", async () => {
-    upsertPlace({
+    await upsertPlace({
       id: "c1", source: "google", name: "Cached Park", lat: 36.65, lng: 138.19,
       tags: ["park"], openNow: null,
     });
@@ -384,7 +394,7 @@ describe("discover — source chain", () => {
   });
 
   it("returns whatever cache matches when live sources fail and coverage is partial", async () => {
-    upsertPlace({
+    await upsertPlace({
       id: "c1", source: "google", name: "Cached Park", lat: 36.65, lng: 138.19,
       tags: ["park"], openNow: null,
     });
