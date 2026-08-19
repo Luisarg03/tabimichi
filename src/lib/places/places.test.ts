@@ -558,6 +558,72 @@ describe("discover — merged multi-source chain", () => {
     expect(places.map((p) => p.name)).toEqual(["Miyashita Park"]);
   });
 
+  it("collapses a same-name copy ~85 m away (Geoapify/OSM offset)", async () => {
+    mockFetch([
+      {
+        match: urlContains("googleapis.com"),
+        response: () =>
+          jsonResponse({
+            status: "OK",
+            results: [
+              { place_id: "g1", name: "Ramen Ichiban", geometry: { location: { lat: 36.65, lng: 138.19 } }, rating: 4.3 },
+            ],
+          }),
+      },
+      {
+        match: urlContains("interpreter"),
+        response: () =>
+          jsonResponse({
+            elements: [
+              { type: "node", id: 55, lat: 36.6506, lon: 138.1906, tags: { amenity: "restaurant", name: "Ramen Ichiban" } },
+            ],
+          }),
+      },
+    ]);
+    const { places } = await discover({ lat: 36.65, lng: 138.19, radiusKm: 5, types: ["food"] });
+    expect(places.map((p) => p.id)).toEqual(["g_g1"]); // collapsed
+  });
+
+  it("keeps same-name places ~185 m apart (two real branches)", async () => {
+    mockFetch([
+      {
+        match: urlContains("googleapis.com"),
+        response: () =>
+          jsonResponse({
+            status: "OK",
+            results: [
+              { place_id: "g1", name: "Ramen Ichiban", geometry: { location: { lat: 36.65, lng: 138.19 } }, rating: 4.3 },
+            ],
+          }),
+      },
+      {
+        match: urlContains("interpreter"),
+        response: () =>
+          jsonResponse({
+            elements: [
+              { type: "node", id: 55, lat: 36.6513, lon: 138.1913, tags: { amenity: "restaurant", name: "Ramen Ichiban" } },
+            ],
+          }),
+      },
+    ]);
+    const { places } = await discover({ lat: 36.65, lng: 138.19, radiusKm: 5, types: ["food"] });
+    expect(places.map((p) => p.id).sort()).toEqual(["g_g1", "o_node_55"]);
+  });
+
+  it("dedupes same-name copies when serving from cache (pre-fix data)", async () => {
+    await upsertPlace({
+      id: "g1", source: "google", name: "Ramen Ichiban", lat: 36.65, lng: 138.19,
+      tags: ["food"], openNow: null, rating: 4.3,
+    });
+    await upsertPlace({
+      id: "o1", source: "overpass", name: "Ramen Ichiban", lat: 36.6506, lng: 138.1906,
+      tags: ["food"], openNow: null,
+    });
+    mockFetch([{ match: () => true, response: () => jsonResponse({}, 500) }]);
+    const { places } = await discover({ lat: 36.65, lng: 138.19, radiusKm: 5, types: ["food"] });
+    expect(places.map((p) => p.id)).toEqual(["g1"]); // richer copy kept, cache ids have no prefix
+  });
+
   it("keyed user re-discovers when the cached pool has no google data", async () => {
     // an anonymous search cached an OSM-only pool for this area
     await upsertPlace({

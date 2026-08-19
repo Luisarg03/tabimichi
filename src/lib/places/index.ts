@@ -48,14 +48,17 @@ function dedupe(places: Place[]): Place[] {
 }
 
 /**
- * Second dedupe pass for near-duplicates with *different* spellings: OpenStreetMap
- * usually has the same place as Google a few meters away ("Ramen Ichiban" on both
- * sides). A candidate is dropped only when it is really the same POI — the same
- * normalized name within ~40 m. Two differently-named places near each other are
- * deliberately NOT dropped: in a dense street that's two real local businesses,
- * and dropping them silently removed exactly the nearby options the user wants.
+ * Second dedupe pass for near-duplicates with *different* spellings: the same
+ * POI arrives from several sources (Google, Geoapify, Overpass) with the same
+ * name but slightly offset coordinates — Geoapify snaps to building centroids
+ * while OSM reports the node, so the copies can sit 40–100 m apart. A
+ * candidate is dropped only when it is really the same POI: the same
+ * normalized name within ~100 m AND the same type. Two differently-named
+ * places near each other are deliberately NOT dropped — in a dense street
+ * that's two real local businesses, and dropping them silently removed
+ * exactly the nearby options the user wants.
  */
-const PROX_DUP_KM = 0.04;
+const SAME_NAME_DUP_KM = 0.1;
 const SOURCE_PRIORITY: Record<string, number> = { google: 0, geoapify: 1, overpass: 2 };
 
 function normName(name: string): string {
@@ -77,13 +80,18 @@ function proximityDedupe(places: Place[]): Place[] {
   const kept: Place[] = [];
   for (const p of sorted) {
     const isDup = kept.some((k) => {
-      if (haversineKm(k, p) > PROX_DUP_KM) return false;
+      if (haversineKm(k, p) > SAME_NAME_DUP_KM) return false;
       if (!p.tags.some((t) => k.tags.includes(t))) return false; // different type = different POI
       return normName(p.name) === normName(k.name); // same place, same name
     });
     if (!isDup) kept.push(p);
   }
   return kept;
+}
+
+/** The full merge pipeline: drop generic names, exact dupes, then near dupes. */
+function mergePlaces(places: Place[]): Place[] {
+  return proximityDedupe(dedupe(places.filter((p) => !isFallbackName(p.name))));
 }
 
 /**
@@ -123,10 +131,10 @@ export async function discover(
     const fresh = await freshNearby(lat, lng, radiusKm, typeIds, CACHE_TTL_MS);
     if (fresh && fresh.length > 0) {
       // only return places that match the requested types (and hide stale
-      // generic-named rows, e.g. "Parque (way 123)" cached before the fix)
-      const matched = fresh.filter(
-        (p) => !isFallbackName(p.name) && p.tags.some((t) => typeIds.includes(t))
-      );
+      // generic-named rows, e.g. "Parque (way 123)" cached before the fix).
+      // Re-run the merge pipeline: cached pools can hold pre-fix duplicates
+      // (same POI cached once per source with offset coordinates).
+      const matched = mergePlaces(fresh.filter((p) => p.tags.some((t) => typeIds.includes(t))));
       // A keyed user must NOT be served a pool that lacks Google data — e.g.
       // an area first cached by an anonymous search (OSM-only), or by a search
       // where Google failed. The whole point of the key is the rich merge
@@ -165,10 +173,7 @@ export async function discover(
 
   // merge: higher-priority sources first so proximity dedupe keeps the richer
   // record; generic-named rows (stale cache "Parque (way 123)") are hidden
-  const all = [...googlePlaces, ...geoapifyPlaces, ...overpassPlaces].filter(
-    (p) => !isFallbackName(p.name)
-  );
-  let bounded = proximityDedupe(dedupe(all)).filter(
+  let bounded = mergePlaces([...googlePlaces, ...geoapifyPlaces, ...overpassPlaces]).filter(
     (p) => haversineKm({ lat, lng }, p) <= radiusKm * 1.5
   );
 
@@ -177,8 +182,9 @@ export async function discover(
   let fromCache = false;
   if (bounded.length === 0 && !keyword) {
     const cached = await cachedNear(lat, lng, radiusKm * 2);
-    const matched = (types.length > 0 ? cached.filter((p) => p.tags.some((t) => types.includes(t))) : cached)
-      .filter((p) => !isFallbackName(p.name));
+    const matched = mergePlaces(
+      types.length > 0 ? cached.filter((p) => p.tags.some((t) => types.includes(t))) : cached
+    );
     bounded = matched;
     fromCache = bounded.length > 0;
   }
