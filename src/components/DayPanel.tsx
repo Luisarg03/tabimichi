@@ -126,7 +126,7 @@ export default function DayPanel({
       <div className="flex items-stretch">
         {onClose ? (
           <>
-            <div className="flex min-w-0 flex-1 items-center gap-2 px-4 py-3">
+            <div className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2">
               <span className="text-lg">📍</span>
               <span className="truncate text-sm font-medium text-slate-700">
                 {location ? location.label : t("panel.where")}
@@ -135,7 +135,7 @@ export default function DayPanel({
             <button
               onClick={onClose}
               aria-label={t("detail.close")}
-              className="m-1.5 flex h-[40px] w-[40px] shrink-0 items-center justify-center rounded-full border border-slate-300 text-slate-600 transition-colors hover:bg-slate-50 active:bg-slate-100"
+              className="m-1 flex h-[40px] w-[40px] shrink-0 items-center justify-center rounded-full border border-slate-300 text-slate-600 transition-colors hover:bg-slate-50 active:bg-slate-100"
             >
               ✕
             </button>
@@ -144,7 +144,7 @@ export default function DayPanel({
           <>
             <button
               onClick={() => setCollapsed((v) => !v)}
-              className="flex min-w-0 flex-1 items-center justify-between gap-2 px-4 py-3 text-left transition-colors hover:bg-slate-50 md:pointer-events-none md:cursor-default"
+              className="flex min-w-0 flex-1 items-center justify-between gap-2 px-3 py-2 text-left transition-colors hover:bg-slate-50 md:pointer-events-none md:cursor-default"
             >
               <div className="flex min-w-0 items-center gap-2">
                 <span className="text-lg">📍</span>
@@ -170,7 +170,7 @@ export default function DayPanel({
       </div>
 
       {/* Collapsible body */}
-      <div className={`${bodyOpen ? "block" : "hidden md:block"} px-4 pb-4`}>
+      <div className={`${bodyOpen ? "block" : "hidden md:block"} px-3 pb-3`}>
         {/* location */}
         <label className="block text-sm font-medium text-slate-700">{t("panel.where")}</label>
         <div className="mt-1.5 flex gap-2">
@@ -205,14 +205,14 @@ export default function DayPanel({
         )}
 
         {/* time budget */}
-        <div className="mt-4">
+        <div className="mt-3">
           <span className="text-sm font-medium text-slate-700">{t("panel.timeBudget")}</span>
           <div className="mt-1.5 grid grid-cols-3 gap-1.5 sm:gap-2">
             {BUDGETS.map((b) => (
               <button
                 key={b}
                 onClick={() => onBudgetChange(b)}
-                className={`rounded-lg border px-2 py-2.5 text-sm font-medium transition-colors min-h-[44px] ${
+                className={`rounded-lg border px-1.5 py-2 text-sm font-medium transition-colors min-h-[40px] ${
                   budget === b
                     ? "border-brand-600 bg-brand-600 text-white"
                     : "border-slate-300 text-slate-700 hover:bg-slate-50 active:bg-slate-100"
@@ -225,14 +225,14 @@ export default function DayPanel({
         </div>
 
         {/* transport mode */}
-        <div className="mt-4">
+        <div className="mt-3">
           <span className="text-sm font-medium text-slate-700">{t("panel.modeLabel")}</span>
           <div className="mt-1.5 grid grid-cols-3 gap-1.5 sm:gap-2">
             {MODES.map((m) => (
               <button
                 key={m.id}
                 onClick={() => onModeChange(m.id)}
-                className={`rounded-lg border px-2 py-2.5 text-sm font-medium transition-colors min-h-[44px] ${
+                className={`rounded-lg border px-1.5 py-2 text-sm font-medium transition-colors min-h-[40px] ${
                   mode === m.id
                     ? "border-emerald-500 bg-emerald-500 text-white"
                     : "border-slate-300 text-slate-700 hover:bg-slate-50 active:bg-slate-100"
@@ -245,9 +245,11 @@ export default function DayPanel({
         </div>
 
         {/* type */}
-        <div className="mt-4">
+        <div className="mt-3">
           <span className="text-sm font-medium text-slate-700">{t("panel.vibe")}</span>
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
+          {/* Mobile: one horizontally-scrollable row (wrapping 12+ chips would
+              eat half the 667px viewport); desktop: wrap as usual. */}
+          <div className="mt-1.5 flex flex-nowrap gap-1.5 overflow-x-auto pb-0.5 md:flex-wrap md:overflow-visible">
             <button
               onClick={() => onTypesChange([])}
               className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors min-h-[36px] ${
@@ -282,7 +284,7 @@ export default function DayPanel({
         </div>
 
         {/* optional interest keyword */}
-        <div className="mt-4">
+        <div className="mt-3">
           <span className="text-sm font-medium text-slate-700">{t("panel.interestLabel")}</span>
           <input
             value={keyword}
@@ -298,7 +300,7 @@ export default function DayPanel({
         <button
           onClick={submit}
           disabled={!location || loading}
-          className="mt-4 w-full rounded-xl bg-brand-600 px-4 py-3 text-base font-semibold text-white shadow-sm transition-colors hover:bg-brand-500 disabled:cursor-not-allowed disabled:opacity-50"
+          className="mt-3 w-full rounded-xl bg-brand-600 px-4 py-3 text-base font-semibold text-white shadow-sm transition-colors hover:bg-brand-500 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {loading ? t("panel.discovering") : t("panel.discover")}
         </button>

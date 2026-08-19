@@ -41,7 +41,10 @@ export default function SearchOverlay({
 }) {
   return (
     <div className="fixed inset-0 z-40 flex flex-col bg-slate-50 tabi-safe-top tabi-safe-x tabi-safe-bottom">
-      <div className="tabi-rise-in p-3">
+      {/* Scrollable wrapper: on small phones (375×667) the location + filters
+          form is taller than the viewport; without scrolling the Discover
+          button below the fold was unreachable. */}
+      <div className="tabi-rise-in min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
         <DayPanel
           initialLocation={location}
           loading={loading}
