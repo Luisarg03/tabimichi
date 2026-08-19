@@ -47,10 +47,13 @@ describe("travelMin", () => {
 
 describe("radiusForBudget", () => {
   it("scales by transport mode", () => {
-    expect(radiusForBudget("lunch", "walking")).toBe(2);
+    // walking = "around the point" — tight explicit radii, never 5+ km
+    expect(radiusForBudget("lunch", "walking")).toBe(1.5);
+    expect(radiusForBudget("afternoon", "walking")).toBe(2.5);
+    expect(radiusForBudget("full_day", "walking")).toBe(3.5);
     expect(radiusForBudget("lunch", "transit")).toBe(5);
+    expect(radiusForBudget("afternoon", "transit")).toBe(12);
     expect(radiusForBudget("lunch", "car")).toBe(10);
-    expect(radiusForBudget("afternoon", "walking")).toBeCloseTo(4.8);
     expect(radiusForBudget("full_day", "car")).toBe(70);
   });
 });
