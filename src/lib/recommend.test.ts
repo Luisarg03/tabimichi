@@ -26,7 +26,15 @@ const weatherFixture = () =>
       snowfall: [0, 0],
       weather_code: [1, 0],
     },
-    daily: { time: ["2026-08-16"], weather_code: [1], temperature_2m_max: [28], temperature_2m_min: [20], precipitation_probability_max: [20] },
+    daily: {
+      time: ["2026-08-16"],
+      weather_code: [1],
+      temperature_2m_max: [28],
+      temperature_2m_min: [20],
+      precipitation_probability_max: [20],
+      sunrise: ["2026-08-16T05:10"],
+      sunset: ["2026-08-16T18:40"],
+    },
   });
 
 const result = (id: string, name: string, over: Record<string, unknown> = {}) => ({
@@ -458,5 +466,101 @@ describe("diversify", () => {
     const out = diversify(items, RESULT_LIMIT);
     expect(out.length).toBe(RESULT_LIMIT);
     expect(new Set(out.map((o) => o.tags[0])).size).toBe(tags.length); // variety kept
+  });
+
+  it("defers same-type candidates hugging an already-picked one (spatial spread)", () => {
+    const mk = (id: string, tags: string[], lat: number, lng: number) => ({ id, tags, lat, lng });
+    const items = [
+      mk("t1", ["temple"], 36.65, 138.19),
+      mk("t2", ["temple"], 36.6505, 138.1905), // ~90 m from t1 → deferred
+      mk("t3", ["temple"], 36.66, 138.2), // ~1.5 km away → picked next
+      mk("p1", ["park"], 36.7, 138.3),
+    ];
+    const out = diversify(items, 4);
+    expect(out.map((o) => o.id)).toEqual(["t1", "p1", "t3", "t2"]);
+  });
+});
+
+describe("recommend — pinned place (Google-Maps parity)", () => {
+  beforeEach(() => {
+    isolatedStore();
+    clearWeatherCache();
+    process.env.GOOGLE_PLACES_API_KEY = KEY;
+  });
+  afterEach(() => {
+    delete process.env.GOOGLE_PLACES_API_KEY;
+    vi.unstubAllGlobals();
+  });
+
+  it("surfaces the searched place first with a pinned reason", async () => {
+    mockFetch([
+      { match: urlContains("open-meteo.com"), response: weatherFixture },
+      { match: urlContains("textsearch"), response: () => jsonResponse({ status: "ZERO_RESULTS", results: [] }) },
+      { match: urlContains("nearbysearch"), response: () => jsonResponse({ status: "OK", results: [] }) },
+      { match: urlContains("interpreter"), response: () => jsonResponse({ elements: [] }) },
+    ]);
+    const r = await recommend({
+      lat: 36.6485,
+      lng: 138.1949,
+      budget: "afternoon",
+      types: [],
+      mode: "transit",
+      pin: { name: "Café Misterio", lat: 36.6485, lng: 138.1949, typeId: "food" },
+    });
+    expect(r.places[0].name).toBe("Café Misterio");
+    expect(r.places[0].reasons.map((x) => x.key)).toContain("pinned");
+    expect(r.places[0].tags).toEqual(["food"]);
+    expect(r.emptyReason).toBeUndefined();
+  });
+
+  it("prefers the Google twin (rich data) when discovery also found the place", async () => {
+    mockFetch([
+      { match: urlContains("open-meteo.com"), response: weatherFixture },
+      {
+        match: urlContains("textsearch"),
+        response: () =>
+          googleSearch([
+            result("p1", "Edo-Tokyo Museum", {
+              rating: 4.7,
+              user_ratings_total: 5000,
+              geometry: { location: { lat: 35.714, lng: 139.7798 } },
+            }),
+          ]),
+      },
+      { match: urlContains("nearbysearch"), response: () => jsonResponse({ status: "OK", results: [] }) },
+      { match: urlContains("interpreter"), response: () => jsonResponse({ elements: [] }) },
+    ]);
+    const r = await recommend({
+      lat: 35.714,
+      lng: 139.7798,
+      budget: "afternoon",
+      types: [],
+      mode: "transit",
+      pin: { name: "Edo-Tokyo Museum", lat: 35.714, lng: 139.7798, typeId: "museum" },
+    });
+    expect(r.places[0].id).toBe("g_p1"); // Google's record, not the pin copy
+    expect(r.places[0].rating).toBe(4.7);
+    expect(r.places[0].reasons.map((x) => x.key)).toContain("pinned");
+    expect(r.places.filter((p) => p.name === "Edo-Tokyo Museum")).toHaveLength(1);
+  });
+
+  it("synthesizes the pin when every source fails (never an empty result)", async () => {
+    mockFetch([
+      { match: urlContains("open-meteo.com"), response: weatherFixture },
+      { match: urlContains("textsearch"), response: () => jsonResponse({ status: "REQUEST_DENIED", results: [] }) },
+      { match: urlContains("nearbysearch"), response: () => jsonResponse({ status: "REQUEST_DENIED", results: [] }) },
+      { match: urlContains("interpreter"), response: () => jsonResponse({}, 503) },
+    ]);
+    const r = await recommend({
+      lat: 36.6485,
+      lng: 138.1949,
+      budget: "afternoon",
+      types: [],
+      mode: "transit",
+      pin: { name: "Solo Pin", lat: 36.6485, lng: 138.1949 },
+    });
+    expect(r.places).toHaveLength(1);
+    expect(r.places[0].name).toBe("Solo Pin");
+    expect(r.emptyReason).toBeUndefined();
   });
 });

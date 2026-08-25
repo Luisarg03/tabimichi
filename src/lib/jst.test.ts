@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { jstSimulatedDate, jstHourStamp, SIM_PRESETS } from "@/lib/jst";
+import { jstSimulatedDate, jstHourStamp, localTimeAt, SIM_PRESETS } from "@/lib/jst";
 
 describe("jstSimulatedDate", () => {
   it("stores the JST wall-clock in UTC fields", () => {
@@ -33,5 +33,22 @@ describe("jstHourStamp", () => {
 describe("SIM_PRESETS", () => {
   it("covers the four evaluation slots", () => {
     expect(SIM_PRESETS.map((p) => p.hour)).toEqual([9, 15, 21, 3]);
+  });
+});
+
+describe("localTimeAt", () => {
+  it("shifts a real instant to destination-local wall clock in UTC fields", () => {
+    // 2026-08-16T00:30Z at lng 138.2 (Nagano ≈ UTC+9)
+    const real = new Date("2026-08-16T00:30:00Z");
+    const local = localTimeAt(real, 138.2);
+    expect(local.getUTCHours()).toBe(9);
+    expect(local.getUTCMinutes()).toBe(30);
+    expect(local.getUTCDate()).toBe(16); // same calendar day
+  });
+
+  it("rounds the offset to whole hours (Japan = +9)", () => {
+    const real = new Date("2026-01-01T00:00:00Z");
+    expect(localTimeAt(real, 139.7).getUTCHours()).toBe(9); // Tokyo
+    expect(localTimeAt(real, -3.7).getUTCHours()).toBe(0); // Madrid (UTC+1 → -1h)
   });
 });

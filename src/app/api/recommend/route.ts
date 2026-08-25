@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid json" }, { status: 400 });
   }
 
-  const { lat, lng, budget, types = [], radiusKm, mode, lang, now, keyword } = body ?? {};
+  const { lat, lng, budget, types = [], radiusKm, mode, lang, now, keyword, pin } = body ?? {};
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
     return NextResponse.json({ error: "lat/lng required" }, { status: 400 });
   }
@@ -32,6 +32,20 @@ export async function POST(req: NextRequest) {
   }
   if (keyword !== undefined && (typeof keyword !== "string" || keyword.trim().length > 60)) {
     return NextResponse.json({ error: "keyword too long" }, { status: 400 });
+  }
+  if (pin !== undefined) {
+    const p = pin as { name?: unknown; lat?: unknown; lng?: unknown };
+    const ok =
+      typeof p === "object" &&
+      p !== null &&
+      typeof p.name === "string" &&
+      p.name.trim().length > 0 &&
+      p.name.length <= 120 &&
+      Number.isFinite(p.lat) &&
+      Number.isFinite(p.lng);
+    if (!ok) {
+      return NextResponse.json({ error: "invalid pin" }, { status: 400 });
+    }
   }
 
   // Cost/abuse control: discovery spends the requesting user's API quota.
@@ -52,6 +66,7 @@ export async function POST(req: NextRequest) {
       lang: lang === "en" ? "en" : "es",
       now,
       keyword: typeof keyword === "string" ? keyword.trim() : undefined,
+      pin,
       config,
     });
     return NextResponse.json(result);

@@ -33,3 +33,15 @@ export function jstHourStamp(date: Date): string {
   const h = String(date.getUTCHours()).padStart(2, "0");
   return `${y}-${m}-${d}T${h}:00`;
 }
+
+/**
+ * Shift a real instant so its UTC fields equal the destination-local wall
+ * clock (offset derived from longitude, exact enough everywhere and precise
+ * for Japan). Consumers read time with the getUTC* getters — the same
+ * convention `jstSimulatedDate` already uses, so simulated and real "now"
+ * behave identically downstream.
+ */
+export function localTimeAt(now: Date, lng: number): Date {
+  const offsetH = Math.round(lng / 15);
+  return new Date(now.getTime() + offsetH * 3600 * 1000);
+}

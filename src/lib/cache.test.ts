@@ -34,7 +34,7 @@ describe("place cache (Supabase)", () => {
 
   it("round-trips upsert → placeById", async () => {
     await upsertPlace(
-      p("a1", { rating: 4.2, userRatingsTotal: 300, photoRefs: ["r1", "r2"], tags: ["onsen"] })
+      p("a1", { rating: 4.2, userRatingsTotal: 300, photoRefs: ["r1", "r2"], tags: ["onsen"], wikipedia: "ja:渋温泉" })
     );
     const back = await placeById("a1");
     expect(back?.name).toBe("Place a1");
@@ -43,6 +43,7 @@ describe("place cache (Supabase)", () => {
     expect(back?.photoRefs).toEqual(["r1", "r2"]);
     expect(back?.photoRef).toBe("r1");
     expect(back?.tags).toEqual(["onsen"]);
+    expect(back?.wikipedia).toBe("ja:渋温泉");
   });
 
   it("treats a stale cached open_now as unknown (it is a point-in-time snapshot)", async () => {

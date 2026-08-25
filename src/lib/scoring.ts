@@ -8,6 +8,8 @@ export interface ScoreContext {
   base: LatLng;
   budgetMin: number;
   weather: WeatherInfo;
+  /** destination-local wall clock stored in UTC fields (JST for simulated
+   *  dates, longitude-shifted for real ones) — read with getUTC* getters */
   now: Date;
   mode?: TransportMode;
   /** hard max distance (km); results beyond it are dropped */
@@ -31,6 +33,9 @@ export interface ScoreContext {
   profile?: Record<string, number>;
   /** dev tracing: counters of why candidates were dropped (mutated) */
   stats?: { closed: number; tooFar: number; nameMatches?: number };
+  /** ids exempt from the closed/too-far hard filters — the pinned searched
+   *  place must always show (with a closed badge when closed), never drop */
+  pinnedIds?: Set<string>;
 }
 
 function isIndoor(tag: string): boolean {
@@ -39,6 +44,12 @@ function isIndoor(tag: string): boolean {
 
 function isOutdoor(tag: string): boolean {
   return Boolean(EXPERIENCE_TYPE_MAP[tag]?.outdoor);
+}
+
+/** Minutes-of-day from a destination-local ISO time ("2026-08-20T05:10"). */
+export function minsOfDay(iso: string): number | undefined {
+  const m = iso.match(/T(\d{2}):(\d{2})/);
+  return m ? Number(m[1]) * 60 + Number(m[2]) : undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -133,19 +144,21 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
   for (const p of places) {
     const distanceKm = haversineKm(base, p);
     const t = travelMin(distanceKm, ctx.mode);
+    const pinned = ctx.pinnedIds?.has(p.id) === true;
 
     // hard filters: beyond the discovery radius, or too far to reach on the
-    // day's budget + transport mode (walking is capped tight on purpose)
-    if (ctx.maxDistKm !== undefined && distanceKm > ctx.maxDistKm) {
+    // day's budget + transport mode (walking is capped tight on purpose).
+    // Pinned places are exempt — they are what the user searched for.
+    if (!pinned && ctx.maxDistKm !== undefined && distanceKm > ctx.maxDistKm) {
       ctx.stats && ctx.stats.tooFar++;
       continue;
     }
-    if (t > travelCap) {
+    if (!pinned && t > travelCap) {
       ctx.stats && ctx.stats.tooFar++;
       continue;
     }
     // hard filter: never recommend places that are closed right now
-    if (p.openNow === false) {
+    if (!pinned && p.openNow === false) {
       ctx.stats && ctx.stats.closed++;
       if (!ctx.softClosed) continue;
     }
@@ -209,6 +222,46 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
       reasons.push({ key: "weatherCold", params: { typeId: "onsen" } });
     }
 
+    // --- time-of-day context (destination-local wall clock in UTC fields) ---
+    const hour = ctx.now.getUTCHours();
+    const mins = hour * 60 + ctx.now.getUTCMinutes();
+    const isWeekend = ctx.now.getUTCDay() === 0 || ctx.now.getUTCDay() === 6;
+
+    if (p.tags.includes("food") && ((hour >= 11 && hour < 15) || (hour >= 17 && hour < 22))) {
+      score += 8;
+      reasons.push({ key: "mealTime" });
+    }
+    if (p.tags.includes("nightlife") && (hour >= 20 || hour < 5)) {
+      score += 8;
+      reasons.push({ key: "nightTime" });
+    }
+    if (p.tags.includes("onsen") && hour >= 17 && hour < 23) {
+      score += 6;
+      reasons.push({ key: "onsenEvening" });
+    }
+    // golden hour: real local sunrise/sunset from Open-Meteo (when present)
+    const sun = weather.daily?.[0];
+    if (
+      sun?.sunrise &&
+      sun?.sunset &&
+      (p.tags.includes("viewpoint") || p.tags.includes("trekking") || p.tags.includes("sakura"))
+    ) {
+      const rise = minsOfDay(sun.sunrise);
+      const set = minsOfDay(sun.sunset);
+      if (
+        rise !== undefined &&
+        set !== undefined &&
+        ((mins >= rise - 60 && mins <= rise + 30) || (mins >= set - 60 && mins <= set + 30))
+      ) {
+        score += 8;
+        reasons.push({ key: "goldenHour" });
+      }
+    }
+    if (isWeekend && (p.tags.includes("park") || p.tags.includes("market") || p.tags.includes("sakura"))) {
+      score += 4;
+      reasons.push({ key: "weekend" });
+    }
+
     // --- quality signals: rating shrunk by review count + volume ---
     if (p.rating !== undefined) {
       // Bayesian shrinkage with a lower prior (3.7/25) and a review cap (500):
@@ -248,6 +301,13 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
       } else if (total >= 5) {
         score += 1;
       }
+    }
+
+    // --- landmark signal: Wikipedia/Wikidata-documented places are notable
+    // (OSM rows carry the tag; skipped for keyword hits so intent wins) ---
+    if (p.wikipedia && !kwHit) {
+      score += 6;
+      reasons.push({ key: "landmark" });
     }
 
     // --- interest keyword: explicit user intent wins over noise rules ---

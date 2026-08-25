@@ -23,13 +23,13 @@ describe("haversineKm", () => {
 });
 
 describe("travelMin", () => {
-  it("walks 4.5 km/h: 3 km ≈ 40 min", () => {
-    expect(travelMin(3, "walking")).toBe(40);
+  it("walks 4.5 km/h with a 1.25 detour factor: 3 km ≈ 50 min", () => {
+    expect(travelMin(3, "walking")).toBe(50);
   });
 
-  it("transit adds wait overhead", () => {
+  it("transit adds wait overhead and a 1.5 route factor", () => {
     expect(travelMin(3, "transit")).toBeGreaterThan(travelMin(3, "car"));
-    expect(travelMin(3, "transit")).toBe(14); // 3/28*60 + 8 ≈ 14.4 → 14
+    expect(travelMin(3, "transit")).toBe(18); // 3*1.5/28*60 + 8 ≈ 17.6 → 18
   });
 
   it("car is fastest", () => {

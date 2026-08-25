@@ -192,6 +192,7 @@ export default function HomePage() {
             lang: locale,
             now,
             keyword: payload.keyword,
+            pin: payload.pin,
           }),
         });
         if (!res.ok) throw new Error("bad response");

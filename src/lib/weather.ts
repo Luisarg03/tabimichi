@@ -56,6 +56,8 @@ interface OpenMeteoResponse {
     temperature_2m_max: number[];
     temperature_2m_min: number[];
     precipitation_probability_max: number[];
+    sunrise: string[];
+    sunset: string[];
   };
 }
 
@@ -70,7 +72,7 @@ async function fetchWeather(lat: number, lng: number): Promise<WeatherInfo> {
       hourly:
         "temperature_2m,precipitation_probability,precipitation,snowfall,weather_code",
       daily:
-        "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max",
+        "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset",
       timezone: "auto",
       forecast_days: "3",
     });
@@ -95,6 +97,8 @@ async function fetchWeather(lat: number, lng: number): Promise<WeatherInfo> {
     maxC: data.daily.temperature_2m_max[i] ?? 0,
     minC: data.daily.temperature_2m_min[i] ?? 0,
     precipProbMax: data.daily.precipitation_probability_max[i] ?? 0,
+    sunrise: data.daily.sunrise?.[i] ?? "",
+    sunset: data.daily.sunset?.[i] ?? "",
   }));
 
   return {

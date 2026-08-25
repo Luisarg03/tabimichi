@@ -14,17 +14,49 @@ export function makeSupabaseFake() {
     maxLng: number;
     since: string | null;
     id: string | null;
+    or: string | null;
     descending: boolean;
     limit: number;
     update: Record<string, unknown> | null;
   }
 
+  /** Minimal ILIKE matcher honoring Postgres escapes (\% and \_ are literal). */
+  function ilikeMatch(value: unknown, pattern: string): boolean {
+    const esc = (c: string) => c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    let re = "";
+    for (let i = 0; i < pattern.length; i++) {
+      const c = pattern[i];
+      if (c === "\\" && i + 1 < pattern.length) {
+        re += esc(pattern[++i]);
+      } else if (c === "%") {
+        re += ".*";
+      } else if (c === "_") {
+        re += ".";
+      } else {
+        re += esc(c);
+      }
+    }
+    return new RegExp(`^${re}$`, "i").test(String(value ?? ""));
+  }
+
+  /** Parse `.or("name.ilike.%X%,address.ilike.%Y%")` into column→pattern pairs. */
+  function parseOr(raw: string): Array<[string, string]> {
+    const out: Array<[string, string]> = [];
+    for (const part of raw.split(",")) {
+      const m = part.match(/^([a-z_]+)\.ilike\.(.+)$/i);
+      if (m) out.push([m[1], m[2]]);
+    }
+    return out;
+  }
+
   function runQuery(table: string, f: Filters): Record<string, unknown>[] {
+    const orPairs = f.or ? parseOr(f.or) : [];
     const rows = [...places.values()].filter((r) => {
       if (f.id !== null && r.id !== f.id) return false;
       if (Number(r.lat) < f.minLat || Number(r.lat) > f.maxLat) return false;
       if (Number(r.lng) < f.minLng || Number(r.lng) > f.maxLng) return false;
       if (f.since !== null && String(r.fetched_at) < f.since) return false;
+      if (orPairs.length > 0 && !orPairs.some(([col, pat]) => ilikeMatch(r[col], pat))) return false;
       return true;
     });
     if (f.update) {
@@ -44,6 +76,7 @@ export function makeSupabaseFake() {
       maxLng: Infinity,
       since: null,
       id: null,
+      or: null,
       descending: false,
       limit: 1000,
       update: updateObj,
@@ -63,6 +96,10 @@ export function makeSupabaseFake() {
       },
       eq: (col: string, v: unknown) => {
         if (col === "id") f.id = v as string;
+        return api;
+      },
+      or: (filters: string) => {
+        f.or = filters;
         return api;
       },
       order: (_col: string, opts: { ascending: boolean }) => {

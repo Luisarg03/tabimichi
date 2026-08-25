@@ -25,9 +25,43 @@ export interface Place {
   photoRef?: string;
   /** up to 5 photo references for the gallery */
   photoRefs?: string[];
+  /** OSM `wikipedia`/`wikidata` tag (page title or Q-id) — landmark signal */
+  wikipedia?: string;
   url?: string;
   /** true when this candidate came from the keyword text query (in-memory only) */
   fromKeyword?: boolean;
+}
+
+/** What a search suggestion resolves to: a POI, a street address, or a city. */
+export type SuggestionKind = "place" | "address" | "city";
+
+/** Where a search suggestion came from (display/telemetry only). */
+export type SuggestionSource = "cache" | "photon" | "nominatim" | "google";
+
+/** One result of /api/search/suggest — unified shape across local + remote sources. */
+export interface SearchSuggestion {
+  /** stable id: `p_<source>_<placeId>` for places, hash-based for addresses */
+  id: string;
+  kind: SuggestionKind;
+  name: string;
+  /** secondary line: address, type label or city/country */
+  sublabel?: string;
+  /** Google predictions carry no coordinates — resolved on pick via
+   *  /api/search/resolve; every other source has them. */
+  lat?: number;
+  lng?: number;
+  /** Google place id (autocomplete prediction) — resolves coordinates on pick */
+  placeId?: string;
+  /** experience type id when the source category maps to the taxonomy */
+  typeId?: string;
+  source: SuggestionSource;
+  /** distance (km) to the search bias point, when one was provided */
+  distanceKm?: number;
+  /** provider's own relevance index (0 = best) — tiebreak for exact matches
+   *  and the only signal for cross-script matches (romaji ↔ kanji) */
+  remoteRank?: number;
+  rating?: number;
+  userRatingsTotal?: number;
 }
 
 export type TimeBudget = "lunch" | "afternoon" | "full_day";
@@ -61,6 +95,9 @@ export interface WeatherInfo {
     maxC: number;
     minC: number;
     precipProbMax: number;
+    /** destination-local ISO sunrise/sunset ("2026-08-20T05:10") — golden hour */
+    sunrise: string;
+    sunset: string;
   }>;
 }
 
@@ -91,6 +128,9 @@ export interface RecommendInput {
   now?: string;
   /** Optional interest keyword: "pokemon", "book off", "gatos"… */
   keyword?: string;
+  /** The exact place the user searched (from a suggestion pick): guaranteed
+   *  to appear — and rank first — even when no source knows it. */
+  pin?: { name: string; lat: number; lng: number; typeId?: string };
 }
 
 /** Input for the async LLM narrative phase (/api/narrate). */

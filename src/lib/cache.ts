@@ -62,6 +62,7 @@ function rowToPlace(r: Record<string, unknown>): Place {
     address: r.address ? String(r.address) : undefined,
     photoRef: photoRefs?.[0] ?? (r.photo_ref ? String(r.photo_ref) : undefined),
     photoRefs,
+    wikipedia: r.wikipedia ? String(r.wikipedia) : undefined,
     url: r.url ? String(r.url) : undefined,
   };
 }
@@ -81,6 +82,7 @@ function placeRow(p: Place): Record<string, unknown> {
     address: p.address ?? null,
     photo_ref: p.photoRef ?? null,
     photo_refs: p.photoRefs && p.photoRefs.length > 0 ? JSON.stringify(p.photoRefs) : null,
+    wikipedia: p.wikipedia ?? null,
     url: p.url ?? null,
     fetched_at: new Date().toISOString(),
   };
@@ -168,6 +170,37 @@ export async function freshNearby(
     if (!places.some((p) => p.tags.includes(type))) return null;
   }
   return places;
+}
+
+/** Escape ILIKE wildcards so user input matches literally. */
+export function escapeLike(q: string): string {
+  return q.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+/**
+ * Name/address search over the cached pool (autocomplete local source).
+ * Uses ILIKE (accelerated by the pg_trgm GIN index from migration 005) and
+ * returns a superset — the caller ranks by match tier and distance. Degrades
+ * to [] on any error: local cache must never break suggestions.
+ */
+export async function searchCachedPlaces(q: string, limit = 12): Promise<Place[]> {
+  const nq = escapeLike(q);
+  try {
+    const { data, error } = await admin()
+      .from(PLACE_TABLE)
+      .select("*")
+      .or(`name.ilike.%${nq}%,address.ilike.%${nq}%`)
+      .order("fetched_at", { ascending: false })
+      .limit(Math.max(1, Math.min(limit * 3, 60)));
+    if (error) {
+      console.warn(`[tabi] place_cache search failed: ${error.message}`);
+      return [];
+    }
+    return ((data as Record<string, unknown>[]) ?? []).map(rowToPlace);
+  } catch (e) {
+    console.warn(`[tabi] place_cache search failed: ${String(e)}`);
+    return [];
+  }
 }
 
 /** One cached place by id (used by the photo enrichment + feedback flow). */
