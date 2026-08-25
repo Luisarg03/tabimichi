@@ -1,6 +1,7 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 # openspec
 openspec
+prototype
 
 # dependencies
 /node_modules
@@ -50,3 +51,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 AGENT-E2E-CONTEXT.md
+
+# local playwright browsers (visual checks)
+/.pw-browsers

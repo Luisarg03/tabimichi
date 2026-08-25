@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import type { ScoredPlace } from "@/lib/types";
 import { useI18n } from "@/lib/i18n";
 import PlaceDetail from "@/components/PlaceDetail";
+import Icon from "@/components/ui/Icon";
 
 /**
  * Mobile place-detail sheet: a BOTTOM sheet that leaves the top of the map
@@ -39,7 +40,7 @@ export default function MobileDetailSheet({
       <div
         role="dialog"
         aria-label={place.name}
-        className={`pointer-events-auto absolute inset-x-0 bottom-0 flex flex-col overflow-hidden rounded-t-2xl bg-white shadow-panel-lg ${
+        className={`pointer-events-auto absolute inset-x-0 bottom-0 flex flex-col overflow-hidden rounded-t-panel-lg border-t border-border bg-surface shadow-panel ${
           closing ? "transition-transform duration-200" : "tabi-rise-in"
         }`}
         style={{ height: "75dvh", transform: `translateY(${Math.max(0, dy)}px)` }}
@@ -73,13 +74,13 @@ export default function MobileDetailSheet({
               onClick={onClose}
               onPointerDown={(e) => e.stopPropagation()}
               aria-label={t("detail.back")}
-              className="flex h-[40px] w-[40px] shrink-0 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-600 transition-colors hover:bg-slate-50 active:bg-slate-100"
+              className="flex h-[40px] w-[40px] shrink-0 items-center justify-center rounded-full border border-border bg-surface text-fg transition-colors hover:bg-fg/5 active:bg-fg/10"
             >
-              ←
+              <Icon name="arrow-left" size={17} />
             </button>
             <div className="mx-auto flex flex-col items-center">
-              <div className="h-1 w-10 rounded-full bg-slate-300" />
-              <span className="mt-1 max-w-[50vw] truncate text-xs font-medium text-slate-400">
+              <div className="h-1 w-10 rounded-full bg-border" />
+              <span className="mt-1 max-w-[50vw] truncate text-xs font-medium text-muted">
                 {place.name}
               </span>
             </div>

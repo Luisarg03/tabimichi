@@ -7,6 +7,10 @@ import { EXPERIENCE_TYPES } from "@/lib/places/taxonomy";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import SearchSuggestions from "@/components/SearchSuggestions";
+import Icon from "@/components/ui/Icon";
+import IconButton from "@/components/ui/IconButton";
+import Segmented from "@/components/ui/Segmented";
+import Chip from "@/components/ui/Chip";
 
 export interface DiscoverPayload {
   lat: number;
@@ -24,10 +28,10 @@ export interface DiscoverPayload {
 }
 
 const BUDGETS: TimeBudget[] = ["lunch", "afternoon", "full_day"];
-const MODES: Array<{ id: TransportMode; emoji: string }> = [
-  { id: "walking", emoji: "🚶" },
-  { id: "transit", emoji: "🚃" },
-  { id: "car", emoji: "🚗" },
+const MODES: Array<{ id: TransportMode; icon: string }> = [
+  { id: "walking", icon: "walk" },
+  { id: "transit", icon: "train" },
+  { id: "car", icon: "car" },
 ];
 
 /** A single CJK character is a valid search ("寺", "山"); otherwise ≥2. */
@@ -48,6 +52,7 @@ export default function DayPanel({
   loading,
   onDiscover,
   onClose,
+  embedded = false,
   budget,
   mode,
   types,
@@ -63,6 +68,9 @@ export default function DayPanel({
   /** When set, renders as a full-screen search overlay (mobile):
    *  always-expanded body + close button in the header. */
   onClose?: () => void;
+  /** When true (desktop rail), renders only the form — no card wrapper,
+   *  header or collapse behavior. */
+  embedded?: boolean;
   /** Filter state lifted to the page so it survives panel remounts
    *  (mobile overlay) and stays shared between desktop/mobile. */
   budget: TimeBudget;
@@ -270,62 +278,21 @@ export default function DayPanel({
   }
 
   const bodyOpen = onClose ? true : !collapsed;
+  const activeHint = types.length
+    ? types.map((id) => t(`panel.type.${id}`)).join(" · ")
+    : t("panel.type.any");
 
-  return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      {/* Header — always visible; shows the destination + close (overlay) or
-          expand/collapse toggle (desktop/mobile column) */}
-      <div className="flex items-stretch">
-        {onClose ? (
-          <>
-            <div className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2">
-              <span className="text-lg">📍</span>
-              <span className="truncate text-sm font-medium text-slate-700">
-                {location ? location.label : t("panel.where")}
-              </span>
-            </div>
-            <button
-              onClick={onClose}
-              aria-label={t("detail.close")}
-              className="m-1 flex h-[40px] w-[40px] shrink-0 items-center justify-center rounded-full border border-slate-300 text-slate-600 transition-colors hover:bg-slate-50 active:bg-slate-100"
-            >
-              ✕
-            </button>
-          </>
-        ) : (
-          <>
-            <button
-              onClick={() => setCollapsed((v) => !v)}
-              className="flex min-w-0 flex-1 items-center justify-between gap-2 px-3 py-2 text-left transition-colors hover:bg-slate-50 md:pointer-events-none md:cursor-default"
-            >
-              <div className="flex min-w-0 items-center gap-2">
-                <span className="text-lg">📍</span>
-                <span className="truncate text-sm font-medium text-slate-700">
-                  {location ? location.label : t("panel.where")}
-                </span>
-              </div>
-              <span className="ml-2 shrink-0 text-xs text-slate-400">{collapsed ? "▸" : "▾"}</span>
-            </button>
-            {/* quick re-discover while collapsed (mobile only) — sibling of the
-                toggle button so no nested interactive elements */}
-            {collapsed && location && (
-              <button
-                onClick={submit}
-                disabled={loading}
-                className="m-1.5 shrink-0 rounded-lg bg-brand-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-brand-500 active:bg-brand-700 disabled:opacity-50 md:hidden"
-              >
-                {loading ? "⏳" : "🔍 " + t("panel.discover")}
-              </button>
-            )}
-          </>
-        )}
-      </div>
-
-      {/* Collapsible body */}
-      <div className={`${bodyOpen ? "block" : "hidden md:block"} px-3 pb-3`}>
-        {/* location — live search with place/address autocomplete */}
-        <label className="block text-sm font-medium text-slate-700">{t("panel.where")}</label>
-        <div className="relative mt-1.5 flex gap-2">
+  const form = (
+    <div>
+      {/* location — live search with place/address autocomplete */}
+      <span className="eyebrow">{t("panel.where")}</span>
+      <div className="mt-1.5 flex gap-2">
+        <div className="relative min-w-0 flex-1">
+          <Icon
+            name="search"
+            size={18}
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
+          />
           <input
             value={query}
             onChange={(e) => {
@@ -345,23 +312,8 @@ export default function DayPanel({
             aria-autocomplete="list"
             aria-controls="tabi-suggestions"
             aria-activedescendant={suggActive >= 0 ? `tabi-sugg-${suggActive}` : undefined}
-            className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+            className="w-full min-h-[44px] rounded-[12px] border border-border bg-surface py-0 pl-10 pr-3 text-[14px] text-fg outline-none transition-[border-color,box-shadow] placeholder:text-muted focus:border-brand-500 focus:shadow-[0_0_0_3px_var(--color-accent-soft)]"
           />
-          <button
-            onClick={() => geocode(query)}
-            aria-label={t("panel.searchPlaceholder")}
-            className="rounded-lg bg-slate-900 px-3 py-2.5 text-sm font-medium text-white hover:bg-slate-700 active:bg-slate-800 min-h-[44px] min-w-[44px]"
-          >
-            🔍
-          </button>
-          <button
-            onClick={useGps}
-            disabled={locating}
-            aria-label={t("panel.useMyLocation")}
-            className="rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 active:bg-slate-100 disabled:opacity-50 min-h-[44px] min-w-[44px]"
-          >
-            {locating ? "…" : "📍"}
-          </button>
           <SearchSuggestions
             items={suggestions}
             active={suggActive}
@@ -372,115 +324,159 @@ export default function DayPanel({
             onHover={setSuggActive}
           />
         </div>
-        {geocodeError && <p className="mt-1 text-xs text-rose-600">{t("status.geocodeError")}</p>}
-        {location && (
-          <p className="mt-1.5 text-xs text-slate-500">
-            {location.label} · {location.lat.toFixed(4)}, {location.lng.toFixed(4)}
-          </p>
-        )}
-
-        {/* time budget */}
-        <div className="mt-3">
-          <span className="text-sm font-medium text-slate-700">{t("panel.timeBudget")}</span>
-          <div className="mt-1.5 grid grid-cols-3 gap-1.5 sm:gap-2">
-            {BUDGETS.map((b) => (
-              <button
-                key={b}
-                onClick={() => onBudgetChange(b)}
-                className={`rounded-lg border px-1.5 py-2 text-sm font-medium transition-colors min-h-[40px] ${
-                  budget === b
-                    ? "border-brand-600 bg-brand-600 text-white"
-                    : "border-slate-300 text-slate-700 hover:bg-slate-50 active:bg-slate-100"
-                }`}
-              >
-                {t(`panel.budget.${b}`)}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* transport mode */}
-        <div className="mt-3">
-          <span className="text-sm font-medium text-slate-700">{t("panel.modeLabel")}</span>
-          <div className="mt-1.5 grid grid-cols-3 gap-1.5 sm:gap-2">
-            {MODES.map((m) => (
-              <button
-                key={m.id}
-                onClick={() => onModeChange(m.id)}
-                className={`rounded-lg border px-1.5 py-2 text-sm font-medium transition-colors min-h-[40px] ${
-                  mode === m.id
-                    ? "border-emerald-500 bg-emerald-500 text-white"
-                    : "border-slate-300 text-slate-700 hover:bg-slate-50 active:bg-slate-100"
-                }`}
-              >
-                {m.emoji} {t(`panel.mode.${m.id}`)}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* type */}
-        <div className="mt-3">
-          <span className="text-sm font-medium text-slate-700">{t("panel.vibe")}</span>
-          {/* Mobile: one horizontally-scrollable row (wrapping 12+ chips would
-              eat half the 667px viewport); desktop: wrap as usual. */}
-          <div className="mt-1.5 flex flex-nowrap gap-1.5 overflow-x-auto pb-0.5 md:flex-wrap md:overflow-visible">
-            <button
-              onClick={() => onTypesChange([])}
-              className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors min-h-[36px] ${
-                types.length === 0
-                  ? "border-brand-600 bg-brand-600 text-white"
-                  : "border-slate-300 text-slate-700 hover:bg-slate-50 active:bg-slate-100"
-              }`}
-            >
-              {t("panel.type.any")}
-            </button>
-            {EXPERIENCE_TYPES.map((type) => {
-              const active = types.includes(type.id);
-              return (
-                <button
-                  key={type.id}
-                  onClick={() =>
-                    onTypesChange(
-                      active ? types.filter((x) => x !== type.id) : [...types, type.id]
-                    )
-                  }
-                  className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors min-h-[36px] ${
-                    active
-                      ? "border-brand-600 bg-brand-600 text-white"
-                      : "border-slate-300 text-slate-700 hover:bg-slate-50 active:bg-slate-100"
-                  }`}
-                >
-                  {type.emoji} {t(`panel.type.${type.id}`)}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* optional interest keyword */}
-        <div className="mt-3">
-          <span className="text-sm font-medium text-slate-700">{t("panel.interestLabel")}</span>
-          <input
-            value={keyword}
-            onChange={(e) => onKeywordChange(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && submit()}
-            placeholder={t("panel.interestPlaceholder")}
-            className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
-          />
-          <p className="mt-1 text-xs text-slate-400">{t("panel.interestHint")}</p>
-        </div>
-
-        {/* discover */}
-        <button
-          onClick={submit}
-          disabled={!location || loading}
-          className="mt-3 w-full rounded-xl bg-brand-600 px-4 py-3 text-base font-semibold text-white shadow-sm transition-colors hover:bg-brand-500 disabled:cursor-not-allowed disabled:opacity-50"
+        <IconButton
+          onClick={useGps}
+          disabled={locating}
+          label={t("panel.useMyLocation")}
+          className="shrink-0"
         >
-          {loading ? t("panel.discovering") : t("panel.discover")}
-        </button>
-        {!location && <p className="mt-1.5 text-center text-xs text-slate-400">{t("panel.needLocation")}</p>}
+          <Icon name="locate" />
+        </IconButton>
       </div>
+      {geocodeError && <p className="mt-1 text-xs text-bad">{t("status.geocodeError")}</p>}
+      {location && (
+        <p className="mono mt-1.5 truncate text-xs text-muted">
+          {location.label} · {location.lat.toFixed(4)}, {location.lng.toFixed(4)}
+        </p>
+      )}
+
+      {/* time budget */}
+      <div className="mt-3">
+        <span className="eyebrow">{t("panel.timeBudget")}</span>
+        <Segmented
+          className="mt-1.5"
+          ariaLabel={t("panel.timeBudget")}
+          value={budget}
+          onChange={onBudgetChange}
+          options={BUDGETS.map((b) => ({ id: b, label: t(`panel.budget.${b}`) }))}
+        />
+      </div>
+
+      {/* transport mode */}
+      <div className="mt-3">
+        <span className="eyebrow">{t("panel.modeLabel")}</span>
+        <Segmented
+          className="mt-1.5"
+          ariaLabel={t("panel.modeLabel")}
+          value={mode}
+          onChange={onModeChange}
+          options={MODES.map((m) => ({
+            id: m.id,
+            label: t(`panel.mode.${m.id}`),
+            icon: m.icon,
+          }))}
+        />
+      </div>
+
+      {/* type / vibe */}
+      <div className="mt-3">
+        <div className="mb-1.5 flex items-baseline justify-between gap-2">
+          <span className="eyebrow">{t("panel.vibe")}</span>
+          <span className="truncate text-[11.5px] text-muted">{activeHint}</span>
+        </div>
+        {/* Mobile: one horizontally-scrollable row (wrapping 12+ chips would
+            eat half the 667px viewport); desktop: wrap as usual. */}
+        <div className="flex flex-nowrap gap-1.5 overflow-x-auto pb-1 md:flex-wrap md:overflow-visible">
+          <Chip selected={types.length === 0} onClick={() => onTypesChange([])}>
+            {t("panel.type.any")}
+          </Chip>
+          {EXPERIENCE_TYPES.map((type) => {
+            const active = types.includes(type.id);
+            return (
+              <Chip
+                key={type.id}
+                selected={active}
+                onClick={() =>
+                  onTypesChange(active ? types.filter((x) => x !== type.id) : [...types, type.id])
+                }
+              >
+                {t(`panel.type.${type.id}`)}
+              </Chip>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* optional interest keyword */}
+      <div className="mt-3">
+        <span className="eyebrow">{t("panel.interestLabel")}</span>
+        <input
+          value={keyword}
+          onChange={(e) => onKeywordChange(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && submit()}
+          placeholder={t("panel.interestPlaceholder")}
+          className="mt-1.5 w-full min-h-[40px] rounded-[12px] border border-border bg-surface px-3 text-[14px] text-fg outline-none transition-[border-color,box-shadow] placeholder:text-muted focus:border-brand-500 focus:shadow-[0_0_0_3px_var(--color-accent-soft)]"
+        />
+        <p className="mt-1 text-xs text-muted">{t("panel.interestHint")}</p>
+      </div>
+
+      {/* discover */}
+      <button
+        onClick={submit}
+        disabled={!location || loading}
+        className="mt-3 flex w-full min-h-[44px] items-center justify-center gap-2 rounded-[12px] bg-brand-600 px-4 text-[14px] font-semibold text-surface shadow-accent transition-[background,transform] hover:bg-brand-700 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-55 disabled:shadow-none"
+      >
+        <Icon name="spark" size={16} />
+        {loading ? t("panel.discovering") : t("panel.discover")}
+      </button>
+      {!location && <p className="mt-1.5 text-center text-xs text-muted">{t("panel.needLocation")}</p>}
+    </div>
+  );
+
+  if (embedded) return form;
+
+  return (
+    <div className="overflow-hidden rounded-panel border border-border bg-surface shadow-soft">
+      {/* Header — always visible; shows the destination + close (overlay) or
+          expand/collapse toggle (mobile column) */}
+      <div className="flex items-stretch">
+        {onClose ? (
+          <>
+            <div className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2">
+              <Icon name="locate" size={18} className="text-muted" />
+              <span className="truncate text-sm font-medium text-fg">
+                {location ? location.label : t("panel.where")}
+              </span>
+            </div>
+            <IconButton label={t("detail.close")} onClick={onClose} className="m-1 shrink-0">
+              <Icon name="close" size={16} />
+            </IconButton>
+          </>
+        ) : (
+          <>
+            <button
+              onClick={() => setCollapsed((v) => !v)}
+              className="flex min-w-0 flex-1 items-center justify-between gap-2 px-3 py-2 text-left transition-colors hover:bg-fg/5 md:pointer-events-none md:cursor-default"
+            >
+              <div className="flex min-w-0 items-center gap-2">
+                <Icon name="locate" size={18} className="text-muted" />
+                <span className="truncate text-sm font-medium text-fg">
+                  {location ? location.label : t("panel.where")}
+                </span>
+              </div>
+              <Icon
+                name="chevron-down"
+                size={15}
+                className={`ml-2 shrink-0 text-muted transition-transform ${collapsed ? "" : "rotate-180"}`}
+              />
+            </button>
+            {/* quick re-discover while collapsed (mobile only) — sibling of the
+                toggle button so no nested interactive elements */}
+            {collapsed && location && (
+              <button
+                onClick={submit}
+                disabled={loading}
+                className="m-1.5 shrink-0 rounded-[12px] bg-brand-600 px-3 py-2 text-xs font-semibold text-surface transition-colors hover:bg-brand-700 active:bg-brand-800 disabled:opacity-50 md:hidden"
+              >
+                {loading ? t("panel.discovering") : t("panel.discover")}
+              </button>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Collapsible body */}
+      <div className={`${bodyOpen ? "block" : "hidden md:block"} px-3 pb-3`}>{form}</div>
     </div>
   );
 }

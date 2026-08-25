@@ -11,6 +11,8 @@ import BottomSheet from "@/components/BottomSheet";
 import MobileDetailSheet from "@/components/MobileDetailSheet";
 import SearchOverlay from "@/components/SearchOverlay";
 import PlaceDetailPanel from "@/components/PlaceDetailPanel";
+import BrandPill from "@/components/BrandPill";
+import Icon from "@/components/ui/Icon";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import type { PlaceProfile, RecommendResult, TimeBudget, TransportMode } from "@/lib/types";
@@ -63,6 +65,14 @@ function subscribeLastLocation(onChange: () => void): () => void {
   return () => window.removeEventListener("storage", onChange);
 }
 
+/** "HH:MM" of the current Japan (UTC+9) wall clock. */
+function jstClock(now = new Date()): string {
+  const jst = new Date(now.getTime() + 9 * 3600 * 1000);
+  const h = String(jst.getUTCHours()).padStart(2, "0");
+  const m = String(jst.getUTCMinutes()).padStart(2, "0");
+  return `${h}:${m}`;
+}
+
 export default function HomePage() {
   const { t, locale } = useI18n();
   const { getToken } = useAuth();
@@ -91,6 +101,9 @@ export default function HomePage() {
   const [sheet, setSheet] = useState<SheetSnap>("hidden");
   /** Mobile search overlay (full-screen form). */
   const [searchOpen, setSearchOpen] = useState(false);
+  /** Results-header context for "now" — computed client-side only (the real
+   *  clock would mismatch SSR); presets are deterministic labels. */
+  const [nowCtx, setNowCtx] = useState<string>("");
   const lastQueryRef = useRef<{
     lat: number;
     lng: number;
@@ -121,8 +134,26 @@ export default function HomePage() {
     })();
   }, [getToken]);
 
+  // live "Ahora · HH:MM JST" for the results header (client-only)
+  useEffect(() => {
+    const update = () => setNowCtx(`${t("sim.now")} · ${jstClock()} JST`);
+    update();
+    const id = setInterval(update, 30_000);
+    return () => clearInterval(id);
+  }, [t]);
+
   const origin = location ? { lat: location.lat, lng: location.lng } : null;
   const selected = result?.places.find((p) => p.id === selectedId) ?? null;
+
+  /** Results-header context: "Ahora · 15:00 JST" (real clock) or the
+   *  deterministic preset label ("Tarde · 15:00 JST"). */
+  const simCtx = (() => {
+    if (!simPreset) return nowCtx;
+    const preset = SIM_PRESETS.find((p) => p.id === simPreset);
+    if (!preset) return nowCtx;
+    const hh = String(preset.hour).padStart(2, "0");
+    return `${t(`sim.${preset.labelKey}`)} · ${hh}:00 JST`;
+  })();
 
   const handleFeedback = useCallback(async (placeId: string, liked: boolean, tags?: string[]) => {
     setVotes((v) => ({ ...v, [placeId]: liked ? "like" : "dislike" }));
@@ -350,6 +381,22 @@ export default function HomePage() {
 
   const closeDetail = useCallback(() => setSelectedId(null), []);
 
+  const resultsProps = {
+    loading,
+    error,
+    result,
+    profile,
+    selectedId,
+    onSelect: setSelectedId,
+    tastesOpen,
+    onTastesToggle: () => setTastesOpen((v) => !v),
+    onTaste: handleTaste,
+    onTasteReset: handleTasteReset,
+    onNarrate: narrateNow,
+    guideState,
+    simCtx,
+  } as const;
+
   return (
     <div className="relative h-dvh w-full overflow-hidden">
       {/* full-screen map background */}
@@ -363,41 +410,35 @@ export default function HomePage() {
             onSelect={setSelectedId}
           />
         ) : (
-          <div className="flex h-full items-center justify-center bg-slate-100 text-sm text-slate-400">
+          <div className="flex h-full items-center justify-center bg-bg text-sm text-muted">
             {t("map.nearby")}
           </div>
         )}
       </div>
 
       {/* ============ DESKTOP (md+) ============ */}
-      <div className="pointer-events-none absolute inset-0 z-10 hidden md:block">
-        <div className="pointer-events-none flex h-full flex-col gap-2 p-3">
-          {/* header row: brand + locale/settings */}
-          <div className="pointer-events-auto flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white/95 px-2.5 py-1.5 shadow-sm">
-              <span className="text-base">🗾</span>
-              <span className="text-sm font-bold text-slate-900">
-                {t("app.name")} <span className="font-normal text-slate-400">旅</span>
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <LocaleToggle />
-              <Link
-                href="/settings"
-                className="flex min-h-[36px] min-w-[36px] items-center justify-center rounded-lg border border-slate-300 bg-white/95 p-1.5 text-sm text-slate-700 shadow-sm backdrop-blur hover:bg-slate-50 active:bg-slate-100"
-                title={t("nav.settings")}
-              >
-                ⚙️
-              </Link>
-            </div>
-          </div>
+      <div className="pointer-events-none absolute inset-0 z-20 hidden md:block">
+        {/* brand + time simulation pills (prototype .brand-pill / .sim-pill) */}
+        <BrandPill className="pointer-events-auto absolute left-3 top-3" />
+        {/* settings + locale + time simulation (top-right cluster) */}
+        <div className="pointer-events-auto absolute right-3 top-3 flex items-center gap-1.5">
+          <LocaleToggle />
+          <Link
+            href="/settings"
+            className="grid h-10 w-10 place-items-center rounded-full border border-border bg-surface/94 text-fg shadow-soft backdrop-blur-md transition-colors hover:bg-fg/5 active:bg-fg/10"
+            title={t("nav.settings")}
+            aria-label={t("nav.settings")}
+          >
+            <Icon name="gear" size={18} />
+          </Link>
+          <SimTabs preset={simPreset} onChange={setSimPreset} />
+        </div>
 
-          {/* left column: sim + search + results */}
-          <div className="pointer-events-auto flex w-[26rem] min-h-0 flex-1 flex-col gap-2 overflow-hidden">
-            <div className="shrink-0 rounded-xl border border-slate-200 bg-white/95 px-1.5 py-1 shadow-sm">
-              <SimTabs preset={simPreset} onChange={setSimPreset} />
-            </div>
+        {/* left rail: search + filters (rail-top) + results (rail-body) */}
+        <section className="pointer-events-auto absolute bottom-3 left-3 top-16 flex w-[400px] max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-panel-lg border border-border bg-surface/95 shadow-panel backdrop-blur-md">
+          <div className="flex-none border-b border-border p-3.5">
             <DayPanel
+              embedded
               initialLocation={location}
               loading={loading}
               onDiscover={handleDiscover}
@@ -410,28 +451,16 @@ export default function HomePage() {
               onTypesChange={setTypes}
               onKeywordChange={setKeyword}
             />
-            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain pr-1">
-              <ResultsList
-                loading={loading}
-                error={error}
-                result={result}
-                profile={profile}
-                mode={mode}
-                selectedId={selectedId}
-                onSelect={setSelectedId}
-                tastesOpen={tastesOpen}
-                onTastesToggle={() => setTastesOpen((v) => !v)}
-                onTaste={handleTaste}
-                onTasteReset={handleTasteReset}
-                onNarrate={narrateNow}
-                guideState={guideState}
-              />
-            </div>
           </div>
-        </div>
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3.5">
+            <ResultsList {...resultsProps} />
+          </div>
+        </section>
+      </div>
 
-        {/* right place-detail panel */}
-        {selected && origin && (
+      {/* right place-detail panel (desktop) */}
+      {selected && origin && (
+        <div className="hidden md:block">
           <PlaceDetailPanel
             place={selected}
             origin={origin}
@@ -441,8 +470,8 @@ export default function HomePage() {
             onFeedback={handleFeedback}
             onClose={closeDetail}
           />
-        )}
-      </div>
+        </div>
+      )}
 
       {/* ============ MOBILE (<md) ============ */}
       <div className="pointer-events-none absolute inset-0 z-10 md:hidden">
@@ -451,30 +480,30 @@ export default function HomePage() {
           <div className="pointer-events-auto flex items-center justify-between gap-2">
             <button
               onClick={() => setSearchOpen(true)}
-              className="flex min-w-0 flex-1 items-center gap-2 rounded-full border border-slate-200 bg-white/95 px-4 py-2.5 text-left shadow-sm min-h-[44px]"
+              className="flex min-w-0 flex-1 items-center gap-2 rounded-full border border-border bg-surface/95 px-4 py-2.5 text-left shadow-soft min-h-[44px]"
               aria-label={t("panel.where")}
             >
-              <span className="text-base">📍</span>
-              <span className="truncate text-sm font-medium text-slate-700">
+              <Icon name="search" size={17} className="shrink-0 text-muted" />
+              <span className="truncate text-sm font-medium text-fg">
                 {location ? location.label : t("panel.where")}
               </span>
-              {loading && <span className="animate-pulse text-xs">⏳</span>}
+              {loading && <span className="ml-auto animate-pulse text-xs text-muted">⏳</span>}
             </button>
             <div className="flex shrink-0 items-center gap-1.5">
               <LocaleToggle />
               <Link
                 href="/settings"
-                className="flex min-h-[40px] min-w-[40px] items-center justify-center rounded-full border border-slate-300 bg-white/95 text-sm text-slate-700 shadow-sm hover:bg-slate-50 active:bg-slate-100"
+                className="flex h-[44px] w-[44px] items-center justify-center rounded-full border border-border bg-surface/95 text-fg shadow-soft transition-colors hover:bg-fg/5 active:bg-fg/10"
                 title={t("nav.settings")}
               >
-                ⚙️
+                <Icon name="gear" size={18} />
               </Link>
             </div>
           </div>
 
           {/* time simulation chips */}
-          <div className="pointer-events-auto shrink-0 rounded-xl border border-slate-200 bg-white/95 px-1.5 py-1 shadow-sm">
-            <SimTabs preset={simPreset} onChange={setSimPreset} />
+          <div className="pointer-events-auto">
+            <SimTabs preset={simPreset} onChange={setSimPreset} className="max-w-[calc(100%-1rem)]" />
           </div>
         </div>
       </div>
@@ -492,21 +521,7 @@ export default function HomePage() {
                 : undefined
             }
           >
-            <ResultsList
-              loading={loading}
-              error={error}
-              result={result}
-              profile={profile}
-              mode={mode}
-              selectedId={selectedId}
-              onSelect={setSelectedId}
-              tastesOpen={tastesOpen}
-              onTastesToggle={() => setTastesOpen((v) => !v)}
-              onTaste={handleTaste}
-              onTasteReset={handleTasteReset}
-              onNarrate={narrateNow}
-              guideState={guideState}
-            />
+            <ResultsList {...resultsProps} />
           </BottomSheet>
         </div>
       )}

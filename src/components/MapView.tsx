@@ -5,7 +5,6 @@ import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { LatLng, ScoredPlace } from "@/lib/types";
-import { EXPERIENCE_TYPE_MAP } from "@/lib/places/taxonomy";
 import { DEFAULT_TILE, TILE_STYLES, tileStyleById } from "@/lib/tiles";
 import { useI18n } from "@/lib/i18n";
 
@@ -52,7 +51,7 @@ function TileSwitcher({
 }) {
   const { t } = useI18n();
   return (
-    <div className="absolute bottom-24 right-2 z-[1000] flex max-w-[calc(100%-1rem)] flex-wrap gap-0.5 rounded-xl border border-slate-200 bg-white/95 p-1 shadow-md backdrop-blur md:right-2">
+    <div className="absolute bottom-24 right-2 z-[1000] flex max-w-[calc(100%-1rem)] flex-wrap gap-0.5 rounded-panel border border-border bg-surface/95 p-1 shadow-soft backdrop-blur md:right-2">
       {TILE_STYLES.map((s) => (
         <button
           key={s.id}
@@ -61,8 +60,8 @@ function TileSwitcher({
           aria-label={t(`map.tiles.${s.id}`)}
           className={`flex items-center gap-1 rounded-lg px-1.5 py-1.5 text-[11px] font-medium transition-colors min-h-[36px] sm:px-2 ${
             tileId === s.id
-              ? "bg-brand-600 text-white"
-              : "text-slate-600 hover:bg-slate-100 active:bg-slate-200"
+              ? "bg-brand-600 text-surface"
+              : "text-muted hover:bg-fg/5 hover:text-fg active:bg-fg/10"
           }`}
         >
           <span>{TILE_ICONS[s.id] ?? "🗺️"}</span>
@@ -83,7 +82,7 @@ function LocateButton({ center }: { center: LatLng }) {
       onClick={() => map.flyTo([center.lat, center.lng], Math.max(map.getZoom(), 13), { duration: 0.6 })}
       aria-label={t("map.locate")}
       title={t("map.locate")}
-      className="absolute bottom-44 right-2 z-[1000] flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-md backdrop-blur transition-colors hover:bg-slate-50 active:bg-slate-100"
+      className="absolute bottom-44 right-2 z-[1000] flex h-10 w-10 items-center justify-center rounded-full border border-border bg-surface text-fg shadow-soft backdrop-blur transition-colors hover:bg-fg/5 active:bg-fg/10"
     >
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
         <circle cx="12" cy="12" r="6" />
@@ -94,46 +93,35 @@ function LocateButton({ center }: { center: LatLng }) {
   );
 }
 
-function scoreColor(score: number): string {
-  if (score >= 70) return "#059669"; // emerald
-  if (score >= 50) return "#d97706"; // amber
-  return "#e11d48"; // rose
-}
-
-function markerIcon(place: ScoredPlace): L.DivIcon {
-  const type = place.tags[0] ?? "viewpoint";
-  const emoji = EXPERIENCE_TYPE_MAP[type]?.emoji ?? "📍";
-  const color = scoreColor(place.score);
+/** Ranked place marker (prototype .marker): cinnabar numbered circle. */
+function markerIcon(rank: number): L.DivIcon {
   return L.divIcon({
     className: "",
-    html: `<div style="position:relative;width:30px;height:30px;border-radius:9999px;background:#fff;border:2px solid ${color};box-shadow:0 1px 4px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font-size:15px">${emoji}</div>`,
+    html: `<div style="position:relative;width:30px;height:30px;border-radius:9999px;background:var(--color-verm, #c04b33);color:#fff;border:2px solid #fff;box-shadow:0 4px 12px rgba(192,75,51,.35);display:flex;align-items:center;justify-content:center;font-family:ui-monospace,monospace;font-size:12px;font-weight:700;transition:transform .15s">${rank}</div>`,
     iconSize: [30, 30],
-    iconAnchor: [15, 30],
-    popupAnchor: [0, -30],
+    iconAnchor: [15, 15],
+    popupAnchor: [0, -18],
   });
 }
 
-/** Highlighted marker for the selected place: pulsing ring, larger, on top. */
-function selectedIcon(place: ScoredPlace): L.DivIcon {
-  const type = place.tags[0] ?? "viewpoint";
-  const emoji = EXPERIENCE_TYPE_MAP[type]?.emoji ?? "📍";
+/** Selected marker: bigger, deeper cinnabar, accent pulse ring. */
+function selectedIcon(rank: number): L.DivIcon {
   return L.divIcon({
     className: "",
-    html: `<div style="position:relative;width:44px;height:44px;border-radius:9999px;background:#0ea5e9;border:3px solid #fff;box-shadow:0 2px 10px rgba(14,165,233,.55);display:flex;align-items:center;justify-content:center;font-size:20px;z-index:1000">${emoji}</div>
-           <div class="tabi-pulse-ring" style="position:absolute;top:50%;left:50%;width:44px;height:44px;margin:-22px 0 0 -22px;border-radius:9999px;border:3px solid #0ea5e9;pointer-events:none"></div>`,
-    iconSize: [44, 44],
-    iconAnchor: [22, 44],
-    popupAnchor: [0, -44],
+    html: `<div style="position:relative;width:38px;height:38px;border-radius:9999px;background:var(--color-verm-deep, #9c3a24);color:#fff;border:2px solid #fff;box-shadow:0 4px 12px rgba(156,58,36,.4);display:flex;align-items:center;justify-content:center;font-family:ui-monospace,monospace;font-size:14px;font-weight:700;z-index:1000">${rank}</div>
+           <div class="tabi-pulse-ring" style="position:absolute;top:50%;left:50%;width:38px;height:38px;margin:-19px 0 0 -19px;border-radius:9999px;border:3px solid var(--color-brand-500, #454e95);pointer-events:none"></div>`,
+    iconSize: [38, 38],
+    iconAnchor: [19, 19],
+    popupAnchor: [0, -22],
   });
 }
 
-/** "You are here" marker: filled blue dot with a static halo (vs the
- *  pulsing ring used for the selected recommendation). */
-function userIcon(): L.DivIcon {
+/** "You are here" marker: filled accent dot with halo + label. */
+function userIcon(label: string): L.DivIcon {
   return L.divIcon({
     className: "",
-    html: `<div style="position:relative;width:18px;height:18px;border-radius:9999px;background:#2563eb;border:3px solid #fff;box-shadow:0 1px 6px rgba(37,99,235,.7)"></div>
-           <div style="position:absolute;top:50%;left:50%;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:9999px;background:rgba(37,99,235,.25)"></div>`,
+    html: `<div style="position:relative;width:18px;height:18px;border-radius:9999px;background:var(--color-brand-600, #3d47a8);border:3px solid #fff;box-shadow:0 0 0 4px rgba(61,71,168,.25),0 2px 8px rgba(0,0,0,.2)"></div>
+           <div style="position:absolute;left:26px;top:50%;transform:translateY(-50%);white-space:nowrap;font-size:11px;font-weight:700;color:var(--color-fg,#1f2433);background:rgba(255,255,255,.92);backdrop-filter:blur(6px);padding:3px 8px;border-radius:9999px;border:1px solid var(--color-border,#e7e4dc)">${label}</div>`,
     iconSize: [18, 18],
     iconAnchor: [9, 9],
   });
@@ -171,17 +159,17 @@ const PlaceMarkers = memo(function PlaceMarkers({
   const { t } = useI18n();
   return (
     <>
-      {places.map((p) => (
+      {places.map((p, i) => (
         <Marker
           key={p.id}
           position={[p.lat, p.lng]}
-          icon={markerIcon(p)}
+          icon={markerIcon(i + 1)}
           eventHandlers={{ click: () => onSelect(p.id) }}
         >
           <Popup>
             <div className="text-sm">
               <div className="font-semibold">{p.name}</div>
-              <div className="text-gray-600">
+              <div className="text-muted">
                 {t("card.travel", { min: p.travelMin })} ·{" "}
                 {p.rating !== undefined && t("card.rating", { r: p.rating.toFixed(1) })}
               </div>
@@ -249,11 +237,11 @@ export default function MapView({
         <FlyToSelected place={selected} />
 
       {/* you are here — visual reference of the input position */}
-      <Marker position={[center.lat, center.lng]} icon={userIcon()} zIndexOffset={500}>
+      <Marker position={[center.lat, center.lng]} icon={userIcon(t("map.youAreHere"))} zIndexOffset={500}>
         <Popup>
           <div className="text-sm">
-            <div className="font-semibold">📍 {t("map.youAreHere")}</div>
-            <div className="text-gray-600">
+            <div className="font-semibold">{t("map.youAreHere")}</div>
+            <div className="text-muted">
               {userApproximate ? t("map.approx") : t("map.exact")}
             </div>
           </div>
@@ -266,14 +254,14 @@ export default function MapView({
         <Marker
           key={`sel-${selected.id}`}
           position={[selected.lat, selected.lng]}
-          icon={selectedIcon(selected)}
+          icon={selectedIcon(places.findIndex((p) => p.id === selected.id) + 1)}
           zIndexOffset={1000}
           eventHandlers={{ click: () => onSelect(selected.id) }}
         >
           <Popup>
             <div className="text-sm">
               <div className="font-semibold">{selected.name}</div>
-              <div className="text-gray-600">
+              <div className="text-muted">
                 {t("card.travel", { min: selected.travelMin })} ·{" "}
                 {selected.rating !== undefined && t("card.rating", { r: selected.rating.toFixed(1) })}
               </div>

@@ -1,38 +1,24 @@
 "use client";
 
 import type { ScoredPlace } from "@/lib/types";
-import { EXPERIENCE_TYPE_MAP } from "@/lib/places/taxonomy";
 import { useI18n } from "@/lib/i18n";
 import { fmtCount } from "@/lib/format";
-import PlacePhoto from "./PlacePhoto";
+import Icon, { typeIcon } from "@/components/ui/Icon";
+import ScoreRing from "@/components/ui/ScoreRing";
 
-const MODE_EMOJI: Record<string, string> = {
-  walking: "🚶",
-  transit: "🚃",
-  car: "🚗",
-};
-
-/** Compact list item (Google-Maps-style result row). Tapping opens the
- *  full detail panel/sheet. */
+/** Compact list item (prototype .card): icon tile, tags, meta and score
+ *  ring. Tapping opens the full detail panel/sheet. */
 export default function RecommendationCard({
   place,
-  mode,
   selected,
   onSelect,
 }: {
   place: ScoredPlace;
-  /** transport mode used for the recommendation */
-  mode: string;
   selected: boolean;
   onSelect: (id: string) => void;
 }) {
-  const { t } = useI18n();
-  const photoRef = place.photoRefs?.[0] ?? place.photoRef;
-  const emojiBox = (
-    <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-2xl">
-      {EXPERIENCE_TYPE_MAP[place.tags[0] ?? "viewpoint"]?.emoji ?? "📍"}
-    </div>
-  );
+  const { t, locale } = useI18n();
+  const km = place.distanceKm.toLocaleString(locale, { maximumFractionDigits: 1 });
 
   return (
     <article
@@ -47,71 +33,68 @@ export default function RecommendationCard({
           onSelect(place.id);
         }
       }}
-      className={`flex w-full cursor-pointer items-center gap-3 rounded-2xl border p-3 text-left transition-colors ${
+      className={`card relative flex w-full cursor-pointer items-center gap-2.5 overflow-hidden rounded-panel border bg-surface p-2.5 text-left transition-[border-color,box-shadow,transform] hover:-translate-y-px hover:border-fg/25 hover:shadow-soft active:translate-y-px ${
         selected
-          ? "border-brand-400 bg-brand-50"
-          : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+          ? "border-brand-500/50 shadow-[0_8px_24px_color-mix(in_oklch,var(--color-brand-500)_14%,transparent)]"
+          : "border-border"
       }`}
     >
-      {photoRef ? (
-        <PlacePhoto
-          photoRef={photoRef}
-          placeId={place.id}
-          alt={place.name}
-          className="h-20 w-20 shrink-0 rounded-xl object-cover"
-          fallback={emojiBox}
-        />
-      ) : (
-        emojiBox
-      )}
+      {/* selection bar (prototype .card::before) */}
+      <span
+        aria-hidden
+        className={`absolute bottom-2.5 left-0 top-2.5 w-[3px] rounded-r-[3px] ${
+          selected ? "bg-brand-500" : "bg-transparent"
+        }`}
+      />
+
+      <div className="card-tile grid h-[46px] w-[46px] flex-none place-items-center rounded-[13px] border border-brand-500/25 bg-accent-soft text-brand-600">
+        <Icon name={typeIcon(place.tags[0] ?? "viewpoint")} size={20} />
+      </div>
 
       <div className="min-w-0 flex-1">
-        <div className="flex items-start justify-between gap-2">
-          <h3 className="truncate font-semibold text-slate-900">{place.name}</h3>
-          <div className="shrink-0 text-right leading-none">
-            <span className="text-lg font-bold text-slate-900">{place.score}</span>
-            <span className="text-[10px] font-normal text-slate-400">/100</span>
-          </div>
+        <div className="truncate font-display text-[14.5px] font-bold leading-tight tracking-[-0.01em] text-fg">
+          {place.name}
         </div>
 
-        {place.tags.length > 0 && (
-          <div className="mt-1 flex flex-wrap gap-1">
-            {place.tags.slice(0, 2).map((tag) => (
-              <span
-                key={tag}
-                className="inline-flex items-center gap-0.5 rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600"
-              >
-                <span>{EXPERIENCE_TYPE_MAP[tag]?.emoji ?? ""}</span>
-                {t(`panel.type.${tag}`)}
-              </span>
-            ))}
-          </div>
-        )}
+        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+          {place.tags.slice(0, 2).map((tag) => (
+            <span
+              key={tag}
+              className="rounded-full bg-fg/5 px-2 py-0.5 text-[11px] font-semibold text-muted"
+            >
+              {t(`panel.type.${tag}`)}
+            </span>
+          ))}
+          {place.openNow === true && (
+            <span className="flex items-center gap-1 text-[11.5px] font-semibold text-ok">
+              <span className="h-1.5 w-1.5 rounded-full bg-ok" />
+              {t("card.open")}
+            </span>
+          )}
+          {place.openNow === false && (
+            <span className="flex items-center gap-1 text-[11.5px] font-semibold text-bad">
+              <span className="h-1.5 w-1.5 rounded-full bg-bad" />
+              {t("card.closed")}
+            </span>
+          )}
+        </div>
 
-        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-600">
-          <span>📍 {t("card.distance", { km: place.distanceKm })}</span>
-          <span>
-            {MODE_EMOJI[mode] ?? "🚃"} {t("card.travel", { min: place.travelMin })}
-          </span>
+        <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px] text-muted">
+          <b className="mono font-semibold text-fg">{place.travelMin} min</b>
+          <span>{km} km</span>
           {place.rating !== undefined && (
             <span>
-              ⭐ {place.rating.toFixed(1)}
+              <span className="font-bold text-fg">★</span>{" "}
+              {place.rating.toLocaleString(locale, { maximumFractionDigits: 1 })}
               {place.userRatingsTotal !== undefined && (
-                <span className="text-slate-400">
-                  {" "}
-                  ({fmtCount(place.userRatingsTotal)})
-                </span>
+                <span className="text-muted"> ({fmtCount(place.userRatingsTotal)})</span>
               )}
             </span>
           )}
-          {place.openNow === true && <span className="text-emerald-600">● {t("card.open")}</span>}
-          {place.openNow === false && <span className="text-rose-600">● {t("card.closed")}</span>}
         </div>
       </div>
 
-      <span className="shrink-0 text-slate-300" aria-hidden>
-        ›
-      </span>
+      <ScoreRing score={place.score} size="sm" />
     </article>
   );
 }
