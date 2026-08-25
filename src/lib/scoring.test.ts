@@ -252,3 +252,107 @@ describe("scorePlaces — sorting", () => {
     expect(out[0].id).toBe(a.id);
   });
 });
+
+describe("scorePlaces — time-of-day context (destination-local wall clock)", () => {
+  // 2026-08-15 is a Saturday; 2026-08-18 a Tuesday
+  const satNoon = new Date(Date.UTC(2026, 7, 15, 12, 30));
+  const goldenWeather = () =>
+    weather({
+      daily: [
+        {
+          date: "2026-08-15",
+          code: 1,
+          maxC: 28,
+          minC: 20,
+          precipProbMax: 10,
+          sunrise: "2026-08-15T05:10",
+          sunset: "2026-08-15T18:40",
+        },
+      ],
+    });
+
+  it("boosts food during meal windows only", () => {
+    const lunch = scorePlaces([place({ tags: ["food"] })], ctx({ now: satNoon }))[0];
+    expect(lunch.reasons.some((r) => r.key === "mealTime")).toBe(true);
+    const mid = scorePlaces(
+      [place({ tags: ["food"] })],
+      ctx({ now: new Date(Date.UTC(2026, 7, 15, 16, 0)) })
+    )[0];
+    expect(mid.reasons.some((r) => r.key === "mealTime")).toBe(false);
+  });
+
+  it("boosts nightlife at night", () => {
+    const night = scorePlaces(
+      [place({ tags: ["nightlife"] })],
+      ctx({ now: new Date(Date.UTC(2026, 7, 18, 22, 0)) })
+    )[0];
+    expect(night.reasons.some((r) => r.key === "nightTime")).toBe(true);
+    const day = scorePlaces([place({ tags: ["nightlife"] })], ctx({ now: satNoon }))[0];
+    expect(day.reasons.some((r) => r.key === "nightTime")).toBe(false);
+  });
+
+  it("boosts onsen in the evening", () => {
+    const eve = scorePlaces(
+      [place({ tags: ["onsen"] })],
+      ctx({ now: new Date(Date.UTC(2026, 7, 18, 19, 0)) })
+    )[0];
+    expect(eve.reasons.some((r) => r.key === "onsenEvening")).toBe(true);
+  });
+
+  it("boosts viewpoints in golden hour using real sunrise/sunset", () => {
+    const atSunset = new Date(Date.UTC(2026, 7, 15, 18, 10)); // 30 min before sunset
+    const vp = scorePlaces(
+      [place({ tags: ["viewpoint"] })],
+      ctx({ weather: goldenWeather(), now: atSunset })
+    )[0];
+    expect(vp.reasons.some((r) => r.key === "goldenHour")).toBe(true);
+    const noon = scorePlaces(
+      [place({ tags: ["viewpoint"] })],
+      ctx({ weather: goldenWeather(), now: satNoon })
+    )[0];
+    expect(noon.reasons.some((r) => r.key === "goldenHour")).toBe(false);
+  });
+
+  it("boosts parks/markets on weekends only", () => {
+    const sat = scorePlaces([place({ tags: ["park"] })], ctx({ now: satNoon }))[0];
+    expect(sat.reasons.some((r) => r.key === "weekend")).toBe(true);
+    const tue = scorePlaces(
+      [place({ tags: ["park"] })],
+      ctx({ now: new Date(Date.UTC(2026, 7, 18, 12, 0)) })
+    )[0];
+    expect(tue.reasons.some((r) => r.key === "weekend")).toBe(false);
+  });
+
+  it("boosts Wikipedia-documented landmarks, except when the keyword hit", () => {
+    const plain = scorePlaces(
+      [place({ tags: ["temple"], wikipedia: "ja:善光寺" })],
+      ctx()
+    )[0];
+    expect(plain.reasons.some((r) => r.key === "landmark")).toBe(true);
+    const kw = scorePlaces(
+      [place({ name: "善光寺", tags: ["temple"], wikipedia: "ja:善光寺" })],
+      ctx({ keyword: "善光寺", keywordTerms: ["善光寺"] })
+    )[0];
+    expect(kw.reasons.some((r) => r.key === "keywordMatch")).toBe(true);
+    expect(kw.reasons.some((r) => r.key === "landmark")).toBe(false);
+  });
+});
+
+describe("scorePlaces — pinned exemptions", () => {
+  it("keeps a pinned place even when closed or beyond the filters", () => {
+    const closed = place({ id: "pin1", openNow: false });
+    const far = place({ id: "pin2", lat: 36.9, lng: 138.5 }); // ~40 km
+    const out = scorePlaces(
+      [closed, far],
+      ctx({ maxDistKm: 1, pinnedIds: new Set(["pin1", "pin2"]) })
+    );
+    expect(out.map((p) => p.id)).toEqual(["pin1", "pin2"]);
+  });
+
+  it("drops the same places when they are not pinned", () => {
+    const closed = place({ openNow: false });
+    const far = place({ lat: 36.9, lng: 138.5 });
+    const out = scorePlaces([closed, far], ctx({ maxDistKm: 1 }));
+    expect(out).toHaveLength(0);
+  });
+});

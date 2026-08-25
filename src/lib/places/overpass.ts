@@ -135,6 +135,9 @@ function toPlace(e: OverpassElement, matched: string[]): Place | null {
     lng: lng2,
     tags: matched,
     openNow: null,
+    // Landmark signal: documented places carry a Wikipedia page or Wikidata
+    // item — the scoring layer boosts them over undocumented ones.
+    wikipedia: (tags.wikipedia || tags.wikidata || undefined)?.slice(0, 100),
   } satisfies Place;
 }
 

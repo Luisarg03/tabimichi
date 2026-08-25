@@ -14,19 +14,24 @@ export function haversineKm(a: LatLng, b: LatLng): number {
 }
 
 /**
- * Rough travel-time estimate in minutes, by transport mode.
- * Heuristics: walking 4.5 km/h (capped at 4h), transit ~28 km/h + 8 min
- * wait overhead, car ~40 km/h + 2 min. Fine-tuned later (M+).
+ * Rough travel-time estimate in minutes, by transport mode, with a route
+ * detour factor per mode (straight-line distance is not the road/walk/rail
+ * distance: city walking detours ~25%, transit routes and transfers ~50%,
+ * driving ~25%). Heuristics: walking 4.5 km/h (capped at 4h), transit
+ * ~28 km/h + 8 min wait overhead, car ~40 km/h + 2 min. Fine-tuned later (M+).
  */
+const DETOUR_FACTOR: Record<TransportMode, number> = { walking: 1.25, transit: 1.5, car: 1.25 };
+
 export function travelMin(distKm: number, mode: TransportMode = "transit"): number {
   if (distKm <= 0.2) return Math.max(1, Math.round(distKm / 0.083)); // ~5 km/h walk for tiny distances
+  const routeKm = distKm * DETOUR_FACTOR[mode];
   switch (mode) {
     case "walking":
-      return Math.min(Math.round((distKm / 4.5) * 60), 240);
+      return Math.min(Math.round((routeKm / 4.5) * 60), 240);
     case "car":
-      return Math.max(3, Math.round((distKm / 40) * 60 + 2));
+      return Math.max(3, Math.round((routeKm / 40) * 60 + 2));
     default:
-      return Math.max(4, Math.round((distKm / 28) * 60 + 8));
+      return Math.max(4, Math.round((routeKm / 28) * 60 + 8));
   }
 }
 

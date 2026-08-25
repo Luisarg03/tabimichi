@@ -1,13 +1,14 @@
 import type { EmptyReason, Place, RecommendInput, RecommendResult, ScoredPlace, TransportMode } from "./types";
 import { getWeather, weatherAt } from "./weather";
 import { BUDGET_MIN, radiusForBudget, haversineKm } from "./geo";
-import { discover } from "./places";
+import { discover, normalizePlaceName } from "./places";
+import { EXPERIENCE_TYPE_MAP } from "./places/taxonomy";
 import { scorePlaces } from "./scoring";
 import { getProfile } from "./db";
 import { getConfig, type AppConfig } from "./settings";
 import { googlePlaceDetails } from "./places/google";
 import { isOpenAt, type OpenPeriod } from "./open-hours";
-import { jstHourStamp } from "./jst";
+import { jstHourStamp, localTimeAt } from "./jst";
 import { logEntry, newTraceId } from "./logger";
 import { keywordTokens, normalizeKeyword } from "./keywords";
 import { translateEsEn } from "./translate";
@@ -30,9 +31,17 @@ export const RESULT_LIMIT = 30;
  * Spread the top picks across experience types so a generic "discover" shows
  * variety (a park, a museum, a shrine, food...) instead of 10 similar places.
  * Within each type, score order is preserved; the global best still comes first.
+ * Spatial guard: a candidate hugging an already-picked same-type place
+ * (within 150 m) is deferred to a later round instead of dropped — the list
+ * spreads over the map without silently removing real local businesses.
  * Single-type searches are unaffected (one bucket).
  */
-export function diversify<T extends { tags: string[] }>(scored: T[], limit: number): T[] {
+const SAME_TAG_SPREAD_KM = 0.15;
+
+export function diversify<T extends { tags: string[]; lat?: number; lng?: number }>(
+  scored: T[],
+  limit: number
+): T[] {
   const byTag = new Map<string, T[]>();
   for (const p of scored) {
     const tag = p.tags[0] ?? "other";
@@ -40,13 +49,28 @@ export function diversify<T extends { tags: string[] }>(scored: T[], limit: numb
     byTag.get(tag)!.push(p);
   }
   const out: T[] = [];
+  const pickedByTag = new Map<string, T[]>();
   const keys = [...byTag.keys()];
-  while (out.length < limit) {
+  let guard = 0;
+  while (out.length < limit && guard++ <= scored.length + limit) {
     let added = false;
     for (const k of keys) {
       const list = byTag.get(k)!;
       if (list.length === 0) continue;
-      out.push(list.shift()!);
+      const picked = pickedByTag.get(k) ?? [];
+      // prefer a candidate that is not on top of an already-picked same-type
+      // place; when everything clusters (or coords are unknown), take the
+      // best remaining one
+      const tooClose = (p: T, q: T): boolean =>
+        p.lat !== undefined && p.lng !== undefined && q.lat !== undefined && q.lng !== undefined
+          ? haversineKm({ lat: p.lat, lng: p.lng }, { lat: q.lat, lng: q.lng }) <= SAME_TAG_SPREAD_KM
+          : false;
+      let idx = list.findIndex((p) => !picked.some((q) => tooClose(p, q)));
+      if (idx === -1) idx = 0;
+      const [p] = list.splice(idx, 1);
+      picked.push(p);
+      pickedByTag.set(k, picked);
+      out.push(p);
       added = true;
       if (out.length >= limit) break;
     }
@@ -105,14 +129,33 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
 
   const weather = simulated ? weatherAt(weatherRaw, jstHourStamp(simulated)) : weatherRaw;
 
+  // Pinned place (the exact place the user searched): joins the candidate
+  // pool so scoring sees it, but is exempt from hard filters and later moved
+  // to the front — Google Maps shows the searched place, always.
+  const pin = input.pin
+    ? { ...input.pin, name: input.pin.name.trim().slice(0, 120) }
+    : undefined;
+  const pinPlace: Candidate | undefined = pin
+    ? {
+        id: `pin_${pin.lat.toFixed(4)}_${pin.lng.toFixed(4)}`,
+        source: "overpass",
+        name: pin.name,
+        lat: pin.lat,
+        lng: pin.lng,
+        tags: EXPERIENCE_TYPE_MAP[pin.typeId ?? ""] ? [pin.typeId!] : ["other"],
+        openNow: null,
+        fromKeyword: true,
+      }
+    : undefined;
+
   // simulation: evaluate open/closed locally at the simulated instant.
   // Enrich the NEAREST candidates first (details calls are limited) and merge
   // the results back — never discard candidates outside the enriched slice.
-  let candidates: Candidate[] = places;
+  let candidates: Candidate[] = pinPlace ? [...places, pinPlace] : places;
   if (simulated) {
     const config = input.config ?? getConfig();
     const base = { lat: input.lat, lng: input.lng };
-    const byDistance = [...places].sort(
+    const byDistance = [...candidates].sort(
       (a, b) => haversineKm(base, a) - haversineKm(base, b)
     );
     const enriched = await Promise.all(
@@ -128,16 +171,19 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
       })
     );
     const enrichedById = new Map(enriched.map((p) => [p.id, p]));
-    candidates = places.map((p) => enrichedById.get(p.id) ?? { ...p, openNow: null });
+    candidates = candidates.map((p) => enrichedById.get(p.id) ?? { ...p, openNow: null });
   }
 
   const profile = getProfile();
   const stats = { closed: 0, tooFar: 0, nameMatches: 0 };
+  // Destination-local wall clock in UTC fields: simulated dates already are
+  // (JST convention); real instants get shifted by the longitude offset.
+  const scoringNow = simulated ?? localTimeAt(new Date(), input.lng);
   const scored = scorePlaces(candidates, {
     base: { lat: input.lat, lng: input.lng },
     budgetMin,
     weather,
-    now: simulated ?? new Date(),
+    now: scoringNow,
     mode,
     // Google Places only biases by radius, so hard-drop results beyond it (50% slack)
     maxDistKm: radiusKm * 1.5,
@@ -148,6 +194,7 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
     keywordTerms: kwTerms,
     profile,
     stats,
+    pinnedIds: pinPlace ? new Set([pinPlace.id]) : undefined,
   });
 
   // With an interest keyword the user's intent wins: candidates that came
@@ -172,6 +219,38 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
       (a, b) => b.score - a.score || a.travelMin - b.travelMin
     );
   }
+
+  // Pinned place first, always: prefer the source-enriched twin (Google's
+  // record with rating/photos) when discovery also found it — that keeps
+  // rich data while the pin guarantees presence; synthesize as last resort
+  // (every source failed and the pool is empty).
+  if (pinPlace) {
+    const twin = scored.find(
+      (p) =>
+        p.id !== pinPlace.id &&
+        normalizePlaceName(p.name) === normalizePlaceName(pinPlace.name) &&
+        Math.abs(p.lat - pinPlace.lat) < 0.002 &&
+        Math.abs(p.lng - pinPlace.lng) < 0.002
+    );
+    const chosen = twin ?? scored.find((p) => p.id === pinPlace.id);
+    if (chosen) {
+      top = [
+        { ...chosen, reasons: [{ key: "pinned" }, ...chosen.reasons] },
+        ...top.filter((p) => p.id !== chosen.id && p.id !== pinPlace.id),
+      ].slice(0, RESULT_LIMIT);
+    } else {
+      top = [
+        {
+          ...pinPlace,
+          score: top.length > 0 ? Math.max(top[0].score, 50) : 50,
+          distanceKm: 0,
+          travelMin: 0,
+          reasons: [{ key: "pinned" }],
+        },
+        ...top,
+      ].slice(0, RESULT_LIMIT);
+    }
+  }
   const emptyReason = emptyReasonFor(candidates, top.length);
 
   const traceId = newTraceId();
@@ -192,6 +271,7 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
     keyword,
     keywordResults: keywordResults ?? 0,
     keywordMiss: kwMiss,
+    pin: pin?.name,
     weather: { condition: weather.condition, tempC: weather.tempC, precipMm: weather.precipMm },
     profile,
     radiusKm,

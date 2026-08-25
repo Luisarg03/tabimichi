@@ -61,7 +61,7 @@ function dedupe(places: Place[]): Place[] {
 const SAME_NAME_DUP_KM = 0.1;
 const SOURCE_PRIORITY: Record<string, number> = { google: 0, geoapify: 1, overpass: 2 };
 
-function normName(name: string): string {
+export function normalizePlaceName(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9\u3040-\u30ff\u4e00-\u9faf]+/g, "");
 }
 
@@ -82,7 +82,7 @@ function proximityDedupe(places: Place[]): Place[] {
     const isDup = kept.some((k) => {
       if (haversineKm(k, p) > SAME_NAME_DUP_KM) return false;
       if (!p.tags.some((t) => k.tags.includes(t))) return false; // different type = different POI
-      return normName(p.name) === normName(k.name); // same place, same name
+      return normalizePlaceName(p.name) === normalizePlaceName(k.name); // same place, same name
     });
     if (!isDup) kept.push(p);
   }

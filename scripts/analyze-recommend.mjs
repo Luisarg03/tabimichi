@@ -57,6 +57,29 @@ async function runScenario(sc) {
     ? places.filter((p) => (p.reasons ?? []).some((x) => x.key === "keywordMatch")).length
     : (r.filters?.nameMatches ?? 0);
 
+  // spatial spread: closest pair of same-tag places in the top (higher = the
+  // list covers the map instead of clustering on one street)
+  const haversine = (a, b) => {
+    const R = 6371;
+    const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+    const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(h));
+  };
+  let spreadMinKm = "-";
+  const top = places.slice(0, 10);
+  let best = Infinity;
+  for (let i = 0; i < top.length; i++) {
+    for (let j = i + 1; j < top.length; j++) {
+      const shareTag = (top[i].tags ?? []).some((t) => (top[j].tags ?? []).includes(t));
+      if (!shareTag) continue;
+      const d = haversine(top[i], top[j]);
+      if (d < best) best = d;
+    }
+  }
+  if (Number.isFinite(best)) spreadMinKm = (best * 1000).toFixed(0) + "m";
+  const reasonKeys = new Set(places.flatMap((p) => (p.reasons ?? []).map((x) => x.key))).size;
+
   const miss = r.keywordMiss ? " ⚠ KEYWORD MISS (pool genérico)" : "";
   console.log(`\n=== ${name} ${keyword ? `· kw:"${keyword}"` : "· sin keyword"} — ${r.sourceNote}, ${places.length} resultados, empty:${r.emptyReason ?? "-"}${miss} ===`);
   if (r.filters) console.log(`filters: closed=${r.filters.closed} tooFar=${r.filters.tooFar} nameMatches=${kwHits} kwResults=${r.keywordResults ?? 0}`);
@@ -66,9 +89,9 @@ async function runScenario(sc) {
     );
   }
   console.log(
-    `metrics: avgRating=${avgRating} chains=${chains} hotels=${hotels} types=${types}/5 avgTravel=${avgTravel}min`
+    `metrics: avgRating=${avgRating} chains=${chains} hotels=${hotels} types=${types}/5 avgTravel=${avgTravel}min spread=${spreadMinKm} reasons=${reasonKeys}`
   );
-  return { avgRating: Number(avgRating), chains, hotels, types, kwHits, scored: places.length };
+  return { avgRating: Number(avgRating), chains, hotels, types, kwHits, scored: places.length, spreadMinKm, reasonKeys };
 }
 
 const results = [];

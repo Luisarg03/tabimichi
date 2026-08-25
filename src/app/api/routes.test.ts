@@ -143,6 +143,14 @@ describe("/api/recommend", () => {
       post("http://localhost/api/recommend", { lat: 36, lng: 138, budget: "lunch", keyword: "x".repeat(61) })
     );
     expect(longKw.status).toBe(400);
+    const badPin = await recommendPOST(
+      post("http://localhost/api/recommend", { lat: 36, lng: 138, budget: "lunch", pin: { name: "", lat: 0, lng: 0 } })
+    );
+    expect(badPin.status).toBe(400);
+    const badPinCoords = await recommendPOST(
+      post("http://localhost/api/recommend", { lat: 36, lng: 138, budget: "lunch", pin: { name: "X", lat: "36", lng: 138 } })
+    );
+    expect(badPinCoords.status).toBe(400);
   });
 
   it("accepts an optional interest keyword", async () => {

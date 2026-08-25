@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import type { TimeBudget, TransportMode } from "@/lib/types";
+import { useEffect, useRef, useState } from "react";
+import type { KeyboardEvent } from "react";
+import type { SearchSuggestion, TimeBudget, TransportMode } from "@/lib/types";
 import { EXPERIENCE_TYPES } from "@/lib/places/taxonomy";
 import { useI18n } from "@/lib/i18n";
+import { useAuth } from "@/lib/auth-context";
+import SearchSuggestions from "@/components/SearchSuggestions";
 
 export interface DiscoverPayload {
   lat: number;
@@ -16,6 +19,8 @@ export interface DiscoverPayload {
   gps?: boolean;
   /** optional interest keyword: "pokemon", "book off", "gatos"… */
   keyword?: string;
+  /** the exact place the user searched — guaranteed to appear first */
+  pin?: { name: string; lat: number; lng: number; typeId?: string };
 }
 
 const BUDGETS: TimeBudget[] = ["lunch", "afternoon", "full_day"];
@@ -24,6 +29,12 @@ const MODES: Array<{ id: TransportMode; emoji: string }> = [
   { id: "transit", emoji: "🚃" },
   { id: "car", emoji: "🚗" },
 ];
+
+/** A single CJK character is a valid search ("寺", "山"); otherwise ≥2. */
+const CJK_RE = /[\u3040-\u30ff\u3400-\u9fff]/;
+function isValidSearch(q: string): boolean {
+  return q.length >= 2 || (q.length === 1 && CJK_RE.test(q));
+}
 
 interface PanelLocation {
   lat: number;
@@ -64,12 +75,152 @@ export default function DayPanel({
   onKeywordChange: (k: string) => void;
 }) {
   const { t } = useI18n();
+  const { getToken } = useAuth();
   const [query, setQuery] = useState("");
   const [locating, setLocating] = useState(false);
   const [location, setLocation] = useState(initialLocation ?? null);
   const [geocodeError, setGeocodeError] = useState(false);
   /** Mobile: panel collapsed by default to not block the map */
   const [collapsed, setCollapsed] = useState(true);
+
+  // --- live search suggestions (place/address autocomplete) ---
+  const [suggestions, setSuggestions] = useState<SearchSuggestion[]>([]);
+  const [suggActive, setSuggActive] = useState(-1);
+  const [suggLoading, setSuggLoading] = useState(false);
+  const suggAbort = useRef<AbortController | null>(null);
+  /** picking a suggestion sets query to the place name — suppress the fetch
+   *  that change would otherwise trigger (the dropdown must not reopen). */
+  const justPicked = useRef(false);
+
+  useEffect(() => {
+    if (justPicked.current) {
+      justPicked.current = false;
+      return;
+    }
+    const q = query.trim();
+    suggAbort.current?.abort();
+    // Invalid/empty input: no setState here — suggOpen is already false via
+    // isValidSearch, and the aborted fetch self-heals its loading flag.
+    if (!isValidSearch(q)) return;
+    const ctrl = new AbortController();
+    suggAbort.current = ctrl;
+    setSuggLoading(true); // eslint-disable-line react-hooks/set-state-in-effect
+    const timer = setTimeout(async () => {
+      try {
+        // Bias suggestions by the current destination when one is set, so
+        // results are ranked by distance to the search area. The session JWT
+        // lets the server add Google Autocomplete with the user's own key.
+        const bias = location
+          ? `&lat=${location.lat.toFixed(5)}&lng=${location.lng.toFixed(5)}`
+          : "";
+        const token = await getToken();
+        const res = await fetch(`/api/search/suggest?q=${encodeURIComponent(q)}${bias}`, {
+          signal: ctrl.signal,
+          ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}),
+        });
+        if (!res.ok) {
+          setSuggestions([]);
+          return;
+        }
+        const data = (await res.json()) as { suggestions?: SearchSuggestion[] };
+        setSuggestions(data.suggestions ?? []);
+        setSuggActive(-1);
+      } catch {
+        // aborted by newer input (keep current list) or network failure —
+        // suggestions degrade to the remote-only list the user already sees
+      } finally {
+        if (!ctrl.signal.aborted) setSuggLoading(false);
+      }
+    }, 250);
+    return () => clearTimeout(timer);
+    // location bias is read at fetch time; re-fetching on every destination
+    // change would reopen the dropdown while the user is not typing
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
+
+  const suggOpen = (suggestions.length > 0 || suggLoading) && isValidSearch(query.trim());
+
+  /** Run discovery centered on a picked suggestion (Google-Maps behavior:
+   *  search → results immediately; filters stay adjustable afterwards). */
+  function discoverAt(
+    loc: { name: string; lat: number; lng: number; typeId?: string },
+    isPlace: boolean
+  ) {
+    setLocation({ lat: loc.lat, lng: loc.lng, label: loc.name, gps: false });
+    setGeocodeError(false);
+    onDiscover({
+      lat: loc.lat,
+      lng: loc.lng,
+      label: loc.name,
+      budget,
+      types,
+      mode,
+      // the searched place: keyword + pin guarantee it ranks first
+      keyword: isPlace ? loc.name : undefined,
+      pin: isPlace ? { name: loc.name, lat: loc.lat, lng: loc.lng, typeId: loc.typeId } : undefined,
+    });
+    setCollapsed(true);
+  }
+
+  function pickSuggestion(s: SearchSuggestion) {
+    justPicked.current = true;
+    setQuery(s.name);
+    setSuggestions([]);
+    setSuggActive(-1);
+    if (s.placeId) {
+      // Google prediction: no coords yet — resolve with one Place Details call
+      // (BYOK), falling back to geocoding the name with the free sources.
+      (async () => {
+        try {
+          const token = await getToken();
+          const res = await fetch(
+            `/api/search/resolve?placeId=${encodeURIComponent(s.placeId!)}`,
+            token ? { headers: { Authorization: `Bearer ${token}` } } : undefined
+          );
+          if (res.ok) {
+            const hit = (await res.json()) as {
+              name: string;
+              lat: number;
+              lng: number;
+              typeId?: string;
+            };
+            discoverAt(hit, true);
+            return;
+          }
+        } catch {
+          // fall through to the free geocoder
+        }
+        const g = await geocode(s.name);
+        if (g) discoverAt({ name: s.name, ...g }, true);
+      })();
+      return;
+    }
+    if (s.lat !== undefined && s.lng !== undefined) {
+      discoverAt({ name: s.name, lat: s.lat, lng: s.lng, typeId: s.typeId }, s.kind === "place");
+    }
+  }
+
+  function onSearchKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      const n = Math.max(suggestions.length, 1);
+      setSuggActive((a) => (a + 1) % n);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      const n = Math.max(suggestions.length, 1);
+      setSuggActive((a) => (a <= 0 ? n - 1 : (a - 1 + n) % n));
+    } else if (e.key === "Escape") {
+      setSuggestions([]);
+      setSuggActive(-1);
+    } else if (e.key === "Enter") {
+      if (suggActive >= 0 && suggestions[suggActive]) {
+        e.preventDefault();
+        pickSuggestion(suggestions[suggActive]);
+      } else {
+        geocode(query);
+      }
+    }
+  }
 
   // Keep the destination in sync with the page's persisted location: during
   // hydration the server snapshot is null, so the state initializer above
@@ -78,16 +229,17 @@ export default function DayPanel({
     if (initialLocation) setLocation(initialLocation); // eslint-disable-line react-hooks/set-state-in-effect
   }, [initialLocation]);
 
-  async function geocode(q: string) {
-    if (!q.trim()) return;
+  async function geocode(q: string): Promise<{ lat: number; lng: number; label: string } | null> {
+    if (!q.trim()) return null;
     setGeocodeError(false);
     const res = await fetch(`/api/geocode?q=${encodeURIComponent(q)}`);
     if (!res.ok) {
       setGeocodeError(true);
-      return;
+      return null;
     }
     const data = await res.json();
     setLocation({ lat: data.lat, lng: data.lng, label: data.name, gps: false });
+    return { lat: data.lat, lng: data.lng, label: data.name };
   }
 
   function useGps() {
@@ -171,14 +323,28 @@ export default function DayPanel({
 
       {/* Collapsible body */}
       <div className={`${bodyOpen ? "block" : "hidden md:block"} px-3 pb-3`}>
-        {/* location */}
+        {/* location — live search with place/address autocomplete */}
         <label className="block text-sm font-medium text-slate-700">{t("panel.where")}</label>
-        <div className="mt-1.5 flex gap-2">
+        <div className="relative mt-1.5 flex gap-2">
           <input
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && geocode(query)}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setSuggActive(-1);
+            }}
+            onKeyDown={onSearchKeyDown}
+            onBlur={() =>
+              setTimeout(() => {
+                setSuggestions([]);
+                setSuggActive(-1);
+              }, 150)
+            }
             placeholder={t("panel.searchPlaceholder")}
+            role="combobox"
+            aria-expanded={suggOpen}
+            aria-autocomplete="list"
+            aria-controls="tabi-suggestions"
+            aria-activedescendant={suggActive >= 0 ? `tabi-sugg-${suggActive}` : undefined}
             className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
           />
           <button
@@ -196,6 +362,15 @@ export default function DayPanel({
           >
             {locating ? "…" : "📍"}
           </button>
+          <SearchSuggestions
+            items={suggestions}
+            active={suggActive}
+            open={suggOpen}
+            loading={suggLoading}
+            query={query.trim()}
+            onPick={pickSuggestion}
+            onHover={setSuggActive}
+          />
         </div>
         {geocodeError && <p className="mt-1 text-xs text-rose-600">{t("status.geocodeError")}</p>}
         {location && (

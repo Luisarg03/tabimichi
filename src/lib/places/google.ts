@@ -202,7 +202,7 @@ function isNoiseForType(r: GoogleResult, type: ExperienceType): boolean {
  * mapping (e.g. only ["point_of_interest", "establishment"]) are ambiguous →
  * kept, tagged with the searched type as before.
  */
-const GOOGLE_TYPE_TO_EXPERIENCE: Record<string, string[]> = {
+export const GOOGLE_TYPE_TO_EXPERIENCE: Record<string, string[]> = {
   park: ["park", "sakura", "trekking"],
   garden: ["park"],
   tourist_attraction: ["viewpoint", "trekking", "sakura"],
@@ -408,8 +408,7 @@ export async function googleReconcile(
   return hit;
 }
 
-/** Google photo bytes (follows the CDN redirect). Shared by proxy + enrichment. */
-export async function googlePhotoBytes(
+/** Google photo bytes (follows the CDN redirect). Shared by proxy + enrichment. */export async function googlePhotoBytes(
   apiKey: string,
   ref: string,
   maxwidth = 600
@@ -445,5 +444,89 @@ export async function googlePlaceDetails(
   return {
     photos: (data.result.photos ?? []).slice(0, 8).map((p) => p.photo_reference),
     periods: data.result.opening_hours?.periods,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Search suggestions (Google parity)
+// ---------------------------------------------------------------------------
+
+export interface GooglePrediction {
+  place_id: string;
+  description: string;
+  types: string[];
+}
+
+/**
+ * Place Autocomplete — Google's own suggestion ranking for the dropdown.
+ * Predictions carry NO coordinates (only place_id + text); picking one
+ * resolves them via googlePlaceResolve. Location bias keeps results local.
+ */
+export async function googleAutocomplete(
+  apiKey: string,
+  input: string,
+  lang: string,
+  lat?: number,
+  lng?: number
+): Promise<GooglePrediction[]> {
+  const params = new URLSearchParams({
+    input,
+    language: lang === "en" ? "en" : "es",
+    key: apiKey,
+  });
+  if (lat !== undefined && lng !== undefined) {
+    params.set("location", `${lat.toFixed(5)},${lng.toFixed(5)}`);
+    params.set("radius", "50000");
+  }
+  const res = await fetch(
+    `https://maps.googleapis.com/maps/api/place/autocomplete/json?${params}`,
+    { signal: AbortSignal.timeout(5000) }
+  );
+  if (!res.ok) throw new Error(`autocomplete-http-${res.status}`);
+  const data = (await res.json()) as { status: string; predictions?: GooglePrediction[] };
+  if (data.status !== "OK" && data.status !== "ZERO_RESULTS") {
+    throw new Error(`autocomplete-${data.status}`);
+  }
+  return data.predictions ?? [];
+}
+
+/** Map a Google prediction's types to an experience type id (first hit). */
+export function googleTypeToExperience(types: string[]): string | undefined {
+  for (const gt of types) {
+    const mapped = GOOGLE_TYPE_TO_EXPERIENCE[gt];
+    if (mapped) return mapped[0];
+  }
+  return undefined;
+}
+
+/**
+ * Resolve a prediction to coordinates at pick time (one Place Details call).
+ * Returns null when Google has no such place — the caller falls back to
+ * geocoding the name with the free sources.
+ */
+export async function googlePlaceResolve(
+  apiKey: string,
+  placeId: string
+): Promise<{ name: string; lat: number; lng: number; typeId?: string } | null> {
+  const params = new URLSearchParams({
+    place_id: placeId,
+    fields: "geometry,name,types",
+    key: apiKey,
+  });
+  const res = await fetch(
+    `https://maps.googleapis.com/maps/api/place/details/json?${params}`,
+    { signal: AbortSignal.timeout(8000) }
+  );
+  if (!res.ok) throw new Error(`resolve-http-${res.status}`);
+  const data = (await res.json()) as {
+    status: string;
+    result?: { name?: string; geometry?: { location?: { lat: number; lng: number } }; types?: string[] };
+  };
+  if (data.status !== "OK" || !data.result?.name || !data.result.geometry?.location) return null;
+  return {
+    name: data.result.name,
+    lat: data.result.geometry.location.lat,
+    lng: data.result.geometry.location.lng,
+    typeId: googleTypeToExperience(data.result.types ?? []),
   };
 }

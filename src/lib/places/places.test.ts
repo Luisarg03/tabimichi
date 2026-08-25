@@ -371,7 +371,7 @@ describe("overpassSearch", () => {
         response: () =>
           jsonResponse({
             elements: [
-              { type: "node", id: 1, lat: 36.65, lon: 138.19, tags: { leisure: "hot_spring", name: "Kame no Yu" } },
+              { type: "node", id: 1, lat: 36.65, lon: 138.19, tags: { leisure: "hot_spring", name: "Kame no Yu", wikipedia: "ja:渋温泉" } },
               { type: "node", id: 2, lat: 36.66, lon: 138.2, tags: { tourism: "viewpoint", name: "Lookout Hill" } },
               { type: "way", id: 3, center: { lat: 36.67, lon: 138.21 }, tags: { leisure: "park", name: "Koen Park" } },
             ],
@@ -381,6 +381,7 @@ describe("overpassSearch", () => {
     const places = await overpassSearch(resolveTypes(["onsen", "viewpoint", "park"]), 36.65, 138.19, 5000);
     expect(places.find((p) => p.id === "o_node_1")?.name).toBe("Kame no Yu");
     expect(places.find((p) => p.id === "o_node_1")?.tags).toEqual(["onsen"]);
+    expect(places.find((p) => p.id === "o_node_1")?.wikipedia).toBe("ja:渋温泉");
     expect(places.find((p) => p.id === "o_node_2")?.tags).toEqual(["viewpoint"]);
     expect(places.find((p) => p.id === "o_way_3")?.tags).toEqual(["park"]);
     expect(places.find((p) => p.id === "o_node_2")?.name).toBe("Lookout Hill");
