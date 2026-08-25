@@ -15,6 +15,7 @@ import BrandPill from "@/components/BrandPill";
 import Icon from "@/components/ui/Icon";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
+import { DEFAULT_LOCATION } from "@/lib/geo";
 import type { PlaceProfile, RecommendResult, TimeBudget, TransportMode } from "@/lib/types";
 import type { SheetSnap } from "@/lib/sheet";
 import { SIM_PRESETS, jstSimulatedDate } from "@/lib/jst";
@@ -78,8 +79,11 @@ export default function HomePage() {
   const { getToken } = useAuth();
   // Read the persisted location through useSyncExternalStore (server snapshot
   // is always null) instead of a useState initializer, which read localStorage
-  // during the client's first render and broke hydration.
-  const location = useSyncExternalStore(subscribeLastLocation, readLastLocation, () => null);
+  // during the client's first render and broke hydration. Without a saved
+  // location the app starts on Tokyo (default) — the map is always open and
+  // "Descubrir" works from the first visit.
+  const savedLocation = useSyncExternalStore(subscribeLastLocation, readLastLocation, () => null);
+  const location = savedLocation ?? { ...DEFAULT_LOCATION, label: t("map.default") };
   const [result, setResult] = useState<RecommendResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
@@ -399,21 +403,17 @@ export default function HomePage() {
 
   return (
     <div className="relative h-dvh w-full overflow-hidden">
-      {/* full-screen map background */}
+      {/* full-screen map background — always open (defaults to Tokyo) */}
       <div className="absolute inset-0 z-0">
-        {location ? (
-          <MapView
-            center={{ lat: location.lat, lng: location.lng }}
-            places={result?.places ?? []}
-            selectedId={selectedId}
-            userApproximate={location.gps !== true}
-            onSelect={setSelectedId}
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center bg-bg text-sm text-muted">
-            {t("map.nearby")}
-          </div>
-        )}
+        <MapView
+          center={{ lat: location.lat, lng: location.lng }}
+          places={result?.places ?? []}
+          selectedId={selectedId}
+          userApproximate={location.gps !== true}
+          // default start: label the pin "Tokio" instead of "Estás acá"
+          userLabel={savedLocation ? undefined : t("map.default")}
+          onSelect={setSelectedId}
+        />
       </div>
 
       {/* ============ DESKTOP (md+) ============ */}

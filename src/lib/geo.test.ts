@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { haversineKm, travelMin, radiusForBudget, BUDGET_MIN } from "@/lib/geo";
+import { haversineKm, travelMin, radiusForBudget, BUDGET_MIN, DEFAULT_LOCATION } from "@/lib/geo";
 
 describe("haversineKm", () => {
   it("returns 0 for the same point", () => {
@@ -63,5 +63,14 @@ describe("BUDGET_MIN", () => {
     expect(BUDGET_MIN.lunch).toBe(90);
     expect(BUDGET_MIN.afternoon).toBe(300);
     expect(BUDGET_MIN.full_day).toBe(600);
+  });
+});
+
+describe("DEFAULT_LOCATION", () => {
+  it("is Tokyo Station", () => {
+    expect(DEFAULT_LOCATION.lat).toBeGreaterThan(35.6);
+    expect(DEFAULT_LOCATION.lat).toBeLessThan(35.8);
+    expect(DEFAULT_LOCATION.lng).toBeGreaterThan(139.6);
+    expect(DEFAULT_LOCATION.lng).toBeLessThan(139.9);
   });
 });

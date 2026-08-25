@@ -186,6 +186,7 @@ export default function MapView({
   places,
   selectedId,
   userApproximate = false,
+  userLabel,
   onSelect,
 }: {
   center: LatLng;
@@ -193,6 +194,9 @@ export default function MapView({
   selectedId?: string | null;
   /** true when the position comes from a searched address (geocoded, not GPS) */
   userApproximate?: boolean;
+  /** "you are here" pin label — defaults to "Estás acá"; the default-start
+   *  (Tokyo) passes the city name instead. */
+  userLabel?: string;
   onSelect: (id: string) => void;
 }) {
   const { t } = useI18n();
@@ -237,7 +241,7 @@ export default function MapView({
         <FlyToSelected place={selected} />
 
       {/* you are here — visual reference of the input position */}
-      <Marker position={[center.lat, center.lng]} icon={userIcon(t("map.youAreHere"))} zIndexOffset={500}>
+      <Marker position={[center.lat, center.lng]} icon={userIcon(userLabel ?? t("map.youAreHere"))} zIndexOffset={500}>
         <Popup>
           <div className="text-sm">
             <div className="font-semibold">{t("map.youAreHere")}</div>
