@@ -1,5 +1,9 @@
 import type { LatLng, TransportMode } from "./types";
 
+/** Default start: Tokyo Station (used until the user searches or uses GPS;
+ *  never persisted — the saved location always wins on later visits). */
+export const DEFAULT_LOCATION: LatLng = { lat: 35.6812, lng: 139.7671 } as const;
+
 /** Great-circle distance in km */
 export function haversineKm(a: LatLng, b: LatLng): number {
   const R = 6371;
