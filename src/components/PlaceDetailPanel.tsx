@@ -3,7 +3,7 @@
 import type { ScoredPlace } from "@/lib/types";
 import { useI18n } from "@/lib/i18n";
 import PlaceDetail from "@/components/PlaceDetail";
-import IconButton from "@/components/ui/IconButton";
+import Icon from "@/components/ui/Icon";
 
 /** Desktop place-detail panel: slides in from the right when a place is
  *  selected (card or map marker). Hidden below `md` (mobile uses the sheet). */
@@ -29,16 +29,18 @@ export default function PlaceDetailPanel({
     <aside
       role="dialog"
       aria-label={place.name}
-      className="tabi-slide-in-right pointer-events-auto absolute bottom-3 right-3 top-3 z-20 hidden w-[26rem] max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-panel-lg md:flex"
+      className="tabi-slide-in-right pointer-events-auto absolute bottom-3 right-3 top-16 z-20 hidden w-[26rem] max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-panel-lg border border-border bg-surface shadow-panel md:flex"
     >
       <PlaceDetail place={place} origin={origin} mode={mode} narratedBy={narratedBy} voted={voted} onFeedback={onFeedback} />
-      <IconButton
-        label={t("detail.close")}
+      {/* close — dark circle over the hero (prototype .detail-close) */}
+      <button
         onClick={onClose}
-        className="absolute right-2 top-2 z-10 bg-white/95 backdrop-blur"
+        aria-label={t("detail.close")}
+        title={t("detail.close")}
+        className="absolute right-2.5 top-2.5 z-10 grid h-9 w-9 place-items-center rounded-full bg-fg/50 text-surface backdrop-blur-sm transition-colors hover:bg-fg/70"
       >
-        ✕
-      </IconButton>
+        <Icon name="close" size={16} />
+      </button>
     </aside>
   );
 }

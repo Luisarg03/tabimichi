@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { dragVelocity, resolveSnap, snapTop, type SheetSnap } from "@/lib/sheet";
+import Icon from "@/components/ui/Icon";
 
 const HANDLE_H = 56;
 
@@ -58,7 +59,7 @@ export default function BottomSheet({
 
   useLayoutEffect(() => {
     if (handleRef.current) setHandleH(handleRef.current.offsetHeight);
-  }, [summary]);
+  }, [summary, title]);
 
   const currentTop = dragTop ?? snapTop(snap, vh, safeBottom);
 
@@ -106,16 +107,18 @@ export default function BottomSheet({
     [snap, vh, safeBottom, onSnapChange]
   );
 
+  const expanded = snap !== "peek" || dragTop !== null;
+
   return (
     <div
       role="dialog"
       aria-label={title}
-      className={`fixed inset-x-0 bottom-0 z-30 flex flex-col rounded-t-2xl border-t border-slate-200 bg-white shadow-panel-lg ${
+      className={`fixed inset-x-0 bottom-0 z-30 flex flex-col rounded-t-panel-lg border-t border-border bg-surface shadow-panel ${
         dragging ? "" : "transition-transform duration-300 ease-out"
       } ${className}`}
       style={{ height: vh, transform: `translateY(${currentTop}px)`, touchAction: "pan-y" }}
     >
-      {/* drag handle + summary */}
+      {/* drag handle + summary (prototype .mobile-summary) */}
       <div
         ref={handleRef}
         className="flex shrink-0 cursor-grab touch-none flex-col items-center pt-2 pb-1 active:cursor-grabbing"
@@ -124,12 +127,20 @@ export default function BottomSheet({
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
       >
-        <div className="h-1 w-10 rounded-full bg-slate-300" />
-        {summary && (
-          <div className="mt-1.5 w-full truncate px-4 text-center text-xs font-medium text-slate-500">
-            {summary}
-          </div>
-        )}
+        <div className="h-[5px] w-11 rounded-[3px] bg-border" />
+        <div className="mt-2 flex w-full items-center justify-between gap-2 px-4 pb-1">
+          <span className="truncate font-display text-[16px] font-bold text-fg">{title}</span>
+          {summary && (
+            <span className="flex shrink-0 items-center gap-1 text-[12.5px] text-muted">
+              {summary}
+              <Icon
+                name="chevron-down"
+                size={15}
+                className={`text-muted transition-transform duration-300 ${expanded ? "rotate-180" : ""}`}
+              />
+            </span>
+          )}
+        </div>
       </div>
 
       {/* scrollable content — height is computed so the content hugs the

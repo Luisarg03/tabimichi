@@ -1,38 +1,101 @@
 @import "tailwindcss";
 
-/* Design tokens (Google-Maps-inspired). These extend Tailwind v4's theme:
- *   --color-brand-*  → bg-brand-600, text-brand-500, border-brand-300…
- *   --shadow-panel*  → shadow-panel, shadow-panel-lg
- *   --radius-panel   → rounded-panel
+/* Design tokens — Tabimichi visual language (prototype tabimichi-redesign).
+   Direction: human-approachable (Airbnb/Duolingo).
+   Accent (aizome indigo) = action & selection · Vermilion (cinnabar) =
+   identity & map pins. All colors derive from these tokens; no hex outside
+   this block. Extended into Tailwind v4's theme:
+ *   --color-brand-*    → bg-brand-600, text-brand-500, border-brand-300…
+ *   --color-{bg,surface,fg,muted,border,verm,ok,bad,…} → same-name utilities
+ *   --font-{display,body,mono}  → font-display, font-body, font-mono
+ *   --radius-panel*    → rounded-panel, rounded-panel-sm/lg
+ *   --shadow-{soft,panel,panel-lg} → shadow-soft, shadow-panel, …
  */
 @theme {
-  --color-brand-50: #e8f0fe;
-  --color-brand-100: #d2e3fc;
-  --color-brand-200: #aecbfa;
-  --color-brand-300: #8ab4f8;
-  --color-brand-400: #669df6;
-  --color-brand-500: #4285f4;
-  --color-brand-600: #1a73e8;
-  --color-brand-700: #1765cc;
-  --color-brand-800: #185abc;
-  --color-brand-900: #174ea6;
+  /* aizome indigo — action & selection (the old Google-blue scale is remapped
+     to this hue so settings/auth/admin inherit the new accent) */
+  --color-brand-50: oklch(96.5% 0.018 258);
+  --color-brand-100: oklch(93% 0.034 258);
+  --color-brand-200: oklch(86% 0.06 258);
+  --color-brand-300: oklch(73% 0.095 258);
+  --color-brand-400: oklch(59% 0.115 258);
+  --color-brand-500: oklch(46% 0.12 258);
+  --color-brand-600: oklch(42% 0.11 258);
+  --color-brand-700: oklch(36% 0.1 258);
+  --color-brand-800: oklch(30% 0.09 258);
+  --color-brand-900: oklch(25% 0.08 258);
 
-  --shadow-panel: 0 1px 2px rgba(60, 64, 67, 0.3), 0 1px 3px 1px rgba(60, 64, 67, 0.15);
-  --shadow-panel-lg: 0 1px 3px rgba(60, 64, 67, 0.3), 0 4px 8px 3px rgba(60, 64, 67, 0.15);
+  /* app surfaces */
+  --color-bg: oklch(97.5% 0.005 85);
+  --color-surface: oklch(100% 0 0);
+  --color-fg: oklch(23% 0.02 265);
+  --color-muted: oklch(50% 0.015 260);
+  --color-border: oklch(90.5% 0.007 90);
+  --color-accent-soft: color-mix(in oklch, var(--color-brand-500) 12%, transparent);
 
+  /* cinnabar — brand seal & map pins only */
+  --color-verm: oklch(51% 0.16 32);
+  --color-verm-deep: oklch(44% 0.15 30);
+  --color-verm-soft: color-mix(in oklch, var(--color-verm) 9%, transparent);
+
+  /* semantic status */
+  --color-ok: oklch(47% 0.12 150);
+  --color-bad: oklch(50% 0.15 25);
+  --color-ok-soft: color-mix(in oklch, var(--color-ok) 13%, transparent);
+  --color-bad-soft: color-mix(in oklch, var(--color-bad) 11%, transparent);
+  --color-warn: oklch(50% 0.11 70);
+  --color-warn-soft: color-mix(in oklch, var(--color-warn) 12%, transparent);
+
+  /* type */
+  --font-display: "Avenir Next", "Söhne", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+
+  /* elevation */
+  --shadow-soft: 0 1px 2px oklch(30% 0.03 260 / 0.06), 0 10px 28px oklch(30% 0.03 260 / 0.08);
+  --shadow-panel: 0 2px 4px oklch(30% 0.03 260 / 0.06), 0 20px 52px oklch(30% 0.03 260 / 0.15);
+  --shadow-panel-lg: var(--shadow-panel);
+  --shadow-seg: 0 1px 3px oklch(20% 0.02 240 / 0.16);
+  --shadow-accent: 0 10px 22px color-mix(in oklch, var(--color-brand-600) 30%, transparent);
+  --shadow-pin: 0 4px 12px oklch(46% 0.16 30 / 0.35);
+
+  /* shape */
   --radius-panel: 1rem;
+  --radius-panel-sm: 0.75rem;
+  --radius-panel-lg: 1.375rem;
 }
 
 :root {
-  --background: #f8fafc;
-  --foreground: #171717;
+  --background: oklch(97.5% 0.005 85);
+  --foreground: oklch(23% 0.02 265);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Buttons: Tailwind's preflight already normalizes them; a plain (unlayered)
+   `button { font/color: inherit }` reset would beat every utility class
+   (utilities live in @layer utilities) and silently break text-white,
+   font-semibold, etc. — see ui buttons on settings/auth. */
+
+/* small typographic helpers (prototype .eyebrow / .mono / .muted) */
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 
 /* Leaflet inside rounded containers */
@@ -72,7 +135,7 @@ body {
 }
 
 /* Mobile perf: backdrop-filter is expensive on low-end GPUs. Panels keep
-   their translucent bg-white/95 backgrounds, so dropping the blur below the
+   their translucent surface/95 backgrounds, so dropping the blur below the
    md breakpoint is visually near-identical and much cheaper. */
 @media (max-width: 767px) {
   .backdrop-blur,
@@ -124,6 +187,7 @@ body {
 :focus-visible {
   outline: 2px solid var(--color-brand-500);
   outline-offset: 2px;
+  border-radius: 6px;
 }
 
 /* Desktop place-detail panel: slide in from the right. */

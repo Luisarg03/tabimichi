@@ -40,7 +40,7 @@ export default function SearchOverlay({
   onKeywordChange: (k: string) => void;
 }) {
   return (
-    <div className="fixed inset-0 z-40 flex flex-col bg-slate-50 tabi-safe-top tabi-safe-x tabi-safe-bottom">
+    <div className="fixed inset-0 z-40 flex flex-col bg-bg tabi-safe-top tabi-safe-x tabi-safe-bottom">
       {/* Scrollable wrapper: on small phones (375×667) the location + filters
           form is taller than the viewport; without scrolling the Discover
           button below the fold was unreachable. */}
