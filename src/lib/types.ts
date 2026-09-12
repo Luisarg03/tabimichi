@@ -30,6 +30,9 @@ export interface Place {
   url?: string;
   /** true when this candidate came from the keyword text query (in-memory only) */
   fromKeyword?: boolean;
+  /** normalized keyword this row was discovered for (cache provenance only —
+   *  set by discover() when writing to place_cache, never by a source) */
+  keywordKey?: string;
 }
 
 /** What a search suggestion resolves to: a POI, a street address, or a city. */
@@ -106,6 +109,29 @@ export interface Reason {
   params?: Record<string, string | number>;
 }
 
+/** Bucketed crowd level shown to the user. */
+export type CrowdLabel = "low" | "medium" | "high" | "veryHigh";
+
+/** Where a crowd value came from: the model, the user's observations, or both. */
+export type CrowdSource = "model" | "mixed" | "observed";
+
+/**
+ * "How many people are there right now", for one place.
+ * Always an ESTIMATE unless `source` is "observed"/"mixed" — the UI says which.
+ */
+export interface CrowdEstimate {
+  /** 0..1 on the relative crowd scale */
+  level: number;
+  label: CrowdLabel;
+  source: CrowdSource;
+  /** ISO instant of the freshest own observation folded in */
+  observedAt?: string;
+  /** i18n keys (`crowd.factor.*`) explaining the value */
+  factors: string[];
+  /** destination-local hour with the fewest people left today */
+  bestHour?: number;
+}
+
 export interface ScoredPlace extends Place {
   score: number;
   distanceKm: number;
@@ -113,6 +139,8 @@ export interface ScoredPlace extends Place {
   reasons: Reason[];
   /** LLM narrative "why now" (M2) — optional, rule reasons are the fallback */
   why?: string;
+  /** how busy it is right now (estimate, or observed when reported) */
+  crowd?: CrowdEstimate;
 }
 
 export interface RecommendInput {
@@ -147,6 +175,8 @@ export interface NarrateResponse {
   summary?: string;
   narratives: Record<string, string>;
   narratedBy?: string;
+  /** model id that narrated, when one ran (e.g. "deepseek-v4-pro") */
+  model?: string;
 }
 
 /** User profile: learned tag weights from 👍/👎 feedback (M3). */
@@ -168,6 +198,8 @@ export interface RecommendResult {
   narrated: boolean;
   /** which provider tier narrated: "opencode-zen" (free) | "opencode-go" (paid) */
   narratedBy?: string;
+  /** model id that narrated (e.g. "deepseek-v4-pro"), when one ran */
+  model?: string;
   /** LLM day-plan summary (2-3 sentences) */
   summary?: string;
   /** why places came back empty, when they did */
@@ -180,4 +212,8 @@ export interface RecommendResult {
   keywordResults?: number;
   /** true when the keyword found nothing and the pool is generic */
   keywordMiss?: boolean;
+  /** zone-level crowd layer [lat, lng, weight 0..1] for the map heat overlay */
+  crowdCells?: Array<[number, number, number]>;
+  /** ISO instant the crowd field was computed for */
+  crowdAt?: string;
 }

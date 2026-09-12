@@ -15,6 +15,10 @@ export function makeSupabaseFake() {
     since: string | null;
     id: string | null;
     or: string | null;
+    /** generic column equality — keyword_key, id, … */
+    eqs: Map<string, unknown>;
+    /** `not(col, "like", pattern)` exclusions */
+    notLikes: Array<[string, string]>;
     descending: boolean;
     limit: number;
     update: Record<string, unknown> | null;
@@ -53,6 +57,13 @@ export function makeSupabaseFake() {
     const orPairs = f.or ? parseOr(f.or) : [];
     const rows = [...places.values()].filter((r) => {
       if (f.id !== null && r.id !== f.id) return false;
+      for (const [col, v] of f.eqs) {
+        // NULL-safe: an eq on a column the row never set is a miss
+        if (String(r[col] ?? "") !== String(v)) return false;
+      }
+      for (const [col, pattern] of f.notLikes) {
+        if (ilikeMatch(r[col], pattern)) return false;
+      }
       if (Number(r.lat) < f.minLat || Number(r.lat) > f.maxLat) return false;
       if (Number(r.lng) < f.minLng || Number(r.lng) > f.maxLng) return false;
       if (f.since !== null && String(r.fetched_at) < f.since) return false;
@@ -77,6 +88,8 @@ export function makeSupabaseFake() {
       since: null,
       id: null,
       or: null,
+      eqs: new Map(),
+      notLikes: [],
       descending: false,
       limit: 1000,
       update: updateObj,
@@ -96,6 +109,11 @@ export function makeSupabaseFake() {
       },
       eq: (col: string, v: unknown) => {
         if (col === "id") f.id = v as string;
+        else f.eqs.set(col, v);
+        return api;
+      },
+      not: (col: string, op: string, pattern: string) => {
+        if (op === "like") f.notLikes.push([col, pattern]);
         return api;
       },
       or: (filters: string) => {

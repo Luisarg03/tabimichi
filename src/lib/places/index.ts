@@ -1,6 +1,6 @@
 import type { Place } from "../types";
 import { getConfig, type AppConfig } from "../settings";
-import { cachePlaces, cachedNear, freshNearby } from "../cache";
+import { cachePlaces, cachedNear, freshNearby, discoveryDone, markDiscoveryDone } from "../cache";
 import { haversineKm } from "../geo";
 import { resolveTypes } from "./taxonomy";
 import { googleSearchAll } from "./google";
@@ -123,28 +123,59 @@ export async function discover(
 
   const overpassEndpoint = config.overpassEndpoint?.trim() || undefined;
 
-  // fast path: reuse a fresh local cache covering every requested type.
-  // SKIPPED when an interest keyword is set — the cache is keyword-agnostic
-  // and would bypass the keyword discovery entirely (Google must be asked).
+  // fast path: reuse a fresh local cache covering every requested type, or a
+  // cached keyword pool. Keyword rows are stored with their keyword_key (see
+  // migration 008) so a repeat search ("pokemon" in Tokyo, asked 13 times in
+  // the logs) no longer re-runs Google Text Search: 4.9 s p50 → cache read.
+  // SKIPPED with a keyword only when that keyword's pool was cached under a
+  // different type set — the scoring layer ranks keyword hits by intent, so
+  // the requested types do not constrain a keyword answer.
   const typeIds = experienceTypes.map((t) => t.id);
-  if (!keyword) {
-    const fresh = await freshNearby(lat, lng, radiusKm, typeIds, CACHE_TTL_MS);
-    if (fresh && fresh.length > 0) {
-      // only return places that match the requested types (and hide stale
-      // generic-named rows, e.g. "Parque (way 123)" cached before the fix).
-      // Re-run the merge pipeline: cached pools can hold pre-fix duplicates
-      // (same POI cached once per source with offset coordinates).
-      const matched = mergePlaces(fresh.filter((p) => p.tags.some((t) => typeIds.includes(t))));
-      // A keyed user must NOT be served a pool that lacks Google data — e.g.
-      // an area first cached by an anonymous search (OSM-only), or by a search
-      // where Google failed. The whole point of the key is the rich merge
-      // (ratings/photos/hours); re-discover to add it instead of freezing the
-      // thin pool. Anonymous users happily reuse any pool.
-      const hasGoogle = matched.some((p) => p.source === "google");
-      if (matched.length > 0 && (!config.googlePlacesApiKey || hasGoogle)) {
-        return { places: matched, source: "cache", sources: ["cache"] };
-      }
+  const cached = await freshNearby(lat, lng, radiusKm, typeIds, CACHE_TTL_MS, keyword);
+  // Cached keyword rows are authoritative even when the answer is empty: the
+  // live query already ran and matched nothing. "miss" is not an answer —
+  // that is an incomplete pool, a keyword never searched, or a dead store.
+  const servable = cached.status === "found" || (cached.status === "empty" && keyword !== undefined);
+  const cachedPlaces = cached.status === "found" ? cached.places : [];
+  if (servable) {
+    // only return places that match the requested types (and hide stale
+    // generic-named rows, e.g. "Parque (way 123)" cached before the fix).
+    // Re-run the merge pipeline: cached pools can hold pre-fix duplicates
+    // (same POI cached once per source with offset coordinates).
+    // Keyword rows are exempt: their pool came from the keyword query itself.
+    const matched = keyword
+      ? mergePlaces(cachedPlaces)
+      : mergePlaces(cachedPlaces.filter((p) => p.tags.some((t) => typeIds.includes(t))));
+    // A keyed user must NOT be served a pool that lacks Google data — e.g.
+    // an area first cached by an anonymous search (OSM-only), or by a search
+    // where Google failed. The whole point of the key is the rich merge
+    // (ratings/photos/hours); re-discover to add it instead of freezing the
+    // thin pool. Anonymous users happily reuse any pool.
+    const hasGoogle = matched.some((p) => p.source === "google");
+    if (matched.length > 0 && (!config.googlePlacesApiKey || hasGoogle)) {
+      // NB: fetched_at is deliberately NOT refreshed here — a cache hit must
+      // stay a single round trip. Consequence: open_now goes unknown after
+      // OPEN_NOW_FRESH_MS (scoring drops the open/closed term, as documented).
+      return {
+        places: matched.slice(0, POOL_CAP),
+        source: "cache",
+        keywordResults: keyword ? matched.filter((p) => p.fromKeyword).length : undefined,
+        sources: ["cache"],
+      };
     }
+    // Keyword answered nothing and a keyed pool would not be richer: report
+    // the miss from cache instead of re-asking Google for the same zero.
+    if (cached.status === "empty" && keyword !== undefined) {
+      return { places: [], source: "cache", keywordResults: 0, sources: ["cache"] };
+    }
+  }
+
+  // negative cache: this exact area+types (or keyword) was already answered
+  // with nothing by a source that actually responded. Without this the retry
+  // re-spends Overpass' whole 20 s budget to fail identically (measured: 24
+  // requests at 20-84 s, all with 0 candidates).
+  if (await discoveryDone(lat, lng, typeIds, keyword)) {
+    return { places: [], source: "cache", keywordResults: keyword ? 0 : undefined, sources: ["cache"] };
   }
 
   const hasKey = Boolean(config.googlePlacesApiKey || config.geoapifyApiKey);
@@ -178,7 +209,7 @@ export async function discover(
   );
 
   // last resort: cached places near the point (type-filtered) when every live
-  // source failed; also skipped for keywords (cache is keyword-agnostic)
+  // source failed; skipped for keywords (a keyword pool is not a generic pool)
   let fromCache = false;
   if (bounded.length === 0 && !keyword) {
     const cached = await cachedNear(lat, lng, radiusKm * 2);
@@ -190,7 +221,23 @@ export async function discover(
   }
 
   const pool = bounded.slice(0, POOL_CAP);
-  if (pool.length > 0) await cachePlaces(pool);
+  if (pool.length > 0) await cachePlaces(pool, keyword);
+
+  // Remember a conclusive empty answer so the retry does not re-spend the
+  // whole source budget (measured: 24 requests at 20-84 s, all zero-candidate).
+  //
+  // Only Overpass may testify here. It is the source that actually costs the
+  // budget, and it is the only one whose empty answer is distinguishable from
+  // its own failure: overpassSearch rejects when every mirror is unreachable
+  // and resolves [] only when a mirror really answered "no matches"
+  // (overpass-empty). Google throws on a failed page, but geoapifySearch
+  // resolves [] even when all of its per-type requests rejected, so a
+  // fulfilled Google/Geoapify promise is NOT evidence that anyone answered —
+  // gating on them would cache an outage as "nothing here".
+  const emptyConclusion = runOverpass && ov.status === "fulfilled";
+  if (pool.length === 0 && emptyConclusion) {
+    await markDiscoveryDone(lat, lng, typeIds, keyword);
+  }
 
   // sources in priority order (display), source = dominant contributor (stats)
   const sources: ContributingSource[] = fromCache

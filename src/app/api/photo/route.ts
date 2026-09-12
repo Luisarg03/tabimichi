@@ -16,15 +16,23 @@ const TRANSPARENT_GIF = Buffer.from(
   "base64"
 );
 
+/**
+ * Photo URLs are content-addressed by `ref` (Google photo references are
+ * stable), so the bytes never change for a given URL — let the browser keep
+ * them without revalidating. `vercel.json` must not send `no-store` here or it
+ * wins and every gallery swipe re-downloads through this route.
+ */
+const PHOTO_CACHE = "public, max-age=86400, stale-while-revalidate=604800, immutable";
+
 function gifResponse(): Response {
   return new Response(new Uint8Array(TRANSPARENT_GIF), {
-    headers: { "Content-Type": "image/gif", "Cache-Control": "public, max-age=86400" },
+    headers: { "Content-Type": "image/gif", "Cache-Control": PHOTO_CACHE },
   });
 }
 
 function jpegResponse(buf: Buffer): Response {
   return new Response(new Uint8Array(buf), {
-    headers: { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=86400" },
+    headers: { "Content-Type": "image/jpeg", "Cache-Control": PHOTO_CACHE },
   });
 }
 

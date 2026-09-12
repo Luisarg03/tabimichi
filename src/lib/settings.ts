@@ -16,6 +16,8 @@ export interface AppConfig {
   opencodeGoApiKey: string; // OpenCode Go
   geoapifyApiKey: string; // free tier, no credit card
   overpassEndpoint: string; // custom Overpass instance (e.g. self-hosted osm3s)
+  /** guide model id (see src/lib/llm/models.ts); "" = auto (free-first fallback) */
+  guideModel: string;
 }
 
 export const ENV_KEYS: Record<keyof AppConfig, string> = {
@@ -24,6 +26,7 @@ export const ENV_KEYS: Record<keyof AppConfig, string> = {
   opencodeGoApiKey: "OPENCODE_GO_API_KEY",
   geoapifyApiKey: "GEOAPIFY_API_KEY",
   overpassEndpoint: "OVERPASS_ENDPOINT",
+  guideModel: "GUIDE_MODEL",
 };
 
 const DEFAULT_CONFIG: AppConfig = {
@@ -32,6 +35,7 @@ const DEFAULT_CONFIG: AppConfig = {
   opencodeGoApiKey: "",
   geoapifyApiKey: "",
   overpassEndpoint: "",
+  guideModel: "",
 };
 
 /** Resolved config: read exclusively from environment variables. */
