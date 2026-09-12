@@ -411,6 +411,8 @@ export default function HomePage() {
           center={{ lat: location.lat, lng: location.lng }}
           places={result?.places ?? []}
           selectedId={selectedId}
+          crowdCells={result?.crowdCells}
+          crowdAt={result?.crowdAt}
           userApproximate={location.gps !== true}
           // default start: label the pin "Tokio" instead of "Estás acá"
           userLabel={savedLocation ? undefined : t("map.default")}

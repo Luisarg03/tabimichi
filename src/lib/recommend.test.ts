@@ -118,8 +118,40 @@ describe("recommend — pipeline outcomes", () => {
     expect(top[1].reasons).toContain("closedNow");
   });
 
-  it("threads the interest keyword into discovery, scoring and the log", async () => {
+  it("attaches a 'gente ahora' estimate and a zone layer to the results", async () => {
     mockFetch([
+      { match: urlContains("open-meteo.com"), response: weatherFixture },
+      {
+        match: urlContains("textsearch"),
+        response: () =>
+          googleSearch([
+            result("big", "Templo famoso", { opening_hours: { open_now: true }, user_ratings_total: 30_000 }),
+            result("small", "Templo chico", { opening_hours: { open_now: true }, user_ratings_total: 20 }),
+          ]),
+      },
+      { match: urlContains("nearbysearch"), response: () => jsonResponse({ status: "OK", results: [] }) },
+      { match: urlContains("interpreter"), response: () => jsonResponse({ elements: [] }) },
+    ]);
+    const r = await recommend({ lat: 36.65, lng: 138.19, budget: "afternoon", types: ["temple"], mode: "walking" });
+
+    expect(r.places.length).toBe(2);
+    for (const p of r.places) {
+      expect(p.crowd).toBeDefined();
+      expect(p.crowd!.level).toBeGreaterThanOrEqual(0);
+      expect(p.crowd!.level).toBeLessThanOrEqual(1);
+      expect(p.crowd!.source).toBe("model"); // no observations reported
+      expect(p.crowd!.label).toMatch(/low|medium|high|veryHigh/);
+    }
+    // the review-volume magnet is busier than the obscure one, same hour
+    const famous = r.places.find((p) => p.name === "Templo famoso")!;
+    const quiet = r.places.find((p) => p.name === "Templo chico")!;
+    expect(famous.crowd!.level).toBeGreaterThan(quiet.crowd!.level);
+
+    expect(r.crowdCells?.length ?? 0).toBeGreaterThan(0);
+    expect(r.crowdAt).toBeDefined();
+  });
+
+  it("threads the interest keyword into discovery, scoring and the log", async () => {    mockFetch([
       { match: urlContains("open-meteo.com"), response: weatherFixture },
       {
         match: urlContains("textsearch"),

@@ -49,6 +49,16 @@ function getDb(): DatabaseSync | null {
         tag TEXT PRIMARY KEY,
         weight INTEGER NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS crowd_reports (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        place_id TEXT NOT NULL,
+        level INTEGER NOT NULL,
+        reported_at INTEGER NOT NULL,
+        local_hour REAL NOT NULL,
+        weekend INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS crowd_reports_place_idx
+        ON crowd_reports (place_id, reported_at DESC);
     `);
     return db;
   } catch {
@@ -95,6 +105,61 @@ export function resetProfile(): Record<string, number> {
   if (!d) return {};
   d.prepare("DELETE FROM profile_weights").run();
   return {};
+}
+
+// ---------------------------------------------------------------------------
+// Crowd reports (anonymous / local): "how busy is it right now"
+// ---------------------------------------------------------------------------
+
+/**
+ * Local store for crowd reports. Same split as feedback: it is the whole
+ * store for anonymous users in local dev, and unreachable on serverless
+ * (read-only fs) — signed-in users persist to Supabase instead.
+ */
+export function addLocalCrowdReport(report: {
+  placeId: string;
+  level: 0 | 1 | 2;
+  at: number;
+  localHour: number;
+  weekend: boolean;
+}): void {
+  const d = getDb();
+  if (!d) return;
+  d.prepare(
+    `INSERT INTO crowd_reports (place_id, level, reported_at, local_hour, weekend)
+     VALUES (?, ?, ?, ?, ?)`
+  ).run(report.placeId, report.level, report.at, report.localHour, report.weekend ? 1 : 0);
+}
+
+/** Reports for these places since `sinceMs`, newest first. Empty when the
+ *  store is unavailable — the caller treats that as "no observations". */
+export function getLocalCrowdReports(
+  placeIds: string[],
+  sinceMs: number
+): Array<{ placeId: string; level: 0 | 1 | 2; at: number; localHour: number; weekend: boolean }> {
+  const d = getDb();
+  if (!d || placeIds.length === 0) return [];
+  const placeholders = placeIds.map(() => "?").join(",");
+  const rows = d
+    .prepare(
+      `SELECT place_id, level, reported_at, local_hour, weekend FROM crowd_reports
+       WHERE place_id IN (${placeholders}) AND reported_at >= ?
+       ORDER BY reported_at DESC LIMIT 500`
+    )
+    .all(...placeIds, sinceMs) as Array<{
+    place_id: string;
+    level: number;
+    reported_at: number;
+    local_hour: number;
+    weekend: number;
+  }>;
+  return rows.map((r) => ({
+    placeId: r.place_id,
+    level: (r.level === 0 || r.level === 1 || r.level === 2 ? r.level : 1) as 0 | 1 | 2,
+    at: Number(r.reported_at),
+    localHour: Number(r.local_hour),
+    weekend: r.weekend === 1,
+  }));
 }
 
 /**

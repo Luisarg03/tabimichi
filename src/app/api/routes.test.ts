@@ -26,9 +26,10 @@ vi.mock("@/lib/supabase/auth", async (importOriginal) => {
   };
 });
 
-// Routes resolve keys via getUserKeys(req) (BYOK — no env fallback). These
-// route tests exercise behavior *given* a working key set, so stub it with a
-// fixture instead of fabricating Supabase sessions.
+// Routes resolve keys via getUserKeys(req)/resolveUser(req) (BYOK — no env
+// fallback). These route tests exercise behavior *given* a working key set, so
+// stub them with a fixture instead of fabricating Supabase sessions. The caller
+// is anonymous (no userId): crowd reports then come from the local store only.
 const { routeKeys } = vi.hoisted(() => ({
   routeKeys: {
     googlePlacesApiKey: "AIza-test",
@@ -40,6 +41,7 @@ const { routeKeys } = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/user-keys", () => ({
   getUserKeys: vi.fn(async () => ({ ...routeKeys })),
+  resolveUser: vi.fn(async () => ({ userId: null, config: { ...routeKeys } })),
 }));
 
 
