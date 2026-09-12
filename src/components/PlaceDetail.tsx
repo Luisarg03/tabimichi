@@ -28,12 +28,12 @@ function renderReason(r: Reason, t: ReturnType<typeof useI18n>["t"]): string {
 
 /** Full place detail (photo/illustration hero, meta, actions, reasons, guide,
  *  votes). Rendered inside the desktop PlaceDetailPanel and the mobile
- *  detail sheet. */
-export default function PlaceDetail({
+ *  detail sheet. */export default function PlaceDetail({
   place,
   origin,
   mode,
   narratedBy,
+  model,
   voted,
   onFeedback,
 }: {
@@ -41,6 +41,8 @@ export default function PlaceDetail({
   origin: { lat: number; lng: number };
   mode: string;
   narratedBy?: string;
+  /** model id that narrated (shown in the guide badge when known) */
+  model?: string;
   voted?: "like" | "dislike" | null;
   onFeedback?: (placeId: string, liked: boolean, tags?: string[]) => void;
 }) {
@@ -185,9 +187,10 @@ export default function PlaceDetail({
                 <Icon name="spark" size={13} />
                 {t("card.why")}
               </span>
-              {narratedBy && (
+              {(narratedBy || model) && (
                 <span className="rounded-full bg-brand-500/15 px-2 py-0.5 text-[10px] font-medium text-brand-600">
-                  {narratedBy === "opencode-go" ? t("card.narrator.paid") : t("card.narrator.free")}
+                  {model ??
+                    (narratedBy === "opencode-go" ? t("card.narrator.paid") : t("card.narrator.free"))}
                 </span>
               )}
             </div>

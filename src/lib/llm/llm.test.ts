@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { extractJson, narrateTop } from "@/lib/llm";
 import { chatComplete } from "@/lib/llm/client";
 import type { LlmProvider } from "@/lib/llm/providers";
+import type { AppConfig } from "@/lib/settings";
 import { mockFetch, jsonResponse, urlContains, isolatedStore } from "@/test-utils/helpers";
 
 const provider: LlmProvider = {
@@ -171,5 +172,145 @@ describe("narrateTop — provider fallback (free 429 → paid)", () => {
     delete process.env.OPENCODE_GO_API_KEY;
     const { narratives } = await narrateTop(opts());
     expect(narratives.size).toBe(0);
+  });
+});
+
+describe("narrateTop — guide model selection", () => {
+  const guideConfig = (guideModel: string): AppConfig => ({
+    googlePlacesApiKey: "",
+    geoapifyApiKey: "",
+    overpassEndpoint: "",
+    opencodeApiKey: "sk-zen",
+    opencodeGoApiKey: "sk-go",
+    guideModel,
+  });
+
+  const opts = () => ({
+    places: [
+      {
+        id: "g_1",
+        source: "google" as const,
+        name: "Zenko-ji",
+        lat: 36.66,
+        lng: 138.18,
+        tags: ["temple"],
+        distanceKm: 1.6,
+        travelMin: 21,
+        score: 80,
+        reasons: [],
+      },
+    ],
+    weather: {
+      tempC: 23, feelsC: 25, precipMm: 0, snowCm: 0, windKmh: 8,
+      code: 3, label: "cloudy", condition: "cloudy" as const, isNight: false, hourly: [], daily: [],
+    },
+    budget: "afternoon" as const,
+    mode: "walking" as const,
+    lang: "es",
+    types: ["temple"],
+  });
+
+  const jsonBody = (init?: RequestInit): { model?: string } =>
+    JSON.parse(String(init?.body)) as { model?: string };
+
+  // TS narrows `let` vars assigned only inside closures to `never` on later
+  // reads — access through a typed parameter instead of `?.` on the variable.
+  const bodyModel = (b: { model?: string } | null | undefined): string | undefined => b?.model;
+
+  beforeEach(() => {
+    isolatedStore();
+  });
+  afterEach(() => {
+    delete process.env.TABI_DATA_DIR;
+    vi.unstubAllGlobals();
+  });
+
+  it("sends the selected paid model via its provider and reports it", async () => {
+    let goBody: { model?: string } | null = null;
+    mockFetch([
+      {
+        match: (u) => u.includes("/zen/go/v1/chat/completions"),
+        response: (_u, init) => {
+          goBody = jsonBody(init);
+          return chat('{"summary":"s","narratives":[{"id":"g_1","why":"vamos"}]}');
+        },
+      },
+      {
+        match: (u) => u.includes("/zen/v1/chat/completions"),
+        response: () => jsonResponse({}, 429),
+      },
+    ]);
+    const { provider, model, narratives } = await narrateTop({
+      ...opts(),
+      config: guideConfig("mimo-v2.5"),
+    });
+    expect(provider).toBe("opencode-go");
+    expect(model).toBe("mimo-v2.5");
+    expect(bodyModel(goBody)).toBe("mimo-v2.5");
+    expect(narratives.get("g_1")).toBe("vamos");
+  });
+
+  it("prefers a selected free model on the zen provider", async () => {
+    let zenBody: { model?: string } | null = null;
+    mockFetch([
+      {
+        match: (u) => u.includes("/zen/v1/chat/completions"),
+        response: (_u, init) => {
+          zenBody = jsonBody(init);
+          return chat('{"narratives":[{"id":"g_1","why":"ok"}]}');
+        },
+      },
+      {
+        match: (u) => u.includes("/zen/go/v1/chat/completions"),
+        response: () => jsonResponse({}, 429),
+      },
+    ]);
+    const { provider, model } = await narrateTop({
+      ...opts(),
+      config: guideConfig("deepseek-v4-flash"),
+    });
+    expect(provider).toBe("opencode-zen");
+    expect(model).toBe("deepseek-v4-flash");
+    expect(bodyModel(zenBody)).toBe("deepseek-v4-flash");
+  });
+
+  it("falls back to the auto chain when the selected model's provider key is missing", async () => {
+    let zenBody: { model?: string } | null = null;
+    mockFetch([
+      {
+        match: (u) => u.includes("/zen/v1/chat/completions"),
+        response: (_u, init) => {
+          zenBody = jsonBody(init);
+          return chat('{"narratives":[{"id":"g_1","why":"ok"}]}');
+        },
+      },
+    ]);
+    const { provider, model } = await narrateTop({
+      ...opts(),
+      config: { ...guideConfig("mimo-v2.5"), opencodeGoApiKey: "" },
+    });
+    expect(provider).toBe("opencode-zen");
+    expect(model).toBe("deepseek-v4-flash-free");
+    expect(bodyModel(zenBody)).toBe("deepseek-v4-flash-free");
+  });
+
+  it("ignores an unknown guide model and keeps the free-first order", async () => {
+    let zenBody: { model?: string } | null = null;
+    mockFetch([
+      {
+        match: (u) => u.includes("/zen/v1/chat/completions"),
+        response: (_u, init) => {
+          zenBody = jsonBody(init);
+          return chat('{"narratives":[{"id":"g_1","why":"ok"}]}');
+        },
+      },
+    ]);
+    const { provider, model } = await narrateTop({
+      ...opts(),
+      config: guideConfig("bogus-model"),
+    });
+    expect(provider).toBe("opencode-zen");
+    expect(model).toBe("deepseek-v4-flash-free");
+    expect(bodyModel(zenBody)).toBe("deepseek-v4-flash-free");
   });
 });

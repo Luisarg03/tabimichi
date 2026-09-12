@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
+import { GUIDE_MODELS } from "@/lib/llm/models";
 
 interface Status {
   googlePlacesApiKey: boolean;
@@ -35,6 +36,7 @@ export default function SettingsForm() {
   const [status, setStatus] = useState<Status | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
   const [endpoint, setEndpoint] = useState("");
+  const [model, setModel] = useState("");
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -62,6 +64,7 @@ export default function SettingsForm() {
           overpassEndpoint: config.overpassEndpoint ?? "",
         });
         setEndpoint(config.overpassEndpoint ?? "");
+        setModel(config.guideModel ?? "");
       } catch {
         // ignore
       } finally {
@@ -77,7 +80,7 @@ export default function SettingsForm() {
       const token = await getToken();
       if (!token) return;
 
-      const payload: Record<string, string> = { overpassEndpoint: endpoint.trim() };
+      const payload: Record<string, string> = { overpassEndpoint: endpoint.trim(), guideModel: model };
       for (const f of KEY_FIELDS) {
         // Only include if user typed something (empty = don't overwrite)
         if (values[f.key]) payload[f.key] = values[f.key];
@@ -204,6 +207,29 @@ export default function SettingsForm() {
           placeholder="http://localhost:8080/api/interpreter"
           className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
         />
+      </div>
+
+      {/* virtual guide model */}
+      <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <label className="text-sm font-medium text-slate-800">{t("settings.guideModel")}</label>
+        <p className="mt-1 text-xs text-slate-500">{t("settings.guideModelHelp")}</p>
+        <select
+          value={model}
+          onChange={(e) => setModel(e.target.value)}
+          className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+        >
+          <option value="">{t("settings.guideModelAuto")}</option>
+          <optgroup label={t("settings.modelFreeTier")}>
+            {GUIDE_MODELS.filter((m) => m.tier === "free").map((m) => (
+              <option key={m.id} value={m.id}>{m.label}</option>
+            ))}
+          </optgroup>
+          <optgroup label={t("settings.modelPaidTier")}>
+            {GUIDE_MODELS.filter((m) => m.tier === "paid").map((m) => (
+              <option key={m.id} value={m.id}>{m.label}</option>
+            ))}
+          </optgroup>
+        </select>
       </div>
 
       <button
