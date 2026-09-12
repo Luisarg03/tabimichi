@@ -414,6 +414,37 @@ export interface SearchPlacesResult {
   sources: Array<"google" | "cache" | "photon" | "nominatim">;
 }
 
+/**
+ * L1 result cache for type-ahead. /api/search/suggest fires per keystroke
+ * (client-debounced 250 ms) and every miss costs the three free sources a
+ * round trip (Photon/Nominatim saturate easily). Keys are the normalized query
+ * plus the bias rounded to ~1 km; empty answers are NOT cached (a transient
+ * source outage must not blank the dropdown) and concurrent requests for the
+ * same key share one in-flight promise.
+ *
+ * ponytail: per-instance only — on serverless it helps within one warm
+ * instance. Move to Supabase/a shared store if cross-instance hit rate matters.
+ */
+const SUGGEST_CACHE_MAX = 200;
+const SUGGEST_CACHE_TTL_MS = 5 * 60 * 1000;
+const suggestCache = new Map<string, { at: number; value: SearchPlacesResult }>();
+const suggestInFlight = new Map<string, Promise<SearchPlacesResult>>();
+
+/** Testability: drop cached suggestions. */
+export function clearSuggestCache(): void {
+  suggestCache.clear();
+  suggestInFlight.clear();
+}
+
+function suggestCacheKey(opts: SearchPlacesOptions, q: string, limit: number): string {
+  const bias = opts.lat !== undefined && opts.lng !== undefined
+    ? `${opts.lat.toFixed(2)},${opts.lng.toFixed(2)}`
+    : "-";
+  // the Google key is part of the key: a keyed session gets predictions an
+  // anonymous one cannot, and the two must never share a cache entry
+  return `${q}|${opts.lang ?? "es"}|${bias}|${limit}|${opts.googleKey ? "g" : "-"}`;
+}
+
 /** Google prediction → suggestion: name = text before the first comma,
  *  typeId from Google's own types, no coordinates (resolved on pick). */
 function toGoogleSuggestion(p: GooglePrediction, rank: number): SearchSuggestion {
@@ -431,15 +462,13 @@ function toGoogleSuggestion(p: GooglePrediction, rank: number): SearchSuggestion
   };
 }
 
-export async function searchPlaces(opts: SearchPlacesOptions): Promise<SearchPlacesResult> {
-  const q = normalizeQuery(opts.q);
-  const limit = Math.max(1, Math.min(opts.limit ?? SUGGEST_LIMIT_DEFAULT, SUGGEST_LIMIT_MAX));
-  const lang = opts.lang === "en" ? "en" : "es";
-  const bias =
-    opts.lat !== undefined && opts.lng !== undefined && Number.isFinite(opts.lat) && Number.isFinite(opts.lng)
-      ? { lat: opts.lat, lng: opts.lng }
-      : undefined;
-
+async function fetchSuggestions(
+  opts: SearchPlacesOptions,
+  q: string,
+  limit: number,
+  lang: "es" | "en",
+  bias?: { lat: number; lng: number }
+): Promise<SearchPlacesResult> {
   const [local, photon, nominatim, google] = await Promise.allSettled([
     searchCachedPlaces(q, limit).then((ps) => ps.map((p) => toCachedSuggestion(p, q, bias))),
     photonSuggest(q, lang, limit, bias),
@@ -472,4 +501,49 @@ export async function searchPlaces(opts: SearchPlacesOptions): Promise<SearchPla
       ...bySource.filter(([items]) => items.length > 0).map(([, s]) => s),
     ],
   };
+}
+
+export async function searchPlaces(opts: SearchPlacesOptions): Promise<SearchPlacesResult> {
+  const q = normalizeQuery(opts.q);
+  const limit = Math.max(1, Math.min(opts.limit ?? SUGGEST_LIMIT_DEFAULT, SUGGEST_LIMIT_MAX));
+  const lang = opts.lang === "en" ? "en" : "es";
+  const bias =
+    opts.lat !== undefined && opts.lng !== undefined && Number.isFinite(opts.lat) && Number.isFinite(opts.lng)
+      ? { lat: opts.lat, lng: opts.lng }
+      : undefined;
+
+  const key = suggestCacheKey(opts, q, limit);
+  const hit = suggestCache.get(key);
+  if (hit) {
+    if (Date.now() - hit.at < SUGGEST_CACHE_TTL_MS) {
+      // refresh recency (Map preserves insertion order → oldest first eviction)
+      suggestCache.delete(key);
+      suggestCache.set(key, hit);
+      return hit.value;
+    }
+    suggestCache.delete(key);
+  }
+
+  const inFlight = suggestInFlight.get(key);
+  if (inFlight) return inFlight;
+
+  const pending = fetchSuggestions(opts, q, limit, lang, bias)
+    .then((value) => {
+      // only non-empty answers are cached: an empty list may just mean a
+      // source was down, and caching it would blank the dropdown for 5 min
+      if (value.suggestions.length > 0) {
+        if (suggestCache.size >= SUGGEST_CACHE_MAX) {
+          const oldest = suggestCache.keys().next().value;
+          if (oldest !== undefined) suggestCache.delete(oldest);
+        }
+        suggestCache.set(key, { at: Date.now(), value });
+      }
+      return value;
+    })
+    .finally(() => {
+      suggestInFlight.delete(key);
+    });
+
+  suggestInFlight.set(key, pending);
+  return pending;
 }

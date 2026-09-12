@@ -4,7 +4,7 @@ import { geoapifySearch } from "@/lib/places/geoapify";
 import { overpassSearch, MIRRORS } from "@/lib/places/overpass";
 import { discover } from "@/lib/places";
 import { resolveTypes } from "@/lib/places/taxonomy";
-import { upsertPlace, setAdminForTests } from "@/lib/cache";
+import { upsertPlace, setAdminForTests, discoveryDone } from "@/lib/cache";
 import { mockFetch, jsonResponse, urlContains, isolatedStore } from "@/test-utils/helpers";
 import { makeSupabaseFake } from "@/test-utils/supabase-fake";
 
@@ -557,8 +557,39 @@ describe("discover — merged multi-source chain", () => {
     expect(places.map((p) => p.tags)).toEqual([["park"]]);
   });
 
-  it("merges google + overpass in parallel (no more first-source-wins)", async () => {
-    mockFetch([
+  it("remembers a conclusive empty area so the retry skips the sources", async () => {
+    const fn = mockFetch([overpassEmpty()]);
+    const first = await discover({ lat: 36.65, lng: 138.19, radiusKm: 5, types: ["park"] });
+    expect(first.source).toBe("none");
+    const callsAfterFirst = fn.mock.calls.filter((c) => String(c[0]).includes("interpreter")).length;
+    expect(callsAfterFirst).toBeGreaterThan(0);
+
+    // A second live search costs the full Overpass budget (~20 s in prod) to
+    // fail identically — the marker turns it into a cache read.
+    const second = await discover({ lat: 36.65, lng: 138.19, radiusKm: 5, types: ["park"] });
+    expect(second.source).toBe("cache");
+    expect(second.places).toEqual([]);
+    expect(fn.mock.calls.filter((c) => String(c[0]).includes("interpreter")).length).toBe(callsAfterFirst);
+  });
+
+  it("does not remember an area as empty when the source failed", async () => {
+    // Overpass unreachable (every mirror 502s → overpassSearch throws) is an
+    // OUTAGE, not an answer: caching it would hide a whole area for 10 min.
+    // Contrast with overpassEmpty() above, where a 200 with zero elements IS
+    // conclusive and is deliberately remembered.
+    const fn = mockFetch([
+      { match: urlContains("interpreter"), response: () => jsonResponse({}, 502) },
+    ]);
+    const first = await discover({ lat: 36.65, lng: 138.19, radiusKm: 5, types: ["park"] });
+    expect(first.source).toBe("none");
+    // no marker was written for this signature
+    expect(await discoveryDone(36.65, 138.19, ["park"], undefined)).toBe(false);
+    const before = fn.mock.calls.length;
+    await discover({ lat: 36.65, lng: 138.19, radiusKm: 5, types: ["park"] });
+    expect(fn.mock.calls.length).toBeGreaterThan(before); // retried live
+  });
+
+  it("merges google + overpass in parallel (no more first-source-wins)", async () => {    mockFetch([
       {
         match: urlContains("googleapis.com"),
         response: () =>
@@ -589,7 +620,7 @@ describe("discover — merged multi-source chain", () => {
     expect(places.length).toBe(4);
   });
 
-  it("skips overpass entirely for keyword searches when a google key answered", async () => {
+  it("skips overpass for keyword searches, then serves the keyword from cache", async () => {
     const fn = mockFetch([
       {
         match: urlContains("googleapis.com"),
@@ -606,13 +637,28 @@ describe("discover — merged multi-source chain", () => {
         response: () => jsonResponse({ elements: [{ type: "node", id: 1, lat: 36.65, lon: 138.19, tags: { tourism: "attraction" } }] }),
       },
     ]);
-    const { sources } = await discover({
+    const first = await discover({
       lat: 36.65, lng: 138.19, radiusKm: 5, types: ["food"],
       keyword: "gatos",
     });
-    expect(sources).toEqual(["google"]); // overpass results discarded
+    expect(first.sources).toEqual(["google"]); // overpass results discarded
     const interpreterCalls = fn.mock.calls.filter((c) => String(c[0]).includes("interpreter"));
     expect(interpreterCalls).toHaveLength(0); // and never even started
+
+    // repeat search: keyword rows were persisted with their keyword_key, so
+    // the second identical call is served from cache with no Google round trip
+    const googleCallsBefore = fn.mock.calls.filter((c) => String(c[0]).includes("googleapis.com")).length;
+    const second = await discover({
+      lat: 36.65, lng: 138.19, radiusKm: 5, types: ["food"],
+      keyword: "gatos",
+    });
+    expect(second.sources).toEqual(["cache"]);
+    expect(second.places.map((p) => p.id)).toEqual(first.places.map((p) => p.id));
+    // provenance survives the cache round trip, or keyword ranking breaks
+    expect(second.keywordResults).toBe(1);
+    expect(
+      fn.mock.calls.filter((c) => String(c[0]).includes("googleapis.com")).length
+    ).toBe(googleCallsBefore);
   });
 
   it("drops a real OSM duplicate (same name) next to a rated google place", async () => {

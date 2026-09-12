@@ -5,6 +5,7 @@ import {
   osmTypeId,
   rankSuggestions,
   searchPlaces,
+  clearSuggestCache,
   SUGGEST_LIMIT_MAX,
 } from "./search";
 import { searchCachedPlaces, setAdminForTests } from "../cache";
@@ -146,6 +147,9 @@ describe("searchPlaces (merged sources)", () => {
   beforeEach(() => {
     sb = makeSupabaseFake();
     setAdminForTests(() => sb.fake as never);
+    // the suggest L1 cache is module state: without this, every test reusing a
+    // query would be served the previous test's answer
+    clearSuggestCache();
   });
 
   afterEach(() => {
@@ -267,6 +271,43 @@ describe("searchPlaces (merged sources)", () => {
     const cached = suggestions.find((s) => s.source === "cache");
     expect(cached?.distanceKm).toBeLessThan(0.6);
   });
+
+  it("serves a repeated query from L1 without touching the sources again", async () => {
+    const fn = mockFetch([
+      {
+        match: urlContains("photon.komoot.io"),
+        response: () =>
+          jsonResponse({
+            features: [
+              { geometry: { coordinates: [138.19, 36.65] }, properties: { osm_id: 7, name: "Zenkō-ji", osm_key: "tourism", osm_value: "attraction" } },
+            ],
+          }),
+      },
+      { match: urlContains("nominatim.openstreetmap.org"), response: () => jsonResponse([]) },
+    ]);
+    const photonCalls = () =>
+      fn.mock.calls.filter((c) => String(c[0]).includes("photon.komoot.io")).length;
+
+    const first = await searchPlaces({ q: "zenko" });
+    expect(first.suggestions.length).toBeGreaterThan(0);
+    const afterFirst = photonCalls();
+    expect(afterFirst).toBeGreaterThan(0);
+
+    const second = await searchPlaces({ q: "zenko" }); // same keystroke prefix
+    expect(photonCalls()).toBe(afterFirst); // no new round trip
+    expect(second.suggestions).toEqual(first.suggestions);
+  });
+
+  it("does not cache an empty answer (a source outage must not blank the dropdown)", async () => {
+    const fn = mockFetch([
+      { match: urlContains("photon.komoot.io"), response: () => jsonResponse({}, 500) },
+      { match: urlContains("nominatim.openstreetmap.org"), response: () => jsonResponse({}, 503) },
+    ]);
+    expect((await searchPlaces({ q: "nowhere" })).suggestions).toEqual([]);
+    const afterFirst = fn.mock.calls.length;
+    expect((await searchPlaces({ q: "nowhere" })).suggestions).toEqual([]);
+    expect(fn.mock.calls.length).toBeGreaterThan(afterFirst); // retried, not cached
+  });
 });
 
 describe("searchCachedPlaces", () => {
@@ -275,6 +316,9 @@ describe("searchCachedPlaces", () => {
   beforeEach(() => {
     sb = makeSupabaseFake();
     setAdminForTests(() => sb.fake as never);
+    // the suggest L1 cache is module state: without this, every test reusing a
+    // query would be served the previous test's answer
+    clearSuggestCache();
   });
 
   it("searches name and address, escaping ILIKE wildcards", async () => {
@@ -330,6 +374,9 @@ describe("searchPlaces — Google Autocomplete (BYOK)", () => {
   beforeEach(() => {
     sb = makeSupabaseFake();
     setAdminForTests(() => sb.fake as never);
+    // the suggest L1 cache is module state: without this, every test reusing a
+    // query would be served the previous test's answer
+    clearSuggestCache();
   });
   afterEach(() => vi.unstubAllGlobals());
 
