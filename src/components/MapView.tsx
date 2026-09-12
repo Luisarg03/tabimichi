@@ -1,12 +1,13 @@
 "use client";
 
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import type { LatLng, ScoredPlace } from "@/lib/types";
+import type { CrowdLabel, LatLng, ScoredPlace } from "@/lib/types";
 import { DEFAULT_TILE, TILE_STYLES, tileStyleById } from "@/lib/tiles";
 import { useI18n } from "@/lib/i18n";
+import { CROWD_COLOR } from "@/components/ui/CrowdBadge";
 
 const TILE_ICONS: Record<string, string> = {
   esri: "🏙️",
@@ -45,13 +46,37 @@ function ZoomControlBR() {
 function TileSwitcher({
   tileId,
   onChange,
+  crowdOn,
+  onCrowdChange,
+  crowdAvailable,
 }: {
   tileId: string;
   onChange: (id: string) => void;
+  /** "gente ahora" layer toggle — lives in the same control strip so it never
+   *  stacks another floating pill over the map */
+  crowdOn: boolean;
+  onCrowdChange: (on: boolean) => void;
+  crowdAvailable: boolean;
 }) {
   const { t } = useI18n();
   return (
-    <div className="absolute bottom-24 right-2 z-[1000] flex max-w-[calc(100%-1rem)] flex-wrap gap-0.5 rounded-panel border border-border bg-surface/95 p-1 shadow-soft backdrop-blur md:right-2">
+    <div className="absolute bottom-24 right-2 z-[1000] flex max-w-[calc(100%-1rem)] flex-wrap justify-end gap-0.5 rounded-panel border border-border bg-surface/95 p-1 shadow-soft backdrop-blur md:right-2">
+      {crowdAvailable && (
+        <button
+          onClick={() => onCrowdChange(!crowdOn)}
+          aria-pressed={crowdOn}
+          title={t("map.crowd.toggle")}
+          aria-label={t("map.crowd.toggle")}
+          className={`flex items-center gap-1 rounded-lg px-1.5 py-1.5 text-[11px] font-medium transition-colors min-h-[36px] sm:px-2 ${
+            crowdOn
+              ? "bg-verm text-surface"
+              : "text-muted hover:bg-fg/5 hover:text-fg active:bg-fg/10"
+          }`}
+        >
+          <span>🔥</span>
+          <span className="hidden sm:inline">{t("map.crowd.toggle")}</span>
+        </button>
+      )}
       {TILE_STYLES.map((s) => (
         <button
           key={s.id}
@@ -93,11 +118,15 @@ function LocateButton({ center }: { center: LatLng }) {
   );
 }
 
-/** Ranked place marker (prototype .marker): cinnabar numbered circle. */
-function markerIcon(rank: number): L.DivIcon {
+/** Ranked place marker (prototype .marker): cinnabar numbered circle.
+ *  With a crowd level, the number is wrapped in a ring of that colour, so the
+ *  map itself answers "where is it packed right now" at a glance. */
+function markerIcon(rank: number, crowd?: CrowdLabel): L.DivIcon {
+  const ring = crowd ? CROWD_COLOR[crowd] : "transparent";
+  const ringWidth = crowd ? 3 : 0;
   return L.divIcon({
     className: "",
-    html: `<div style="position:relative;width:30px;height:30px;border-radius:9999px;background:var(--color-verm, #c04b33);color:#fff;border:2px solid #fff;box-shadow:0 4px 12px rgba(192,75,51,.35);display:flex;align-items:center;justify-content:center;font-family:ui-monospace,monospace;font-size:12px;font-weight:700;transition:transform .15s">${rank}</div>`,
+    html: `<div style="position:relative;width:30px;height:30px;border-radius:9999px;background:var(--color-verm, #c04b33);color:#fff;border:2px solid #fff;box-shadow:0 4px 12px rgba(192,75,51,.35);display:flex;align-items:center;justify-content:center;font-family:ui-monospace,monospace;font-size:12px;font-weight:700;transition:transform .15s"><span style="position:absolute;inset:-5px;border-radius:9999px;border:${ringWidth}px solid ${ring};pointer-events:none"></span>${rank}</div>`,
     iconSize: [30, 30],
     iconAnchor: [15, 15],
     popupAnchor: [0, -18],
@@ -163,7 +192,7 @@ const PlaceMarkers = memo(function PlaceMarkers({
         <Marker
           key={p.id}
           position={[p.lat, p.lng]}
-          icon={markerIcon(i + 1)}
+          icon={markerIcon(i + 1, p.crowd?.label)}
           eventHandlers={{ click: () => onSelect(p.id) }}
         >
           <Popup>
@@ -181,10 +210,82 @@ const PlaceMarkers = memo(function PlaceMarkers({
   );
 });
 
+/** Zone layer: where the people are, as a smooth canvas field.
+ *  `leaflet.heat` patches the global `L` and touches `document`, so it is
+ *  imported lazily inside the effect (never during SSR). */
+function CrowdHeat({
+  cells,
+  visible,
+}: {
+  cells: Array<[number, number, number]>;
+  visible: boolean;
+}) {
+  const map = useMap();
+  const layerRef = useRef<L.HeatLayer | null>(null);
+  const cellsRef = useRef(cells);
+  useEffect(() => {
+    cellsRef.current = cells;
+  }, [cells]);
+
+  useEffect(() => {
+    if (!visible) return;
+    let cancelled = false;
+    void import("leaflet.heat").then(() => {
+      if (cancelled || layerRef.current) return;
+      const layer = L.heatLayer(cellsRef.current, {
+        radius: 24,
+        blur: 22,
+        // cells must overlap before the field saturates: one busy street should
+        // read as warm, not as a red hole in the map
+        max: 1.6,
+        minOpacity: 0.2,
+        // leaflet.heat fades every point by 1/2^(maxZoom − zoom): without this
+        // the field is invisible at the app's default zoom (13)
+        maxZoom: 13,
+        // quiet → busy, matching the per-place pin rings
+        gradient: { 0.2: "#3f8f6a", 0.45: "#c9a227", 0.7: "#c04b33", 1: "#9c3a24" },
+      });
+      layer.addTo(map);
+      layerRef.current = layer;
+    });
+    return () => {
+      cancelled = true;
+      layerRef.current?.remove();
+      layerRef.current = null;
+    };
+  }, [visible, map]);
+
+  useEffect(() => {
+    layerRef.current?.setLatLngs(cells);
+  }, [cells]);
+
+  return null;
+}
+
+/** Legend for the crowd layer: what the colours mean and how fresh the data is. */
+function CrowdLegend({ at }: { at?: string }) {
+  const { t, locale } = useI18n();
+  const time = at
+    ? new Date(at).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })
+    : "";
+  return (
+    <div className="absolute bottom-[13.5rem] right-2 z-[1000] w-[150px] rounded-panel border border-border bg-surface/95 p-2 shadow-soft backdrop-blur">
+      <div className="h-2 w-full rounded-full" style={{ background: "linear-gradient(90deg,#3f8f6a,#c9a227,#c04b33,#9c3a24)" }} />
+      <div className="mt-1 flex justify-between text-[10px] font-semibold text-muted">
+        <span>{t("map.crowd.legendLow")}</span>
+        <span>{t("map.crowd.legendHigh")}</span>
+      </div>
+      <p className="mt-1 text-[10px] leading-tight text-muted">{t("map.crowd.caption", { time })}</p>
+    </div>
+  );
+}
+
 export default function MapView({
   center,
   places,
   selectedId,
+  crowdCells,
+  crowdAt,
   userApproximate = false,
   userLabel,
   onSelect,
@@ -192,6 +293,10 @@ export default function MapView({
   center: LatLng;
   places: ScoredPlace[];
   selectedId?: string | null;
+  /** zone-level crowd field [lat, lng, weight] from the last search */
+  crowdCells?: Array<[number, number, number]>;
+  /** when the crowd field was computed (ISO) */
+  crowdAt?: string;
   /** true when the position comes from a searched address (geocoded, not GPS) */
   userApproximate?: boolean;
   /** "you are here" pin label — defaults to "Estás acá"; the default-start
@@ -208,6 +313,15 @@ export default function MapView({
       return DEFAULT_TILE;
     }
   });
+  // crowd layer: opt-in, remembered like the tile choice. Off by default so a
+  // user who never asked for it pays nothing.
+  const [crowdOn, setCrowdOn] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("tabi.crowd") === "1";
+    } catch {
+      return false;
+    }
+  });
   useEffect(() => {
     try {
       localStorage.setItem("tabi.tiles", tileId);
@@ -215,7 +329,15 @@ export default function MapView({
       // ignore
     }
   }, [tileId]);
+  useEffect(() => {
+    try {
+      localStorage.setItem("tabi.crowd", crowdOn ? "1" : "0");
+    } catch {
+      // ignore
+    }
+  }, [crowdOn]);
   const tile = tileStyleById(tileId);
+  const heat = crowdCells ?? [];
 
   return (
     <div className="relative h-full w-full">
@@ -276,9 +398,17 @@ export default function MapView({
 
       {/* "my location" FAB — must live inside MapContainer to use useMap() */}
       <LocateButton center={center} />
+      <CrowdHeat cells={heat} visible={crowdOn} />
       </MapContainer>
       {/* switcher sits above the map but below the page overlay */}
-      <TileSwitcher tileId={tileId} onChange={setTileId} />
+      <TileSwitcher
+        tileId={tileId}
+        onChange={setTileId}
+        crowdOn={crowdOn}
+        onCrowdChange={setCrowdOn}
+        crowdAvailable={heat.length > 0}
+      />
+      {crowdOn && heat.length > 0 && <CrowdLegend at={crowdAt} />}
     </div>
   );
 }

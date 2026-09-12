@@ -195,9 +195,10 @@ export default function ResultsList({
                       <Icon name="spark" size={13} />
                       {t("card.summaryTitle")}
                     </span>
-                    {result.narratedBy && (
+                    {(result.narratedBy || result.model) && (
                       <span className="rounded-full bg-brand-500/15 px-2 py-0.5 text-[10px] font-medium text-brand-600">
-                        {result.narratedBy === "opencode-go" ? t("card.narrator.paid") : t("card.narrator.free")}
+                        {result.model ??
+                          (result.narratedBy === "opencode-go" ? t("card.narrator.paid") : t("card.narrator.free"))}
                       </span>
                     )}
                   </div>
