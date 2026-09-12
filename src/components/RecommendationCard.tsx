@@ -5,6 +5,7 @@ import { useI18n } from "@/lib/i18n";
 import { fmtCount } from "@/lib/format";
 import Icon, { typeIcon } from "@/components/ui/Icon";
 import ScoreRing from "@/components/ui/ScoreRing";
+import CrowdBadge from "@/components/ui/CrowdBadge";
 
 /** Compact list item (prototype .card): icon tile, tags, meta and score
  *  ring. Tapping opens the full detail panel/sheet. */
@@ -77,6 +78,7 @@ export default function RecommendationCard({
               {t("card.closed")}
             </span>
           )}
+          {place.crowd && <CrowdBadge crowd={place.crowd} />}
         </div>
 
         <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px] text-muted">

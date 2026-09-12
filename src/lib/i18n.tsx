@@ -100,6 +100,38 @@ const es: Dict = {
     close: "Cerrar",
     back: "Volver",
   },
+  crowd: {
+    title: "Gente ahora",
+    label: {
+      low: "Poca gente",
+      medium: "Normal",
+      high: "Mucha gente",
+      veryHigh: "Lleno",
+    },
+    short: {
+      low: "poca",
+      medium: "normal",
+      high: "mucha",
+      veryHigh: "lleno",
+    },
+    estimated: "estimado",
+    observed: "observado {when}",
+    mixed: "estimado + tu reporte",
+    basedOn: "Estimado con popularidad, horario y clima — no es una medición.",
+    factor: {
+      weekend: "fin de semana o feriado",
+      rainOutdoor: "lluvia: menos gente afuera",
+      rainIndoor: "lluvia: más gente adentro",
+      sakura: "temporada de sakura",
+    },
+    bestHour: "Mejor hora hoy: {hour}:00",
+    bestHourApprox: "Mejor hora hoy: {hour}:00 (horario aproximado)",
+    reportQuestion: "¿Qué tan lleno está?",
+    report: { empty: "Vacío", normal: "Normal", packed: "Lleno" },
+    reportThanks: "¡Anotado! Lo tengo en cuenta la próxima vez.",
+    reportError: "No se pudo guardar",
+    justNow: "recién",
+  },
   search: {
     place: "Lugar",
     address: "Dirección",
@@ -285,6 +317,12 @@ const es: Dict = {
       positron: "Positron",
       satellite: "Satélite",
     },
+    crowd: {
+      toggle: "Gente ahora",
+      legendLow: "menos gente",
+      legendHigh: "más gente",
+      caption: "Afluencia estimada · {time}",
+    },
   },
 };
 
@@ -380,6 +418,38 @@ const en: Dict = {
   detail: {
     close: "Close",
     back: "Back",
+  },
+  crowd: {
+    title: "People now",
+    label: {
+      low: "Quiet",
+      medium: "Normal",
+      high: "Busy",
+      veryHigh: "Packed",
+    },
+    short: {
+      low: "quiet",
+      medium: "normal",
+      high: "busy",
+      veryHigh: "packed",
+    },
+    estimated: "estimated",
+    observed: "observed {when}",
+    mixed: "estimate + your report",
+    basedOn: "Estimated from popularity, hours and weather — not a measurement.",
+    factor: {
+      weekend: "weekend or holiday",
+      rainOutdoor: "rain: fewer people outside",
+      rainIndoor: "rain: more people indoors",
+      sakura: "cherry blossom season",
+    },
+    bestHour: "Quietest hour left today: {hour}:00",
+    bestHourApprox: "Quietest hour left today: {hour}:00 (approximate hours)",
+    reportQuestion: "How busy is it?",
+    report: { empty: "Empty", normal: "Normal", packed: "Packed" },
+    reportThanks: "Noted — it will count next time.",
+    reportError: "Could not save",
+    justNow: "just now",
   },
   search: {
     place: "Place",
@@ -565,6 +635,12 @@ const en: Dict = {
       voyager: "Voyager",
       positron: "Positron",
       satellite: "Satellite",
+    },
+    crowd: {
+      toggle: "People now",
+      legendLow: "fewer people",
+      legendHigh: "more people",
+      caption: "Estimated footfall · {time}",
     },
   },
 };

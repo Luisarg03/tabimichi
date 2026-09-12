@@ -12,12 +12,15 @@ import { jstHourStamp, localTimeAt } from "./jst";
 import { logEntry, newTraceId } from "./logger";
 import { keywordTokens, normalizeKeyword } from "./keywords";
 import { translateEsEn } from "./translate";
+import { crowdForPool, type CrowdPoolPlace } from "./crowd";
 
 type Candidate = Place & { periods?: OpenPeriod[] };
 
 export interface RecommendOptions extends RecommendInput {
   /** the requesting user's API keys (BYOK) — empty for anonymous */
   config?: AppConfig;
+  /** signed-in user id — their own crowd reports feed the "gente ahora" estimate */
+  userId?: string | null;
 }
 
 /**
@@ -253,6 +256,31 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
   }
   const emptyReason = emptyReasonFor(candidates, top.length);
 
+  // ---- "gente ahora": how busy each place is right now ------------------
+  // Computed over the WHOLE pool (popularity is relative to what else is
+  // around), attached only to what the user sees. No new data source: the
+  // ratings, tags, opening hours and live weather already travelled here.
+  const crowdPool: CrowdPoolPlace[] = candidates.map((p) => ({
+    id: p.id,
+    lat: p.lat,
+    lng: p.lng,
+    tags: p.tags,
+    userRatingsTotal: p.userRatingsTotal,
+    wikipedia: p.wikipedia,
+    periods: p.periods,
+  }));
+  const { byId: crowdById, cells: crowdCellList } = await crowdForPool(crowdPool, {
+    now: scoringNow,
+    lat: input.lat,
+    lng: input.lng,
+    weather,
+    userId: input.userId ?? null,
+  });
+  const placesWithCrowd: ScoredPlace[] = top.map((p) => {
+    const crowd = crowdById.get(p.id);
+    return crowd ? { ...p, crowd } : p;
+  });
+
   const traceId = newTraceId();
   const summary = {
     traceId,
@@ -281,7 +309,7 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
   logEntry({
     type: "recommend",
     ...summary,
-    top: top.map((p) => ({
+    top: placesWithCrowd.map((p) => ({
       id: p.id,
       name: p.name,
       score: p.score,
@@ -289,12 +317,13 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
       travelMin: p.travelMin,
       openNow: p.openNow,
       reasons: p.reasons.map((r) => r.key),
+      crowd: p.crowd ? { level: Number(p.crowd.level.toFixed(2)), label: p.crowd.label } : undefined,
     })),
   });
 
   return {
     weather,
-    places: top,
+    places: placesWithCrowd,
     generatedAt: new Date().toISOString(),
     radiusKm,
     sourceNote: source,
@@ -305,6 +334,8 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
     keyword,
     keywordResults: keywordResults ?? 0,
     keywordMiss: kwMiss,
+    crowdCells: crowdCellList,
+    crowdAt: scoringNow.toISOString(),
   };
 }
 

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { recommend } from "@/lib/recommend";
 import { logEntry } from "@/lib/logger";
 import { enforceRateLimit } from "@/lib/security";
-import { getUserKeys } from "@/lib/user-keys";
+import { resolveUser } from "@/lib/user-keys";
 import type { RecommendInput } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -53,8 +53,10 @@ export async function POST(req: NextRequest) {
   if (limited) return limited;
 
   try {
-    // BYOK: this user's own API keys (empty for anonymous — no operator fallback)
-    const config = await getUserKeys(req);
+    // BYOK + identity: this user's own API keys (empty for anonymous — no
+    // operator fallback) and their id, so the crowd layer can read back the
+    // observations THEY reported.
+    const { userId, config } = await resolveUser(req);
 
     const result = await recommend({
       lat,
@@ -68,6 +70,7 @@ export async function POST(req: NextRequest) {
       keyword: typeof keyword === "string" ? keyword.trim() : undefined,
       pin,
       config,
+      userId,
     });
     return NextResponse.json(result);
   } catch (e) {
