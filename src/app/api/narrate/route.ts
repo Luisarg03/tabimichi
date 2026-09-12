@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
     }));
 
     const startedAt = performance.now();
-    const { narratives, summary, provider } = await narrateTop({
+    const { narratives, summary, provider, model } = await narrateTop({
       places: scored, weather, budget, mode,
       lang: lang === "en" ? "en" : "es", types, keyword,
       config,
@@ -72,11 +72,11 @@ export async function POST(req: NextRequest) {
 
     logEntry({
       type: "narrate", traceId, lat, lng, budget, mode, lang, keyword,
-      sim: simulated !== null, provider, narratives: narratives.size,
+      sim: simulated !== null, provider, model, narratives: narratives.size,
       summary: Boolean(summary), ms: Math.round(performance.now() - startedAt),
     });
 
-    const out: NarrateResponse = { summary, narratives: Object.fromEntries(narratives), narratedBy: provider };
+    const out: NarrateResponse = { summary, narratives: Object.fromEntries(narratives), narratedBy: provider, model };
     return NextResponse.json(out);
   } catch (e) {
     console.error("[tabi] /api/narrate failed:", e);

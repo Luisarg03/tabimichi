@@ -12,6 +12,7 @@ export default function PlaceDetailPanel({
   origin,
   mode,
   narratedBy,
+  model,
   voted,
   onFeedback,
   onClose,
@@ -20,6 +21,7 @@ export default function PlaceDetailPanel({
   origin: { lat: number; lng: number };
   mode: string;
   narratedBy?: string;
+  model?: string;
   voted?: "like" | "dislike" | null;
   onFeedback?: (placeId: string, liked: boolean, tags?: string[]) => void;
   onClose: () => void;
@@ -31,7 +33,7 @@ export default function PlaceDetailPanel({
       aria-label={place.name}
       className="tabi-slide-in-right pointer-events-auto absolute bottom-3 right-3 top-16 z-20 hidden w-[26rem] max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-panel-lg border border-border bg-surface shadow-panel md:flex"
     >
-      <PlaceDetail place={place} origin={origin} mode={mode} narratedBy={narratedBy} voted={voted} onFeedback={onFeedback} />
+      <PlaceDetail place={place} origin={origin} mode={mode} narratedBy={narratedBy} model={model} voted={voted} onFeedback={onFeedback} />
       {/* close — dark circle over the hero (prototype .detail-close) */}
       <button
         onClick={onClose}

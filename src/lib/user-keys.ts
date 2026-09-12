@@ -20,6 +20,7 @@ export const USER_KEY_MAP: Record<string, keyof AppConfig> = {
   overpass_endpoint: "overpassEndpoint",
   opencode_zen: "opencodeApiKey",
   opencode_go: "opencodeGoApiKey",
+  guide_model: "guideModel",
 };
 
 const EMPTY_CONFIG: AppConfig = {
@@ -28,6 +29,7 @@ const EMPTY_CONFIG: AppConfig = {
   opencodeGoApiKey: "",
   geoapifyApiKey: "",
   overpassEndpoint: "",
+  guideModel: "",
 };
 
 /** Resolve the requesting user's keys, or an empty config when unauthenticated. */

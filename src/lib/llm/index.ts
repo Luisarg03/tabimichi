@@ -1,4 +1,4 @@
-import { activeProviders, type LlmProvider } from "./providers";
+import { activeProviders, modelForProvider, type LlmProvider } from "./providers";
 import { chatComplete } from "./client";
 import type { ScoredPlace, WeatherInfo, TimeBudget, TransportMode } from "../types";
 import type { AppConfig } from "../settings";
@@ -73,11 +73,14 @@ export interface NarrateResult {
   summary?: string;
   /** which provider narrated: "opencode-zen" | "opencode-go" */
   provider?: string;
+  /** which model id actually narrated ("" when nothing ran) */
+  model?: string;
 }
 
 async function narrateWith(
   provider: LlmProvider,
-  opts: NarrateOpts
+  opts: NarrateOpts,
+  model: string
 ): Promise<{ narratives: Map<string, string>; summary?: string }> {
   // retry once: the gateway can truncate longer JSON output — a second attempt
   // (with the same prompt) often lands a complete parse
@@ -86,6 +89,7 @@ async function narrateWith(
     try {
       const { system, user } = buildPrompt(opts);
       const raw = await chatComplete(provider, {
+        model,
         messages: [
           { role: "system", content: system },
           { role: "user", content: user },
@@ -119,23 +123,25 @@ async function narrateWith(
 /**
  * LLM narrative layer (M2): the model narrates *why now* for the top picks
  * plus a day-plan summary. The rules still score; the LLM only writes.
- * Tries providers in priority order (free zen first, paid go second; each
- * with internal retries). Never throws — on total failure the app falls back
- * to rule-based reasons.
+ * Tries providers in priority order (free zen first, paid go second — or the
+ * user's chosen guide model first, see activeProviders; each with internal
+ * retries). Never throws — on total failure the app falls back to rule-based
+ * reasons.
  */
 export async function narrateTop(opts: NarrateOpts): Promise<NarrateResult> {
   const providers = activeProviders(opts.config);
-  if (providers.length === 0) return { narratives: new Map() };
-  if (opts.places.length === 0) return { narratives: new Map() };
+  if (providers.length === 0) return { narratives: new Map(), model: "" };
+  if (opts.places.length === 0) return { narratives: new Map(), model: "" };
 
   for (const provider of providers) {
     try {
-      const { narratives, summary } = await narrateWith(provider, opts);
-      if (narratives.size > 0 || summary) return { narratives, summary, provider: provider.id };
+      const model = modelForProvider(provider, opts.config);
+      const { narratives, summary } = await narrateWith(provider, opts, model);
+      if (narratives.size > 0 || summary) return { narratives, summary, provider: provider.id, model };
     } catch (err) {
       // log for debugging (the UI falls back to rule reasons)
       console.warn(`[tabi] narrate failed on ${provider.id}:`, (err as Error).message);
     }
   }
-  return { narratives: new Map() };
+  return { narratives: new Map(), model: "" };
 }

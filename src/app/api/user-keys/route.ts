@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseForUser } from "@/lib/supabase/server";
 import { extractToken, requireUser } from "@/lib/supabase/auth";
 import { enforceRateLimit, validateEndpoint } from "@/lib/security";
+import { isKnownGuideModel } from "@/lib/llm/models";
 import type { AppConfig } from "@/lib/settings";
 
 export const runtime = "nodejs";
@@ -24,6 +25,7 @@ const KEY_MAP: Record<string, keyof AppConfig> = {
   overpass_endpoint: "overpassEndpoint",
   opencode_zen: "opencodeApiKey",
   opencode_go: "opencodeGoApiKey",
+  guide_model: "guideModel",
 };
 
 const REVERSE_MAP: Record<keyof AppConfig, string> = {
@@ -32,6 +34,7 @@ const REVERSE_MAP: Record<keyof AppConfig, string> = {
   overpassEndpoint: "overpass_endpoint",
   opencodeApiKey: "opencode_zen",
   opencodeGoApiKey: "opencode_go",
+  guideModel: "guide_model",
 };
 
 const MAX_VALUE_LENGTH = 2048;
@@ -116,6 +119,14 @@ export async function POST(req: NextRequest) {
             { status: 400 }
           );
         }
+      }
+
+      // The guide model must be a known registry id (or empty = auto).
+      if (keyName === "guide_model" && value !== "" && !isKnownGuideModel(value)) {
+        return NextResponse.json(
+          { error: `unknown guide model: ${value}` },
+          { status: 400 }
+        );
       }
 
       if (value === "") {

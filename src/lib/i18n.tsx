@@ -172,8 +172,14 @@ const es: Dict = {
     overpass: "Overpass propio (osm3s) — endpoint",
     overpassHelp:
       "Opcional: apuntá a tu instancia local (Docker) para descubrimiento ilimitado y confiable, ej. http://localhost:8080/api/interpreter. Si queda vacío, usamos mirrors públicos.",
-    opencodeZen: "OpenCode Zen API key (guía LLM — próxima fase)",
-    opencodeGo: "OpenCode Go API key (próxima fase)",
+    opencodeZen: "OpenCode Zen API key (guía LLM — capa gratuita)",
+    opencodeGo: "OpenCode Go API key (guía LLM — capa paga)",
+    guideModel: "Modelo del guía virtual",
+    guideModelHelp:
+      "Elegí qué modelo escribe los resúmenes del guía. «Auto» prueba la capa gratuita primero y cae a la paga si falla. Los modelos pagos requieren la key de OpenCode Go; sin ella se usa Auto.",
+    guideModelAuto: "Auto (recomendado)",
+    modelFreeTier: "Capa gratuita (OpenCode Zen)",
+    modelPaidTier: "Capa paga (OpenCode Go)",
     save: "Guardar",
     saved: "Guardado ✓",
     connected: "Conectado",
@@ -447,8 +453,14 @@ const en: Dict = {
     overpass: "Self-hosted Overpass (osm3s) — endpoint",
     overpassHelp:
       "Optional: point to your local instance (Docker) for unlimited, reliable discovery, e.g. http://localhost:8080/api/interpreter. Empty = public mirrors.",
-    opencodeZen: "OpenCode Zen API key (LLM guide — next phase)",
-    opencodeGo: "OpenCode Go API key (next phase)",
+    opencodeZen: "OpenCode Zen API key (LLM guide — free tier)",
+    opencodeGo: "OpenCode Go API key (LLM guide — paid tier)",
+    guideModel: "Virtual guide model",
+    guideModelHelp:
+      "Pick which model writes the guide summaries. \"Auto\" tries the free tier first and falls back to paid. Paid models need the OpenCode Go key; without it Auto is used.",
+    guideModelAuto: "Auto (recommended)",
+    modelFreeTier: "Free tier (OpenCode Zen)",
+    modelPaidTier: "Paid tier (OpenCode Go)",
     save: "Save",
     saved: "Saved ✓",
     connected: "Connected",

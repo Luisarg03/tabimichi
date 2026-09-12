@@ -18,6 +18,7 @@ export default function MobileDetailSheet({
   origin,
   mode,
   narratedBy,
+  model,
   voted,
   onFeedback,
   onClose,
@@ -26,6 +27,7 @@ export default function MobileDetailSheet({
   origin: { lat: number; lng: number };
   mode: string;
   narratedBy?: string;
+  model?: string;
   voted?: "like" | "dislike" | null;
   onFeedback?: (placeId: string, liked: boolean, tags?: string[]) => void;
   onClose: () => void;
@@ -94,6 +96,7 @@ export default function MobileDetailSheet({
             origin={origin}
             mode={mode}
             narratedBy={narratedBy}
+            model={model}
             voted={voted}
             onFeedback={onFeedback}
           />

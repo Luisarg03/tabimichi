@@ -361,6 +361,7 @@ export default function HomePage() {
           summary?: string;
           narratives?: Record<string, string>;
           narratedBy?: string;
+          model?: string;
         };
         setResult((prev) => {
           if (!prev) return prev;
@@ -369,6 +370,7 @@ export default function HomePage() {
             ...prev,
             narrated: true,
             narratedBy: narr.narratedBy,
+            model: narr.model,
             summary: narr.summary,
             places: prev.places.map((p) =>
               narrMap[p.id] ? { ...p, why: narrMap[p.id] } : p
@@ -466,6 +468,7 @@ export default function HomePage() {
             origin={origin}
             mode={mode}
             narratedBy={result?.narratedBy}
+            model={result?.model}
             voted={votes[selected.id] ?? null}
             onFeedback={handleFeedback}
             onClose={closeDetail}
@@ -534,6 +537,7 @@ export default function HomePage() {
             origin={origin}
             mode={mode}
             narratedBy={result?.narratedBy}
+            model={result?.model}
             voted={votes[selected.id] ?? null}
             onFeedback={handleFeedback}
             onClose={closeDetail}
