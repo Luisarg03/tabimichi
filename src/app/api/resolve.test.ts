@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { NextRequest } from "next/server";
-import { GET as resolveGET } from "@/app/api/search/resolve/route";
+import { GET as resolveGET } from "@/lib/api/routes/search/resolve";
 import { resetRateLimits } from "@/lib/security";
 import { mockFetch, jsonResponse, urlContains, isolatedStore } from "@/test-utils/helpers";
 
