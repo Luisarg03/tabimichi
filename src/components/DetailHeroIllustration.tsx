@@ -2,12 +2,30 @@
 
 /** Abstract hero (prototype .detail-hero): indigo→cinnabar gradient with a
  *  sun, mountain ridge and torii gate. Used as the detail fallback when the
- *  place has no photos. Children (e.g. the close button) render on top. */
+ *  place has no photos. The per-type emoji keeps every fallback from looking
+ *  like the same place. Children (e.g. the close button) render on top. */
+const TAG_EMOJI: Record<string, string> = {
+  temple: "⛩️",
+  museum: "🏛️",
+  food: "🍜",
+  market: "🏮",
+  shopping: "🛍️",
+  park: "🌳",
+  sakura: "🌸",
+  viewpoint: "🗻",
+  trekking: "🥾",
+  onsen: "♨️",
+  nightlife: "🌃",
+};
+
 export default function DetailHeroIllustration({
   className = "",
+  tag,
   children,
 }: {
   className?: string;
+  /** experience tag: picks the fallback emoji so fallbacks differ per type */
+  tag?: string;
   children?: React.ReactNode;
 }) {
   return (
@@ -32,6 +50,9 @@ export default function DetailHeroIllustration({
           <rect x="140" y="104" width="112" height="7" />
         </g>
       </svg>
+      <span aria-hidden className="absolute bottom-2 left-3 text-4xl opacity-90">
+        {TAG_EMOJI[tag ?? ""] ?? "📍"}
+      </span>
       {children}
     </div>
   );

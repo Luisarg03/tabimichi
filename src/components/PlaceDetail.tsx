@@ -8,6 +8,7 @@ import { fmtCount } from "@/lib/format";
 import { dirsUrl as dirsUrlFor, placeUrl as placeUrlFor } from "@/lib/maps-urls";
 import PlaceGallery from "@/components/PlaceGallery";
 import DetailHeroIllustration from "@/components/DetailHeroIllustration";
+import WikiPhoto from "@/components/WikiPhoto";
 import Icon from "@/components/ui/Icon";
 import ScoreRing from "@/components/ui/ScoreRing";
 import { CROWD_COLOR, CROWD_SOFT, crowdFactors, crowdSourceLabel } from "@/components/ui/CrowdBadge";
@@ -157,12 +158,20 @@ function CrowdSection({ place }: { place: ScoredPlace }) {
 
   return (
     <div className="flex h-full flex-col">
-      {/* photo hero (or abstract illustration when there are no photos) */}
+      {/* photo hero: gallery → free Wikipedia photo → per-type illustration */}
       <div className="relative shrink-0">
         {photoRefs.length > 0 ? (
           <PlaceGallery photoRefs={photoRefs} placeId={place.id} alt={place.name} imgClassName="h-52 w-full object-cover sm:h-60" />
         ) : (
-          <DetailHeroIllustration className="h-52 w-full sm:h-60" />
+          <DetailHeroIllustration className="h-52 w-full sm:h-60" tag={place.tags[0]}>
+            {place.wikipedia && (
+              <WikiPhoto
+                wikiRef={place.wikipedia}
+                alt={place.name}
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+            )}
+          </DetailHeroIllustration>
         )}
       </div>
 
