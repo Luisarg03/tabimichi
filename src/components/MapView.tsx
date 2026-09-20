@@ -120,16 +120,18 @@ function LocateButton({ center }: { center: LatLng }) {
 
 /** Ranked place marker (prototype .marker): cinnabar numbered circle.
  *  With a crowd level, the number is wrapped in a ring of that colour, so the
- *  map itself answers "where is it packed right now" at a glance. */
-function markerIcon(rank: number, crowd?: CrowdLabel): L.DivIcon {
+ *  map itself answers "where is it packed right now" at a glance. Compact
+ *  (heat layer on): dot with ring, no number — the field carries the info. */
+function markerIcon(rank: number, crowd?: CrowdLabel, compact = false): L.DivIcon {
   const ring = crowd ? CROWD_COLOR[crowd] : "transparent";
   const ringWidth = crowd ? 3 : 0;
+  const size = compact ? 14 : 30;
   return L.divIcon({
     className: "",
-    html: `<div style="position:relative;width:30px;height:30px;border-radius:9999px;background:var(--color-verm, #c04b33);color:#fff;border:2px solid #fff;box-shadow:0 4px 12px rgba(192,75,51,.35);display:flex;align-items:center;justify-content:center;font-family:ui-monospace,monospace;font-size:12px;font-weight:700;transition:transform .15s"><span style="position:absolute;inset:-5px;border-radius:9999px;border:${ringWidth}px solid ${ring};pointer-events:none"></span>${rank}</div>`,
-    iconSize: [30, 30],
-    iconAnchor: [15, 15],
-    popupAnchor: [0, -18],
+    html: `<div style="position:relative;width:${size}px;height:${size}px;border-radius:9999px;background:var(--color-verm, #c04b33);color:#fff;border:2px solid #fff;box-shadow:0 4px 12px rgba(192,75,51,.35);display:flex;align-items:center;justify-content:center;font-family:ui-monospace,monospace;font-size:12px;font-weight:700;transition:transform .15s"><span style="position:absolute;inset:-5px;border-radius:9999px;border:${ringWidth}px solid ${ring};pointer-events:none"></span>${compact ? "" : rank}</div>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+    popupAnchor: [0, -size / 2 - 3],
   });
 }
 
@@ -180,9 +182,11 @@ function FlyToSelected({ place }: { place?: ScoredPlace | null }) {
  *  switch) with a stable `places` reference skip Leaflet marker recreation. */
 const PlaceMarkers = memo(function PlaceMarkers({
   places,
+  compact,
   onSelect,
 }: {
   places: ScoredPlace[];
+  compact: boolean;
   onSelect: (id: string) => void;
 }) {
   const { t } = useI18n();
@@ -192,7 +196,7 @@ const PlaceMarkers = memo(function PlaceMarkers({
         <Marker
           key={p.id}
           position={[p.lat, p.lng]}
-          icon={markerIcon(i + 1, p.crowd?.label)}
+          icon={markerIcon(i + 1, p.crowd?.label, compact)}
           eventHandlers={{ click: () => onSelect(p.id) }}
         >
           <Popup>
@@ -458,7 +462,7 @@ export default function MapView({
         </Popup>
       </Marker>
 
-      <PlaceMarkers places={places} onSelect={onSelect} />
+      <PlaceMarkers places={places} compact={crowdOn} onSelect={onSelect} />
       {/* selected place: bigger highlighted marker rendered last → on top */}
       {selected && (
         <Marker

@@ -421,11 +421,12 @@ export default function DayPanel({
         <p className="mt-1 text-xs text-muted">{t("panel.interestHint")}</p>
       </div>
 
-      {/* discover */}
+      {/* discover — sticky so it never hides below the fold in the
+          mobile overlay scroll container */}
       <button
         onClick={submit}
         disabled={!location || loading}
-        className="mt-3 flex w-full min-h-[44px] items-center justify-center gap-2 rounded-[12px] bg-brand-600 px-4 text-[14px] font-semibold text-surface shadow-accent transition-[background,transform] hover:bg-brand-700 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-55 disabled:shadow-none"
+        className="sticky bottom-2 mt-3 flex w-full min-h-[44px] items-center justify-center gap-2 rounded-[12px] bg-brand-600 px-4 text-[14px] font-semibold text-surface shadow-accent transition-[background,transform] hover:bg-brand-700 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-55 disabled:shadow-none md:static"
       >
         <Icon name="spark" size={16} />
         {loading ? t("panel.discovering") : t("panel.discover")}
