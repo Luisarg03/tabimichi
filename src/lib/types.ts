@@ -67,8 +67,6 @@ export interface SearchSuggestion {
   userRatingsTotal?: number;
 }
 
-export type TimeBudget = "lunch" | "afternoon" | "full_day";
-
 /** How the user will get around — changes radius, times and reasons. */
 export type TransportMode = "walking" | "transit" | "car";
 
@@ -164,7 +162,6 @@ export interface ScoredPlace extends Place {
 export interface RecommendInput {
   lat: number;
   lng: number;
-  budget: TimeBudget;
   types: string[]; // empty = any
   radiusKm?: number;
   mode?: TransportMode;

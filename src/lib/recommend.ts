@@ -1,6 +1,6 @@
 import type { EmptyReason, Place, RecommendInput, RecommendResult, ScoredPlace, TransportMode } from "./types";
 import { getWeather, weatherAt } from "./weather";
-import { BUDGET_MIN, radiusForBudget, haversineKm } from "./geo";
+import { RADIUS_KM, haversineKm } from "./geo";
 import { discover, normalizePlaceName } from "./places";
 import { EXPERIENCE_TYPE_MAP } from "./places/taxonomy";
 import { scorePlaces } from "./scoring";
@@ -95,8 +95,7 @@ export function diversify<T extends { tags: string[]; lat?: number; lng?: number
 export async function recommend(input: RecommendOptions): Promise<RecommendResult> {
   const startedAt = performance.now();
   const mode: TransportMode = input.mode ?? "transit";
-  const budgetMin = BUDGET_MIN[input.budget] ?? 300;
-  const radiusKm = input.radiusKm ?? radiusForBudget(input.budget, mode);
+  const radiusKm = input.radiusKm ?? RADIUS_KM[mode];
   const simulated = input.now ? new Date(input.now) : null;
   // optional interest keyword — normalized once here. The raw term goes to
   // Google as-is; single Spanish words ("gatos") are translated by the free
@@ -184,7 +183,6 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
   const scoringNow = simulated ?? localTimeAt(new Date(), input.lng);
   const scored = scorePlaces(candidates, {
     base: { lat: input.lat, lng: input.lng },
-    budgetMin,
     weather,
     now: scoringNow,
     mode,
@@ -293,7 +291,6 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
     traceId,
     lat: input.lat,
     lng: input.lng,
-    budget: input.budget,
     types: input.types,
     mode,
     sim: simulated !== null,
@@ -360,7 +357,7 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
  * Classify an empty result so the UI can say *why*:
  *  - no_results: sources returned nothing
  *  - all_closed: candidates existed but every one is closed right now
- *  - too_far: candidates exist but all fall outside distance/budget
+ *  - too_far: candidates exist but all fall outside distance/mode reach
  */
 export function emptyReasonFor(candidates: Candidate[], scoredCount: number): EmptyReason | undefined {
   if (candidates.length === 0) return "no_results";
