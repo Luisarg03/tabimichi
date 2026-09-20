@@ -427,6 +427,35 @@ describe("overpassSearch", () => {
     expect(sent).toContain("->.t0;.t0 out center 250;");
     expect(sent).toContain("->.t1;.t1 out center 250;");
   });
+
+  it("prefers a COMPLETE mirror over a faster truncated one", async () => {
+    // Real failure this guards: mirrors do not carry the same data. A thin
+    // mirror (osm.ch for Asia) or a memory-capped one answers 200 with a few
+    // elements plus a `remark`; picking the fastest answer gave the pool to
+    // whoever replied first — measured 20 restaurants where one complete
+    // mirror returns 250.
+    const el = (id: number) => ({
+      type: "node" as const, id, lat: 36.65, lon: 138.19,
+      tags: { leisure: "park", name: `Park ${id}` },
+    });
+    const fn = mockFetch([
+      {
+        // one complete mirror; listed FIRST so it wins the route match
+        match: (u: string) => u.includes("overpass-api.de"),
+        response: () => jsonResponse({ elements: [el(1), el(2), el(3), el(4), el(5)] }),
+      },
+      {
+        // every other mirror: truncated, answers instantly
+        match: urlContains("interpreter"),
+        response: () => jsonResponse({ elements: [el(1), el(2)], remark: "runtime error: Query timed out" }),
+      },
+    ]);
+    const places = await overpassSearch(resolveTypes(["park"]), 36.65, 138.19, 5000);
+    expect(places.map((p) => p.id)).toEqual([
+      "o_node_1", "o_node_2", "o_node_3", "o_node_4", "o_node_5",
+    ]);
+    expect(fn).toHaveBeenCalled();
+  });
 });
 
 describe("discover — merged multi-source chain", () => {
