@@ -1,6 +1,7 @@
 import type { Place, Reason, ScoredPlace, WeatherInfo, LatLng, TransportMode } from "./types";
 import { haversineKm, travelMin } from "./geo";
 import { EXPERIENCE_TYPE_MAP } from "./places/taxonomy";
+import { cuisineOf, isLocalCuisine } from "./cuisine";
 import { fmtCount } from "./format";
 import { keywordTokens, matchesKeyword } from "./keywords";
 
@@ -168,6 +169,7 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
 
     let score = 50;
     const reasons: Reason[] = [];
+    const name = p.name ?? "";
 
     // --- travel (graduated by minutes so close wins over far) ---
     if (t <= 5) {
@@ -307,6 +309,16 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
       reasons.push({ key: "landmark" });
     }
 
+    // --- named Japanese speciality ("東京ラーメン 大番", "すし好"): a free,
+    // cache-stable signal that separates a real local kitchen from an
+    // anonymous storefront, which the rating alone cannot do at equal volume.
+    // The kind also feeds the per-kind spread in recommend.ts. ---
+    const cuisine = cuisineOf(name, p.tags);
+    if (!kwHit && cuisine !== "other" && isLocalCuisine(name)) {
+      score += 6;
+      reasons.push({ key: "localCuisine" });
+    }
+
     // --- interest keyword: explicit user intent wins over noise rules ---
     if (kwHit) {
       score += 20;
@@ -315,7 +327,6 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
 
     // --- noise penalties: chains & hotels (skipped when the keyword matched:
     // the user asked for that exact place, e.g. "Sukiya") ---
-    const name = p.name ?? "";
     if (!kwHit && isChainName(name)) {
       score -= 12;
       reasons.push({ key: "chain" });
@@ -364,6 +375,7 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
       distanceKm: Math.round(distanceKm * 10) / 10,
       travelMin: t,
       reasons,
+      ...(cuisine !== "other" ? { cuisine } : {}),
     });
   }
 

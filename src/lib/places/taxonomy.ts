@@ -72,10 +72,13 @@ export const EXPERIENCE_TYPES: ExperienceType[] = [
     labelKey: "food",
     googleQuery: "local food restaurant",
     googleTypes: ["restaurant", "food"],
+    // amenity=fast_food is deliberately NOT queried: it is chain territory
+    // (Sukiya/Yoshinoya/McDonald's…) and ranking already penalizes those
+    // chains by name, so the only effect was flooding the pool and the top 30
+    // with entries that then sank — pushing real local kitchens out.
     overpass: [
       { key: "amenity", value: "restaurant" },
       { key: "amenity", value: "food_court" },
-      { key: "amenity", value: "fast_food" },
     ],
     indoor: true,
     emoji: "🍜",

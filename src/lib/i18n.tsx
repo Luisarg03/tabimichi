@@ -177,6 +177,7 @@ const es: Dict = {
     goldenHour: "Hora dorada para las vistas",
     weekend: "Plan de fin de semana",
     landmark: "Lugar emblemático (Wikipedia)",
+    localCuisine: "Cocina japonesa de la casa",
     pinned: "Lo que buscaste",
   },
   status: {
@@ -496,6 +497,7 @@ const en: Dict = {
     goldenHour: "Golden hour for the views",
     weekend: "Weekend plan",
     landmark: "Notable place (Wikipedia)",
+    localCuisine: "Local Japanese kitchen",
     pinned: "Your search",
   },
   status: {

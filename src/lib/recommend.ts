@@ -31,23 +31,32 @@ export interface RecommendOptions extends RecommendInput {
 export const RESULT_LIMIT = 30;
 
 /**
- * Spread the top picks across experience types so a generic "discover" shows
- * variety (a park, a museum, a shrine, food...) instead of 10 similar places.
- * Within each type, score order is preserved; the global best still comes first.
- * Spatial guard: a candidate hugging an already-picked same-type place
+ * Spread the top picks so the list shows variety instead of near-clones.
+ * Two grouping levels:
+ *   1. experience type (a park, a museum, a shrine, food…) — the generic
+ *      "discover" case;
+ *   2. inside food, the restaurant KIND from the name (ramen, sushi, soba,
+ *      cafe…) — without it a single-type search buckets everything together
+ *      and the spatial guard alone cannot stop five ramen shops in a row.
+ * Within a bucket score order is preserved; the global best still comes first.
+ * Spatial guard: a candidate hugging an already-picked same-bucket place
  * (within 150 m) is deferred to a later round instead of dropped — the list
  * spreads over the map without silently removing real local businesses.
- * Single-type searches are unaffected (one bucket).
  */
 const SAME_TAG_SPREAD_KM = 0.15;
 
-export function diversify<T extends { tags: string[]; lat?: number; lng?: number }>(
+function bucketKey(p: { tags: string[]; cuisine?: string }): string {
+  const tag = p.tags[0] ?? "other";
+  return tag === "food" && p.cuisine ? `food:${p.cuisine}` : tag;
+}
+
+export function diversify<T extends { tags: string[]; lat?: number; lng?: number; cuisine?: string }>(
   scored: T[],
   limit: number
 ): T[] {
   const byTag = new Map<string, T[]>();
   for (const p of scored) {
-    const tag = p.tags[0] ?? "other";
+    const tag = bucketKey(p);
     if (!byTag.has(tag)) byTag.set(tag, []);
     byTag.get(tag)!.push(p);
   }

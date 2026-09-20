@@ -489,6 +489,32 @@ describe("diversify", () => {
     expect(diversify(items, 10).map((o) => o.id)).toEqual(["a", "b", "c"]);
   });
 
+  it("spreads a food-only search across restaurant kinds, not five ramen shops", () => {
+    // worst case for the old single-bucket behaviour: the best-rated places
+    // are all ramen, so score order alone would return ramen for the whole list
+    const items = [
+      ...Array.from({ length: 5 }, (_, i) => ({
+        id: `ramen${i}`, score: 99 - i, tags: ["food"], cuisine: "ramen",
+      })),
+      { id: "sushi1", score: 90, tags: ["food"], cuisine: "sushi" },
+      { id: "soba1", score: 88, tags: ["food"], cuisine: "soba" },
+      { id: "cafe1", score: 86, tags: ["food"], cuisine: "cafe" },
+    ];
+    const out = diversify(items, 4);
+    // one ramen, then one of each other kind before the second ramen
+    expect(out.map((o) => o.id)).toEqual(["ramen0", "sushi1", "soba1", "cafe1"]);
+  });
+
+  it("keeps unclassified food together (no phantom buckets)", () => {
+    const items = [
+      { id: "a", score: 99, tags: ["food"] }, // no cuisine → plain "food" bucket
+      { id: "b", score: 98, tags: ["food"] },
+      { id: "c", score: 97, tags: ["food"], cuisine: "ramen" },
+    ];
+    const out = diversify(items, 3);
+    expect(out.map((o) => o.id)).toEqual(["a", "c", "b"]);
+  });
+
   it("fills remaining slots with next-best of each type", () => {
     const items = [
       { id: "a", score: 99, tags: ["viewpoint"] },

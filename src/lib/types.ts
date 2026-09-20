@@ -156,6 +156,9 @@ export interface ScoredPlace extends Place {
   distanceKm: number;
   travelMin: number;
   reasons: Reason[];
+  /** restaurant kind derived from the name (see lib/cuisine.ts) — drives the
+   *  per-kind spread so the list is not five ramen shops in a row */
+  cuisine?: string;
   /** LLM narrative "why now" (M2) — optional, rule reasons are the fallback */
   why?: string;
   /** how busy it is right now (estimate, or observed when reported) */
