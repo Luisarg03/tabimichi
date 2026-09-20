@@ -50,15 +50,18 @@ export async function GET(req: NextRequest) {
 
   async function refsFor(id: string): Promise<string[]> {
     const cached = await placeById(id);
-    if (cached && (await photosVerified(id))) return cached.photoRefs ?? [];
+    // legacy rows (verified before the googlePlaceId column existed) re-run
+    // once so the id gets backfilled; afterwards they skip like the rest
+    const needsId = Boolean(cached && !cached.id.startsWith("g_") && !cached.googlePlaceId);
+    if (cached && !needsId && (await photosVerified(id))) return cached.photoRefs ?? [];
 
     let refs = [...(cached?.photoRefs ?? [])];
     // Google-sourced places carry their own place id; OSM/Geoapify places
     // don't — reconcile them against Google by name+coords so they get
-    // Google's photos (and rating/url for the next search).
+    // Google's photos (and rating/url/id for the next search).
     const enriched: Partial<Place> = {};
     let googleId: string | undefined = id.startsWith("g_") ? id.slice(2) : undefined;
-    if (!googleId && cached && refs.length === 0) {
+    if (!googleId && cached && (refs.length === 0 || needsId)) {
       try {
         const hit = await googleReconcile(key, cached.name, cached.lat, cached.lng);
         if (hit) {
