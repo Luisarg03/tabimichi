@@ -166,6 +166,7 @@ function CrowdSection({ place }: { place: ScoredPlace }) {
           <DetailHeroIllustration className="h-52 w-full sm:h-60" tag={place.tags[0]}>
             {place.wikipedia && (
               <WikiPhoto
+                key={place.wikipedia}
                 wikiRef={place.wikipedia}
                 alt={place.name}
                 className="absolute inset-0 h-full w-full object-cover"
