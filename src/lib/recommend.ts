@@ -276,10 +276,17 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
     weather,
     userId: input.userId ?? null,
   });
+  // Zone display names: busiest member place (placeIds arrive busiest
+  // first). Names already travelled here with the candidates — no new lookup.
   const placesWithCrowd: ScoredPlace[] = top.map((p) => {
     const crowd = crowdById.get(p.id);
     return crowd ? { ...p, crowd } : p;
   });
+  const names = new Map(candidates.map((p) => [p.id, p.name]));
+  const namedZones = crowdZoneList.map((z) => ({
+    ...z,
+    name: names.get(z.placeIds[0] ?? ""),
+  }));
 
   const traceId = newTraceId();
   const summary = {
@@ -320,12 +327,13 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
       crowd: p.crowd ? { level: Number(p.crowd.level.toFixed(2)), label: p.crowd.label } : undefined,
     })),
     crowdCells: crowdCellList.length,
-    hotZones: crowdZoneList.map((z) => ({
+    hotZones: namedZones.map((z) => ({
       lat: z.lat,
       lng: z.lng,
       weight: z.weight,
       label: z.label,
       places: z.placeIds.length,
+      name: z.name,
     })),
   });
 
@@ -343,7 +351,7 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
     keywordResults: keywordResults ?? 0,
     keywordMiss: kwMiss,
     crowdCells: crowdCellList,
-    hotZones: crowdZoneList,
+    hotZones: namedZones,
     crowdAt: scoringNow.toISOString(),
   };
 }

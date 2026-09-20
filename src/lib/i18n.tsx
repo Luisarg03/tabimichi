@@ -323,6 +323,7 @@ const es: Dict = {
       legendHigh: "más gente",
       caption: "Afluencia estimada · {time}",
       zone: "Zona {n}",
+      hint: "Prendé 🔥 para ver las zonas con gente",
     },
   },
 };
@@ -643,6 +644,7 @@ const en: Dict = {
       legendHigh: "more people",
       caption: "Estimated footfall · {time}",
       zone: "Zone {n}",
+      hint: "Turn on 🔥 to see busy zones",
     },
   },
 };

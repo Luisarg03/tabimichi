@@ -146,6 +146,8 @@ export interface HotZone {
   label: CrowdLabel;
   /** member place ids within radiusM, busiest first (max 8) */
   placeIds: string[];
+  /** display name (busiest member place); unset when members are unknown */
+  name?: string;
 }
 
 export interface ScoredPlace extends Place {

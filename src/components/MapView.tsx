@@ -326,7 +326,7 @@ function CrowdLegend({
     ? new Date(at).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })
     : "";
   return (
-    <div className="absolute bottom-[13.5rem] right-2 z-[1000] w-[150px] rounded-panel border border-border bg-surface/95 p-2 shadow-soft backdrop-blur">
+    <div className="absolute bottom-[13.5rem] right-2 z-[1000] w-[170px] rounded-panel border border-border bg-surface/95 p-2 shadow-soft backdrop-blur">
       <div className="h-2 w-full rounded-full" style={{ background: "linear-gradient(90deg,#3f8f6a,#c9a227,#c04b33,#9c3a24)" }} />
       <div className="mt-1 flex justify-between text-[10px] font-semibold text-muted">
         <span>{t("map.crowd.legendLow")}</span>
@@ -342,7 +342,7 @@ function CrowdLegend({
                 key={z.id}
                 onClick={() => onZone(active ? null : z.id)}
                 aria-pressed={active}
-                className={`flex items-center gap-1 rounded-lg px-1.5 py-1 text-left text-[10px] font-semibold transition-colors ${
+                className={`flex min-h-[44px] items-center gap-1 rounded-lg px-1.5 py-1 text-left text-[10px] font-semibold transition-colors ${
                   active ? "bg-verm text-surface" : "text-fg hover:bg-fg/5 active:bg-fg/10"
                 }`}
               >
@@ -351,7 +351,7 @@ function CrowdLegend({
                   style={{ background: active ? "#fff" : CROWD_COLOR[z.label] }}
                 />
                 <span>
-                  {t("map.crowd.zone", { n: i + 1 })} · {t(`crowd.label.${z.label}`)}
+                  {z.name ?? t("map.crowd.zone", { n: i + 1 })} · {t(`crowd.label.${z.label}`)}
                 </span>
               </button>
             );
@@ -424,6 +424,13 @@ export default function MapView({
   const tile = tileStyleById(tileId);
   const heat = crowdCells ?? [];
   const zones = hotZones ?? [];
+  // one-time hint: layer exists but was never toggled (no stored choice yet)
+  let neverToggledCrowd = false;
+  try {
+    neverToggledCrowd = localStorage.getItem("tabi.crowd") == null;
+  } catch {
+    // ignore
+  }
   const [zoneSel, setZoneSel] = useState<string | null>(null);
   const selectedZone = zones.find((z) => z.id === zoneSel) ?? null;
 
@@ -498,6 +505,11 @@ export default function MapView({
         onCrowdChange={setCrowdOn}
         crowdAvailable={heat.length > 0}
       />
+      {heat.length > 0 && !crowdOn && neverToggledCrowd && (
+        <div className="absolute bottom-36 right-2 z-[1000] w-[170px] rounded-panel border border-border bg-surface/95 p-2 text-[11px] font-medium text-muted shadow-soft backdrop-blur">
+          {t("map.crowd.hint")}
+        </div>
+      )}
       {crowdOn && heat.length > 0 && (
         <CrowdLegend at={crowdAt} zones={zones} selectedId={zoneSel} onZone={setZoneSel} />
       )}
