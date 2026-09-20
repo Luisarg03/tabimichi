@@ -23,9 +23,11 @@ export default function SearchOverlay({
   mode,
   types,
   keyword,
+  avoidCrowds,
   onModeChange,
   onTypesChange,
   onKeywordChange,
+  onCrowdsChange,
 }: {
   location?: PanelLocation | null;
   userLocated?: boolean;
@@ -37,9 +39,11 @@ export default function SearchOverlay({
   mode: TransportMode;
   types: string[];
   keyword: string;
+  avoidCrowds: boolean;
   onModeChange: (m: TransportMode) => void;
   onTypesChange: (t: string[]) => void;
   onKeywordChange: (k: string) => void;
+  onCrowdsChange: (on: boolean) => void;
 }) {
   return (
     <div className="fixed inset-0 z-40 flex flex-col bg-bg tabi-safe-top tabi-safe-x tabi-safe-bottom">
@@ -58,9 +62,11 @@ export default function SearchOverlay({
           mode={mode}
           types={types}
           keyword={keyword}
+          avoidCrowds={avoidCrowds}
           onModeChange={onModeChange}
           onTypesChange={onTypesChange}
           onKeywordChange={onKeywordChange}
+          onCrowdsChange={onCrowdsChange}
         />
       </div>
     </div>

@@ -36,6 +36,13 @@ export interface ScoreContext {
   /** ids exempt from the closed/too-far hard filters — the pinned searched
    *  place must always show (with a closed badge when closed), never drop */
   pinnedIds?: Set<string>;
+  /** "gente ahora" levels by place id — only consulted when avoidCrowds */
+  crowd?: Map<string, { level: number }>;
+  /** user asked to stay away from the crowds: the crowd estimate MOVES the
+   *  order instead of only decorating the card. Off by default: the estimate
+   *  is a model, not a measurement, and silently reordering by it would
+   *  contradict the app's own honesty rules. */
+  avoidCrowds?: boolean;
 }
 
 function isIndoor(tag: string): boolean {
@@ -138,6 +145,26 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
   const out: ScoredPlace[] = [];
   const kwTokens = ctx.keywordTerms ?? (ctx.keyword ? keywordTokens(ctx.keyword) : []);
   const travelCap = MODE_TRAVEL_CAP_MIN[ctx.mode ?? "transit"];
+
+  // Crowd rank inside this pool. The published level is normalized against the
+  // pool's p95 popularity, so in a dense area EVERY candidate lands at
+  // 0.93–1.00 — an absolute comparison sees no difference to rank. What the
+  // user asks is "which of these is the quiet one HERE", so the level is
+  // rescaled onto this pool's min–max before ranking. The badge the user reads
+  // still shows the honest absolute label; only the ordering uses the spread.
+  let crowdRank: Map<string, number> | undefined;
+  if (ctx.avoidCrowds && ctx.crowd && ctx.crowd.size > 1) {
+    const entries = [...ctx.crowd.entries()];
+    const levels = entries.map(([, c]) => c.level);
+    const lo = Math.min(...levels);
+    const hi = Math.max(...levels);
+    crowdRank = new Map();
+    for (const [id, c] of entries) {
+      // higher crowd level = busier, so the rank must DECREASE with it:
+      // 1 = quietest of the pool, 0 = busiest.
+      crowdRank.set(id, hi > lo ? (hi - c.level) / (hi - lo) : 0.5);
+    }
+  }
 
   for (const p of places) {
     const distanceKm = haversineKm(base, p);
@@ -336,6 +363,28 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
       reasons.push({ key: "hotel" });
     }
 
+    // --- "gente ahora" as a ranking signal (opt-in) ---
+    // The one signal Google Maps does not sell. The level is rescaled onto
+    // THIS pool's spread (see crowdRank above): in a dense area every
+    // candidate is published at 0.93 or 1.00, where an absolute comparison
+    // sees almost no difference to rank. Ordering uses the rescaled rank; the
+    // reason shown to the user quotes the ABSOLUTE level, so the card and the
+    // number can never contradict each other.
+    //
+    // ponytail: with only two distinct levels in the pool this separates two
+    // tiers, not a gradient. Upgrade by deriving real per-hour footfall from
+    // the crowd model (curves.ts) instead of the pool-normalized popularity.
+    if (ctx.avoidCrowds && ctx.crowd && crowdRank) {
+      const pct = crowdRank.get(p.id);
+      const level = ctx.crowd.get(p.id)?.level;
+      if (pct !== undefined && level !== undefined) {
+        score += Math.round(-16 + 24 * pct);
+        reasons.push({
+          key: level < 0.55 ? "crowdQuiet" : level < 0.85 ? "crowdMild" : "crowdBusy",
+        });
+      }
+    }
+
     if (p.openNow === true) {
       score += 6;
       reasons.push({ key: "openNow" });
@@ -370,7 +419,11 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
 
     out.push({
       ...p,
-      score: Math.max(0, Math.min(100, Math.round(score))),
+      // Kept UNCLAMPED: the top candidates all earn well over 100, so clamping
+      // here made the first twenty tie at exactly 100 and threw away every
+      // signal that separated them (this is what made the order look random).
+      // The UI already renders the ring against 100 and floors the overflow.
+      score: score,
       distanceKm: Math.round(distanceKm * 10) / 10,
       travelMin: t,
       reasons,

@@ -213,6 +213,27 @@ describe("scorePlaces — noise penalties (chains & hotels)", () => {
     const out = scorePlaces([unrated, rated], ctx({ mode: "walking" }));
     expect(out[0].id).toBe("osm-close");
   });
+
+  it("avoidCrowds reorders by the crowd rank inside the pool", () => {
+    // Both at the same distance and unrated: only the crowd can separate them.
+    // Levels are the realistic dense-city pair (0.93 / 1.00 saturated), which
+    // is exactly why the ranking rescales onto the pool instead of comparing
+    // against an absolute threshold.
+    const quiet = place({ id: "quiet", name: "静食堂", lat: 36.6500, lng: 138.1955, tags: ["food"] });
+    const busy = place({ id: "busy", name: "人気食堂", lat: 36.6500, lng: 138.1955, tags: ["food"] });
+    const crowd = new Map([["quiet", { level: 0.93 }], ["busy", { level: 1.0 }]]);
+
+    const off = scorePlaces([quiet, busy], ctx());
+    const on = scorePlaces([quiet, busy], ctx({ avoidCrowds: true, crowd }));
+    expect(on[0].id).toBe("quiet"); // quietest first, and it outranks its own no-flag score
+    expect(on[0].score).toBeGreaterThan(off.find((p) => p.id === "quiet")!.score);
+    expect(on[1].id).toBe("busy");
+    // the label quotes the ABSOLUTE level: both are saturated here, so both
+    // read "busy" even though the ranking put one ahead of the other
+    for (const p of on) {
+      expect(p.reasons.some((r) => ["crowdBusy", "crowdMild", "crowdQuiet"].includes(r.key))).toBe(true);
+    }
+  });
 });
 
 describe("scorePlaces — interest keyword", () => {
@@ -268,8 +289,12 @@ describe("scorePlaces — profile affinity", () => {
 
   it("clamps affinity", () => {
     const onsen = place({ tags: ["onsen"] });
-    const out = scorePlaces([onsen], ctx({ profile: { onsen: 50 } }))[0];
-    expect(out.score).toBeLessThanOrEqual(100);
+    const boosted = scorePlaces([onsen], ctx({ profile: { onsen: 50 } }))[0];
+    const neutral = scorePlaces([onsen], ctx())[0];
+    // affinity is capped at +12, so a weight of 50 buys the same as 12
+    const capped = scorePlaces([onsen], ctx({ profile: { onsen: 12 } }))[0];
+    expect(boosted.score).toBe(capped.score);
+    expect(boosted.score - neutral.score).toBe(12);
   });
 });
 

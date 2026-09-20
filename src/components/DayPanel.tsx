@@ -23,6 +23,8 @@ export interface DiscoverPayload {
   gps?: boolean;
   /** optional interest keyword: "pokemon", "book off", "gatos"… */
   keyword?: string;
+  /** standing preference: rank quieter places first (crowd estimate) */
+  avoidCrowds?: boolean;
   /** the exact place the user searched — guaranteed to appear first */
   pin?: { name: string; lat: number; lng: number; typeId?: string };
 }
@@ -58,9 +60,11 @@ export default function DayPanel({
   mode,
   types,
   keyword,
+  avoidCrowds,
   onModeChange,
   onTypesChange,
   onKeywordChange,
+  onCrowdsChange,
 }: {
   initialLocation?: PanelLocation | null;
   /** true cuando initialLocation viene de un acto del usuario (GPS, guardado):
@@ -81,9 +85,12 @@ export default function DayPanel({
   mode: TransportMode;
   types: string[];
   keyword: string;
+  /** standing preference: quieter places first (crowd estimate moves the order) */
+  avoidCrowds: boolean;
   onModeChange: (m: TransportMode) => void;
   onTypesChange: (t: string[]) => void;
   onKeywordChange: (k: string) => void;
+  onCrowdsChange: (on: boolean) => void;
 }) {
   const { t } = useI18n();
   const { getToken } = useAuth();
@@ -280,7 +287,7 @@ export default function DayPanel({
   function submit() {
     if (!location) return;
     const kw = keyword.trim();
-    onDiscover({ ...location, types, mode, keyword: kw || undefined });
+    onDiscover({ ...location, types, mode, avoidCrowds, keyword: kw || undefined });
     // Collapse after discover so results are visible on mobile.
     // On desktop (md+) the CSS keeps the body open regardless.
     setCollapsed(true);
@@ -353,6 +360,7 @@ export default function DayPanel({
       <div className="mt-3">
         <span className="eyebrow">{t("sim.label")}</span>
         <SimTabs preset={simPreset} onChange={onSimChange} className="mt-1.5 w-full" />
+        <p className="mt-1 text-[11.5px] text-muted">{t("sim.note")}</p>
       </div>
 
       {/* transport mode */}
@@ -412,6 +420,21 @@ export default function DayPanel({
         />
         <p className="mt-1 text-xs text-muted">{t("panel.interestHint")}</p>
       </div>
+
+      {/* crowd preference: the one signal Maps does not sell. Off by default —
+          the estimate is a model, so it only reorders when asked. */}
+      <label className="mt-3 flex min-h-[44px] cursor-pointer items-center gap-2.5 rounded-[12px] border border-border bg-surface px-3">
+        <input
+          type="checkbox"
+          checked={avoidCrowds}
+          onChange={(e) => onCrowdsChange(e.target.checked)}
+          className="h-4 w-4 shrink-0 accent-[var(--color-brand-600)]"
+        />
+        <span className="min-w-0">
+          <span className="block text-[13px] font-semibold text-fg">{t("panel.avoidCrowds")}</span>
+          <span className="block text-[11.5px] text-muted">{t("panel.avoidCrowdsHint")}</span>
+        </span>
+      </label>
 
       {/* discover — sticky so it never hides below the fold in the
           mobile overlay scroll container */}

@@ -20,6 +20,8 @@ const es: Dict = {
     interestLabel: "Interés (opcional)",
     interestPlaceholder: "ej: pokemon, gatos, book off, snoopy…",
     interestHint: "Orientá la búsqueda a un tema: lugares que lo combinen suben al top.",
+    avoidCrowds: "Evitar multitudes",
+    avoidCrowdsHint: "Ordena primero los lugares tranquilos a esta hora.",
     type: {
       any: "Cualquier cosa",
       onsen: "Onsen",
@@ -154,6 +156,10 @@ const es: Dict = {
     evening: "Noche · 21h",
     late: "Madrugada · 3h",
     active: "Simulando",
+    // Honesty: the opening-hours data only covers Google-sourced places, so
+    // the hour changes the crowd estimate and the time-of-day fit for
+    // everything, but "está abierto" only for the ones we actually know.
+    note: "La hora afecta la gente estimada y el momento del día. El horario de apertura solo lo conocemos en algunos lugares.",
   },
   reasons: {
     weatherRainIndoor: "Hoy llueve — ideal para {type}",
@@ -178,6 +184,9 @@ const es: Dict = {
     weekend: "Plan de fin de semana",
     landmark: "Lugar emblemático (Wikipedia)",
     localCuisine: "Cocina japonesa de la casa",
+    crowdBusy: "Suele estar lleno a esta hora",
+    crowdQuiet: "Tranquilo a esta hora",
+    crowdMild: "Afluencia media a esta hora",
     pinned: "Lo que buscaste",
   },
   status: {
@@ -340,6 +349,8 @@ const en: Dict = {
     interestLabel: "Interest (optional)",
     interestPlaceholder: "e.g. pokemon, cats, book off, snoopy…",
     interestHint: "Orient the search to a topic: matching places rise to the top.",
+    avoidCrowds: "Avoid the crowds",
+    avoidCrowdsHint: "Ranks the quiet places at this hour first.",
     type: {
       any: "Anything",
       onsen: "Onsen",
@@ -474,6 +485,7 @@ const en: Dict = {
     evening: "Evening · 21h",
     late: "Late night · 3h",
     active: "Simulating",
+    note: "The hour affects the crowd estimate and the time-of-day fit. Opening hours are only known for some places.",
   },
   reasons: {
     weatherRainIndoor: "Rainy today — great for {type}",
@@ -498,6 +510,9 @@ const en: Dict = {
     weekend: "Weekend plan",
     landmark: "Notable place (Wikipedia)",
     localCuisine: "Local Japanese kitchen",
+    crowdBusy: "Usually busy at this hour",
+    crowdQuiet: "Quiet at this hour",
+    crowdMild: "Medium footfall at this hour",
     pinned: "Your search",
   },
   status: {

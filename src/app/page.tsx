@@ -99,6 +99,22 @@ export default function HomePage() {
   const [mode, setMode] = useState<TransportMode>("transit");
   const [types, setTypes] = useState<string[]>([]);
   const [keyword, setKeyword] = useState("");
+  /** standing preference: the crowd estimate reorders the list. Stored like
+   *  the map layers so it survives a reload. */
+  const [avoidCrowds, setAvoidCrowds] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("tabi.avoidCrowds") === "1";
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem("tabi.avoidCrowds", avoidCrowds ? "1" : "0");
+    } catch {
+      // ignore
+    }
+  }, [avoidCrowds]);
   /** Mobile results bottom sheet: hidden until a discover runs. */
   const [sheet, setSheet] = useState<SheetSnap>("hidden");
   /** Mobile search overlay (full-screen form). */
@@ -113,6 +129,7 @@ export default function HomePage() {
     mode: string;
     now?: string;
     keyword?: string;
+    avoidCrowds?: boolean;
     traceId?: string;
   } | null>(null);
   const lastPlacesRef = useRef<
@@ -223,6 +240,7 @@ export default function HomePage() {
             lang: locale,
             now,
             keyword: payload.keyword,
+            avoidCrowds,
             pin: payload.pin,
           }),
         });
@@ -274,6 +292,7 @@ export default function HomePage() {
             mode: payload.mode,
             now,
             keyword: payload.keyword,
+            avoidCrowds,
             traceId: data.traceId,
           };
           // /api/narrate caps the payload at 12 places — send the visible top
@@ -291,7 +310,7 @@ export default function HomePage() {
         setLoading(false);
       }
     },
-    [locale, simPreset, getToken]
+    [locale, simPreset, getToken, avoidCrowds]
   );
 
   /** "Tus gustos": set one tag weight directly (optimistic, then server truth). */
@@ -447,6 +466,8 @@ export default function HomePage() {
               mode={mode}
               types={types}
               keyword={keyword}
+              avoidCrowds={avoidCrowds}
+              onCrowdsChange={setAvoidCrowds}
               onModeChange={setMode}
               onTypesChange={setTypes}
               onKeywordChange={setKeyword}
@@ -552,6 +573,8 @@ export default function HomePage() {
             mode={mode}
             types={types}
             keyword={keyword}
+            avoidCrowds={avoidCrowds}
+            onCrowdsChange={setAvoidCrowds}
             onModeChange={setMode}
             onTypesChange={setTypes}
             onKeywordChange={setKeyword}

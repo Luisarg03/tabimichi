@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid json" }, { status: 400 });
   }
 
-  const { lat, lng, types = [], radiusKm, mode, lang, now, keyword, pin } = body ?? {};
+  const { lat, lng, types = [], radiusKm, mode, lang, now, keyword, pin, avoidCrowds } = body ?? {};
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
     return NextResponse.json({ error: "lat/lng required" }, { status: 400 });
   }
@@ -65,6 +65,7 @@ export async function POST(req: NextRequest) {
       now,
       keyword: typeof keyword === "string" ? keyword.trim() : undefined,
       pin,
+      avoidCrowds: avoidCrowds === true,
       config,
       userId,
     });

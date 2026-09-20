@@ -190,6 +190,29 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
   // Destination-local wall clock in UTC fields: simulated dates already are
   // (JST convention); real instants get shifted by the longitude offset.
   const scoringNow = simulated ?? localTimeAt(new Date(), input.lng);
+  // ---- "gente ahora": how busy each place is right now ------------------
+  // Computed BEFORE scoring (it used to run after): the crowd estimate is the
+  // one signal Google Maps does not sell, so when the user asks to avoid the
+  // crowds it has to move the order, not just decorate the card. Popularity is
+  // relative to the pool, so it is one pass over every candidate; only what
+  // the user sees gets the badge attached.
+  const crowdPool: CrowdPoolPlace[] = candidates.map((p) => ({
+    id: p.id,
+    lat: p.lat,
+    lng: p.lng,
+    tags: p.tags,
+    userRatingsTotal: p.userRatingsTotal,
+    wikipedia: p.wikipedia,
+    periods: p.periods,
+  }));
+  const { byId: crowdById, cells: crowdCellList, zones: crowdZoneList } = await crowdForPool(crowdPool, {
+    now: scoringNow,
+    lat: input.lat,
+    lng: input.lng,
+    weather,
+    userId: input.userId ?? null,
+  });
+
   const scored = scorePlaces(candidates, {
     base: { lat: input.lat, lng: input.lng },
     weather,
@@ -205,6 +228,11 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
     profile,
     stats,
     pinnedIds: pinPlace ? new Set([pinPlace.id]) : undefined,
+    // the user's standing preference: "gente ahora" moves the order.
+    // Default off — the estimate is a model, not a measurement, so it only
+    // ranks when the user explicitly asked to avoid the crowds.
+    crowd: input.avoidCrowds ? crowdById : undefined,
+    avoidCrowds: input.avoidCrowds === true,
   });
 
   // With an interest keyword the user's intent wins: candidates that came
@@ -263,26 +291,6 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
   }
   const emptyReason = emptyReasonFor(candidates, top.length);
 
-  // ---- "gente ahora": how busy each place is right now ------------------
-  // Computed over the WHOLE pool (popularity is relative to what else is
-  // around), attached only to what the user sees. No new data source: the
-  // ratings, tags, opening hours and live weather already travelled here.
-  const crowdPool: CrowdPoolPlace[] = candidates.map((p) => ({
-    id: p.id,
-    lat: p.lat,
-    lng: p.lng,
-    tags: p.tags,
-    userRatingsTotal: p.userRatingsTotal,
-    wikipedia: p.wikipedia,
-    periods: p.periods,
-  }));
-  const { byId: crowdById, cells: crowdCellList, zones: crowdZoneList } = await crowdForPool(crowdPool, {
-    now: scoringNow,
-    lat: input.lat,
-    lng: input.lng,
-    weather,
-    userId: input.userId ?? null,
-  });
   // Zone display names: busiest member place (placeIds arrive busiest
   // first). Names already travelled here with the candidates — no new lookup.
   const placesWithCrowd: ScoredPlace[] = top.map((p) => {

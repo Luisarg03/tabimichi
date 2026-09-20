@@ -171,6 +171,8 @@ export interface RecommendInput {
   types: string[]; // empty = any
   radiusKm?: number;
   mode?: TransportMode;
+  /** standing user preference: "gente ahora" moves the order, not just the badge */
+  avoidCrowds?: boolean;
   /** UI language for discovery: "es" | "en" */
   lang?: string;
   /** ISO instant — when set, the pipeline simulates this time (JST evaluation) */
