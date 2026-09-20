@@ -14,6 +14,7 @@ interface PanelLocation {
  *  replaces the top pill until a discover is confirmed or the user closes. */
 export default function SearchOverlay({
   location,
+  userLocated,
   loading,
   onDiscover,
   onClose,
@@ -27,6 +28,7 @@ export default function SearchOverlay({
   onKeywordChange,
 }: {
   location?: PanelLocation | null;
+  userLocated?: boolean;
   loading: boolean;
   onDiscover: (payload: DiscoverPayload) => void;
   onClose: () => void;
@@ -47,6 +49,7 @@ export default function SearchOverlay({
       <div className="tabi-rise-in min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
         <DayPanel
           initialLocation={location}
+          userLocated={userLocated}
           loading={loading}
           onDiscover={onDiscover}
           onClose={onClose}

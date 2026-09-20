@@ -445,6 +445,7 @@ export default function HomePage() {
             <DayPanel
               embedded
               initialLocation={location}
+              userLocated={savedLocation != null}
               loading={loading}
               onDiscover={handleDiscover}
               budget={budget}
@@ -553,6 +554,7 @@ export default function HomePage() {
         <div className="md:hidden">
           <SearchOverlay
             location={location}
+            userLocated={savedLocation != null}
             loading={loading}
             onDiscover={handleDiscover}
             onClose={() => setSearchOpen(false)}

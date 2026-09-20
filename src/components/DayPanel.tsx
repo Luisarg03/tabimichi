@@ -49,6 +49,7 @@ interface PanelLocation {
 
 export default function DayPanel({
   initialLocation,
+  userLocated,
   loading,
   onDiscover,
   onClose,
@@ -63,6 +64,9 @@ export default function DayPanel({
   onKeywordChange,
 }: {
   initialLocation?: PanelLocation | null;
+  /** true cuando initialLocation viene de un acto del usuario (GPS, guardado):
+   *  el default Tokio no cuenta. */
+  userLocated?: boolean;
   loading: boolean;
   onDiscover: (payload: DiscoverPayload) => void;
   /** When set, renders as a full-screen search overlay (mobile):
@@ -87,6 +91,9 @@ export default function DayPanel({
   const [query, setQuery] = useState("");
   const [locating, setLocating] = useState(false);
   const [location, setLocation] = useState(initialLocation ?? null);
+  // bias destino solo si el usuario lo puso (GPS, pick, geocode, o guardado
+  // previo): el default Tokio biases todo a Tokio en primera visita.
+  const [touched, setTouched] = useState(userLocated ?? initialLocation?.gps === true);
   const [geocodeError, setGeocodeError] = useState(false);
   /** Mobile: panel collapsed by default to not block the map */
   const [collapsed, setCollapsed] = useState(true);
@@ -118,9 +125,10 @@ export default function DayPanel({
         // Bias suggestions by the current destination when one is set, so
         // results are ranked by distance to the search area. The session JWT
         // lets the server add Google Autocomplete with the user's own key.
-        const bias = location
-          ? `&lat=${location.lat.toFixed(5)}&lng=${location.lng.toFixed(5)}`
-          : "";
+        const bias =
+          location && touched
+            ? `&lat=${location.lat.toFixed(5)}&lng=${location.lng.toFixed(5)}`
+            : "";
         const token = await getToken();
         const res = await fetch(`/api/search/suggest?q=${encodeURIComponent(q)}${bias}`, {
           signal: ctrl.signal,
@@ -155,6 +163,7 @@ export default function DayPanel({
     isPlace: boolean
   ) {
     setLocation({ lat: loc.lat, lng: loc.lng, label: loc.name, gps: false });
+    setTouched(true);
     setGeocodeError(false);
     onDiscover({
       lat: loc.lat,
@@ -247,6 +256,7 @@ export default function DayPanel({
     }
     const data = await res.json();
     setLocation({ lat: data.lat, lng: data.lng, label: data.name, gps: false });
+    setTouched(true);
     return { lat: data.lat, lng: data.lng, label: data.name };
   }
 
@@ -261,6 +271,7 @@ export default function DayPanel({
           label: "📍",
           gps: true,
         });
+        setTouched(true);
         setLocating(false);
       },
       () => setLocating(false),
