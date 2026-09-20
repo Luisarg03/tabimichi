@@ -119,7 +119,7 @@ describe("/api/recommend", () => {
       { match: urlContains("interpreter"), response: () => jsonResponse({ elements: [] }) },
     ]);
     const res = await recommendPOST(
-      post("http://localhost/api/recommend", { lat: 36.65, lng: 138.19, budget: "afternoon", types: ["park", "museum"], mode: "walking" })
+      post("http://localhost/api/recommend", { lat: 36.65, lng: 138.19, types: ["park", "museum"], mode: "walking" })
     );
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -131,26 +131,26 @@ describe("/api/recommend", () => {
   });
 
   it("validates inputs", async () => {
-    const noLat = await recommendPOST(post("http://localhost/api/recommend", { lng: 138, budget: "lunch" }));
+    const noLat = await recommendPOST(post("http://localhost/api/recommend", { lng: 138 }));
     expect(noLat.status).toBe(400);
     const badMode = await recommendPOST(
-      post("http://localhost/api/recommend", { lat: 36, lng: 138, budget: "lunch", mode: "jetpack" })
+      post("http://localhost/api/recommend", { lat: 36, lng: 138, mode: "jetpack" })
     );
     expect(badMode.status).toBe(400);
     const badNow = await recommendPOST(
-      post("http://localhost/api/recommend", { lat: 36, lng: 138, budget: "lunch", now: "not-a-date" })
+      post("http://localhost/api/recommend", { lat: 36, lng: 138, now: "not-a-date" })
     );
     expect(badNow.status).toBe(400);
     const longKw = await recommendPOST(
-      post("http://localhost/api/recommend", { lat: 36, lng: 138, budget: "lunch", keyword: "x".repeat(61) })
+      post("http://localhost/api/recommend", { lat: 36, lng: 138, keyword: "x".repeat(61) })
     );
     expect(longKw.status).toBe(400);
     const badPin = await recommendPOST(
-      post("http://localhost/api/recommend", { lat: 36, lng: 138, budget: "lunch", pin: { name: "", lat: 0, lng: 0 } })
+      post("http://localhost/api/recommend", { lat: 36, lng: 138, pin: { name: "", lat: 0, lng: 0 } })
     );
     expect(badPin.status).toBe(400);
     const badPinCoords = await recommendPOST(
-      post("http://localhost/api/recommend", { lat: 36, lng: 138, budget: "lunch", pin: { name: "X", lat: "36", lng: 138 } })
+      post("http://localhost/api/recommend", { lat: 36, lng: 138, pin: { name: "X", lat: "36", lng: 138 } })
     );
     expect(badPinCoords.status).toBe(400);
   });
@@ -162,7 +162,7 @@ describe("/api/recommend", () => {
       { match: urlContains("nearbysearch"), response: () => jsonResponse({ status: "OK", results: [] }) },
     ]);
     const res = await recommendPOST(
-      post("http://localhost/api/recommend", { lat: 36.65, lng: 138.19, budget: "afternoon", types: [], mode: "walking", keyword: "pokemon" })
+      post("http://localhost/api/recommend", { lat: 36.65, lng: 138.19, types: [], mode: "walking", keyword: "pokemon" })
     );
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -208,7 +208,7 @@ describe("/api/recommend", () => {
     // Sunday 21:00 JST — encoded as the client does: Date.UTC(y,m,d,hourJST)
     const res = await recommendPOST(
       post("http://localhost/api/recommend", {
-        lat: 36.65, lng: 138.19, budget: "afternoon", types: ["food", "nightlife"], mode: "walking",
+        lat: 36.65, lng: 138.19, types: ["food", "nightlife"], mode: "walking",
         now: "2026-08-16T21:00:00.000Z",
       })
     );

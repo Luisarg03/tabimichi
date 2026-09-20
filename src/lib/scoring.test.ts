@@ -30,7 +30,6 @@ const place = (over: Partial<Place> = {}): Place => ({
 
 const ctx = (over: Record<string, unknown> = {}) => ({
   base: { lat: 36.6485, lng: 138.1949 },
-  budgetMin: 300,
   weather: weather(),
   now: new Date(),
   ...over,
@@ -44,25 +43,25 @@ describe("scorePlaces — hard filters", () => {
     expect(out.map((p) => p.id)).toEqual([near.id]);
   });
 
-  it("drops places too far for the budget", () => {
-    const out = scorePlaces([place({ lat: 36.9, lng: 138.5 })], ctx({ budgetMin: 60 }));
+  it("drops places beyond the mode travel cap", () => {
+    // transit cap 90 min: ~40 km ≈ 94 min → dropped
+    const out = scorePlaces([place({ lat: 36.9, lng: 138.5 })], ctx({}));
     expect(out).toHaveLength(0);
   });
 
   it("drops far places in walking mode that transit would accept", () => {
     const far = place({ lat: 36.69, lng: 138.23 }); // ~5.5 km
     // walking: 5.5 km ≈ 73 min on foot > 45 min cap → dropped ("around me" only)
-    expect(scorePlaces([far], ctx({ mode: "walking", budgetMin: 300 }))).toHaveLength(0);
+    expect(scorePlaces([far], ctx({ mode: "walking" }))).toHaveLength(0);
     // transit: 5.5 km ≈ 20 min < 90 min cap → accepted
-    expect(scorePlaces([far], ctx({ mode: "transit", budgetMin: 300 }))).toHaveLength(1);
+    expect(scorePlaces([far], ctx({ mode: "transit" }))).toHaveLength(1);
   });
 
-  it("caps travel at half the day budget regardless of mode", () => {
-    // lunch = 90 min budget → cap = min(45, mode cap) = 45 min even for transit
+  it("caps travel per mode: transit takes 61 min trips, walking does not", () => {
     const mid = place({ lat: 36.69, lng: 138.23 }); // ~5.5 km ≈ 20 min transit
-    const far = place({ lat: 36.78, lng: 138.42 }); // ~25 km ≈ 61 min transit
-    const out = scorePlaces([mid, far], ctx({ mode: "transit", budgetMin: 90 }));
-    expect(out.map((p) => p.id)).toEqual([mid.id]);
+    const far = place({ lat: 36.95, lng: 138.55 }); // ~40 km ≈ 136 min transit
+    expect(scorePlaces([mid, far], ctx({ mode: "transit" })).map((p) => p.id)).toEqual([mid.id]);
+    expect(scorePlaces([mid, far], ctx({ mode: "walking" }))).toHaveLength(0);
   });
 
   it("never recommends closed places", () => {

@@ -32,7 +32,7 @@ async function main() {
   { const r = await fetch(BASE); check("GET / 200", r.status === 200, `status ${r.status}`); }
 
   console.log("recommend (real, Osaka):");
-  let r = await post("/api/recommend", { lat: 34.6937, lng: 135.5023, budget: "afternoon", types: [], mode: "walking", lang: "es" });
+  let r = await post("/api/recommend", { lat: 34.6937, lng: 135.5023, types: [], mode: "walking", lang: "es" });
   check("200", r.status === 200, `status ${r.status}`);
   check("places > 0", (r.json?.places ?? []).length > 0, `n=${(r.json?.places ?? []).length}`);
   check("crowd en todos", (r.json?.places ?? []).every((p) => p.crowd && p.crowd.level >= 0 && p.crowd.level <= 1));
@@ -44,7 +44,7 @@ async function main() {
   await sleep(5000); // pacing (15/IP)
 
   console.log("recommend (simulado 03:00):");
-  r = await post("/api/recommend", { lat: 34.6937, lng: 135.5023, budget: "afternoon", types: ["food"], mode: "walking", lang: "es", now: "2026-08-16T03:00:00.000Z" });
+  r = await post("/api/recommend", { lat: 34.6937, lng: 135.5023, types: ["food"], mode: "walking", lang: "es", now: "2026-08-16T03:00:00.000Z" });
   check("200", r.status === 200, `status ${r.status}`);
   check("simulados nunca closed", (r.json?.places ?? []).every((p) => p.openNow !== false));
 

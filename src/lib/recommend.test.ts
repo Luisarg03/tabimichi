@@ -99,7 +99,7 @@ describe("recommend — pipeline outcomes", () => {
       { match: urlContains("nearbysearch"), response: () => jsonResponse({ status: "OK", results: [] }) },
       { match: urlContains("interpreter"), response: () => jsonResponse({ elements: [] }) },
     ]);
-    const r = await recommend({ lat: 36.65, lng: 138.19, budget: "afternoon", types: ["park"], mode: "walking" });
+    const r = await recommend({ lat: 36.65, lng: 138.19, types: ["park"], mode: "walking" });
     expect(r.places.map((p) => p.id)).toEqual(["g_p1", "g_p2"]);
     expect(r.places[0].openNow).toBe(true);
     expect(r.places[1].openNow).toBe(false);
@@ -132,7 +132,7 @@ describe("recommend — pipeline outcomes", () => {
       { match: urlContains("nearbysearch"), response: () => jsonResponse({ status: "OK", results: [] }) },
       { match: urlContains("interpreter"), response: () => jsonResponse({ elements: [] }) },
     ]);
-    const r = await recommend({ lat: 36.65, lng: 138.19, budget: "afternoon", types: ["temple"], mode: "walking" });
+    const r = await recommend({ lat: 36.65, lng: 138.19, types: ["temple"], mode: "walking" });
 
     expect(r.places.length).toBe(2);
     for (const p of r.places) {
@@ -177,7 +177,7 @@ describe("recommend — pipeline outcomes", () => {
       { match: urlContains("nearbysearch"), response: () => jsonResponse({ status: "OK", results: [] }) },
     ]);
     const r = await recommend({
-      lat: 36.65, lng: 138.19, budget: "afternoon", types: ["museum"], mode: "walking",
+      lat: 36.65, lng: 138.19, types: ["museum"], mode: "walking",
       keyword: "pokemon",
     });
     expect(r.places[0].id).toBe("g_p1"); // keyword query result ranked
@@ -207,7 +207,7 @@ describe("recommend — pipeline outcomes", () => {
       { match: urlContains("nearbysearch"), response: () => jsonResponse({ status: "OK", results: [] }) },
     ]);
     const r = await recommend({
-      lat: 36.65, lng: 138.19, budget: "afternoon", types: ["museum"], mode: "walking",
+      lat: 36.65, lng: 138.19, types: ["museum"], mode: "walking",
       keyword: "gatos",
     });
     expect(r.places[0].id).toBe("g_c1"); // 'cat' query → cat café
@@ -243,7 +243,7 @@ describe("recommend — pipeline outcomes", () => {
       },
     ]);
     const r = await recommend({
-      lat: 36.65, lng: 138.19, budget: "afternoon", types: ["museum"], mode: "walking",
+      lat: 36.65, lng: 138.19, types: ["museum"], mode: "walking",
       keyword: "pokemon",
     });
     expect(r.places[0].id).toBe("g_kw1"); // intent wins over rating/volume
@@ -270,7 +270,7 @@ describe("recommend — pipeline outcomes", () => {
       },
     ]);
     const r = await recommend({
-      lat: 36.65, lng: 138.19, budget: "afternoon", types: ["museum"], mode: "walking",
+      lat: 36.65, lng: 138.19, types: ["museum"], mode: "walking",
       keyword: "snoopy",
     });
     expect(r.keywordMiss).toBe(true);
@@ -303,7 +303,7 @@ describe("recommend — pipeline outcomes", () => {
       },
     ]);
     const r = await recommend({
-      lat: 36.65, lng: 138.19, budget: "afternoon", types: ["museum"], mode: "walking",
+      lat: 36.65, lng: 138.19, types: ["museum"], mode: "walking",
       keyword: "cafe, neko",
     });
     expect(r.places[0].id).toBe("g_kw1"); // keyword-query result first, no name match needed
@@ -335,7 +335,7 @@ describe("recommend — pipeline outcomes", () => {
       },
     ]);
     const r = await recommend({
-      lat: 36.65, lng: 138.19, budget: "afternoon", types: ["museum"], mode: "walking",
+      lat: 36.65, lng: 138.19, types: ["museum"], mode: "walking",
       keyword: "snoopy",
     });
     expect(r.keywordMiss).toBe(true); // nothing Snoopy-ish within reach
@@ -375,7 +375,7 @@ describe("recommend — pipeline outcomes", () => {
       },
     ]);
     const r = await recommend({
-      lat: 36.65, lng: 138.19, budget: "afternoon", types: ["museum"], mode: "walking",
+      lat: 36.65, lng: 138.19, types: ["museum"], mode: "walking",
       keyword: "snoopy",
     });
     expect(r.keywordMiss).toBe(true);
@@ -409,7 +409,7 @@ describe("recommend — pipeline outcomes", () => {
     ]);
     // Sunday 21:00 JST → café closed
     const r = await recommend({
-      lat: 36.65, lng: 138.19, budget: "afternoon", types: ["food"], mode: "walking",
+      lat: 36.65, lng: 138.19, types: ["food"], mode: "walking",
       now: "2026-08-16T21:00:00.000Z",
     });
     expect(r.places).toHaveLength(0);
@@ -423,7 +423,7 @@ describe("recommend — pipeline outcomes", () => {
       { match: urlContains("api.geoapify.com"), response: () => jsonResponse({}, 500) },
       { match: urlContains("interpreter"), response: () => jsonResponse({ elements: [] }) },
     ]);
-    const r = await recommend({ lat: 36.65, lng: 138.19, budget: "afternoon", types: ["park"], mode: "walking" });
+    const r = await recommend({ lat: 36.65, lng: 138.19, types: ["park"], mode: "walking" });
     expect(r.places).toHaveLength(0);
     expect(r.emptyReason).toBe("no_results");
   });
@@ -438,7 +438,7 @@ describe("recommend — pipeline outcomes", () => {
       { match: urlContains("nearbysearch"), response: () => jsonResponse({ status: "OK", results: [] }) },
       { match: urlContains("interpreter"), response: () => jsonResponse({ elements: [] }) },
     ]);
-    const r = await recommend({ lat: 36.65, lng: 138.19, budget: "afternoon", types: ["museum"], mode: "walking" });
+    const r = await recommend({ lat: 36.65, lng: 138.19, types: ["museum"], mode: "walking" });
     expect(r.places).toHaveLength(12); // 12 > 10 → the UI cap was raised
   });
 
@@ -459,7 +459,7 @@ describe("recommend — pipeline outcomes", () => {
           jsonResponse({ elements: [{ type: "node", id: 9, lat: 36.651, lon: 138.19, tags: { tourism: "museum", name: "Nagano Museum" } }] }),
       },
     ]);
-    const r = await recommend({ lat: 36.65, lng: 138.19, budget: "afternoon", types: ["museum"], mode: "walking" });
+    const r = await recommend({ lat: 36.65, lng: 138.19, types: ["museum"], mode: "walking" });
     expect(r.sources).toEqual(["google", "overpass"]);
   });
 });
@@ -546,7 +546,6 @@ describe("recommend — pinned place (Google-Maps parity)", () => {
     const r = await recommend({
       lat: 36.6485,
       lng: 138.1949,
-      budget: "afternoon",
       types: [],
       mode: "transit",
       pin: { name: "Café Misterio", lat: 36.6485, lng: 138.1949, typeId: "food" },
@@ -577,7 +576,6 @@ describe("recommend — pinned place (Google-Maps parity)", () => {
     const r = await recommend({
       lat: 35.714,
       lng: 139.7798,
-      budget: "afternoon",
       types: [],
       mode: "transit",
       pin: { name: "Edo-Tokyo Museum", lat: 35.714, lng: 139.7798, typeId: "museum" },
@@ -598,7 +596,6 @@ describe("recommend — pinned place (Google-Maps parity)", () => {
     const r = await recommend({
       lat: 36.6485,
       lng: 138.1949,
-      budget: "afternoon",
       types: [],
       mode: "transit",
       pin: { name: "Solo Pin", lat: 36.6485, lng: 138.1949 },
