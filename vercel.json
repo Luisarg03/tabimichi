@@ -6,8 +6,8 @@
   "installCommand": "pnpm install --frozen-lockfile",
   "regions": ["gru1"],
   "functions": {
-    "src/app/api/**/*.ts": {
-      "maxDuration": 30
+    "src/app/api/**": {
+      "maxDuration": 60
     }
   },
   "crons": [],
