@@ -159,13 +159,24 @@ describe("scorePlaces — noise penalties (chains & hotels)", () => {
     expect(byId[chain.id].score).toBeLessThan(byId[local.id].score);
   });
 
-  it("penalizes hotels but not ryokan-onsen", () => {
+  it("drops hotel dining rooms from a food search but keeps ryokan-onsen", () => {
+    // Google types hotels as "restaurant" when they serve breakfast; the user
+    // reported seeing "Hotel … Dining" in the food list. A hard filter is
+    // correct here — a hotel is not a place you go to eat — while a ryokan
+    // with a bath stays, because that IS a destination for this app.
     const hotel = place({ name: "Marunouchi Hotel", tags: ["food"], rating: 4.2, userRatingsTotal: 300, openNow: true });
+    const dining = place({ name: "All Day Dining Jurin", tags: ["food"], rating: 4.2, userRatingsTotal: 1074, openNow: true });
+    const karaoke = place({ name: "Karaoke Pasela Shinjuku Honten", tags: ["food", "nightlife"], rating: 4.3, userRatingsTotal: 1358, openNow: true });
     const ryokan = place({ name: "Ryokan Sanga", tags: ["onsen"], rating: 4.6, userRatingsTotal: 200, openNow: true });
-    const out = scorePlaces([hotel, ryokan], ctx());
-    const byId = Object.fromEntries(out.map((p) => [p.id, p]));
-    expect(byId[hotel.id].reasons.some((r) => r.key === "hotel")).toBe(true);
-    expect(byId[ryokan.id].reasons.some((r) => r.key === "hotel")).toBe(false);
+    const out = scorePlaces([hotel, dining, karaoke, ryokan], ctx({ types: ["food"] }));
+    expect(out.map((p) => p.id)).toEqual([ryokan.id]);
+  });
+
+  it("keeps a food place whose name merely contains a lodging word elsewhere", () => {
+    // the filter is name-anchored, so a normal restaurant is untouched
+    const soba = place({ name: "信州そば本陣", tags: ["food"], rating: 4.4, userRatingsTotal: 400, openNow: true });
+    const out = scorePlaces([soba], ctx({ types: ["food"] }));
+    expect(out.map((p) => p.id)).toEqual([soba.id]);
   });
 
   it("a highly rated local gem beats a mediocre chain at the same distance", () => {

@@ -32,7 +32,7 @@ export interface ScoreContext {
   /** M3: learned tag weights from 👍/👎 feedback, e.g. { onsen: 2, food: -1 } */
   profile?: Record<string, number>;
   /** dev tracing: counters of why candidates were dropped (mutated) */
-  stats?: { closed: number; tooFar: number; nameMatches?: number };
+  stats?: { closed: number; tooFar: number; nameMatches?: number; noise?: number };
   /** ids exempt from the closed/too-far hard filters — the pinned searched
    *  place must always show (with a closed badge when closed), never drop */
   pinnedIds?: Set<string>;
@@ -90,6 +90,17 @@ export const CHAIN_NAMES = [
   "ココイチ",
   "go go curry",
   "ゴーゴーカレー",
+  "blue bottle",
+  "komeda",
+  "コメダ",
+  "tully",
+  "タリーズ",
+  "excelsior",
+  "エクセルシオール",
+  "katsukura",
+  "かつくら",
+  "kani douraku",
+  "かに道楽",
   "bikkuri donkey",
   "びっくりドンキー",
   "joyfull",
@@ -142,6 +153,19 @@ const MODE_TRAVEL_CAP_MIN: Record<TransportMode, number> = { walking: 45, transi
  * Rule-based "base fit" score (0-100) + human-readable reasons.
  * The LLM (next phase) will narrate, not score.
  */
+/** Entertainment venues and lodgings Google types as food because they serve
+ *  something (a karaoke box with a menu, a hotel breakfast room). Reported by
+ *  the user: "Karaoke Pasela" and "Hotel … Dining" showed up as restaurants.
+ *  Checked HERE and not only at discovery because cached rows were stored
+ *  before that filter existed — a cache hit would keep serving them. A place
+ *  tagged onsen is exempt: a ryokan with a bath is a destination, not noise. */
+const FOOD_NOISE_RE = /karaoke|カラオケ|pasela|hotel|ホテル|旅館|ryokan|lodging|bowling|casino|dining/i;
+
+function isFoodNoise(p: Place): boolean {
+  if (!p.tags.includes("food") || p.tags.includes("onsen")) return false;
+  return FOOD_NOISE_RE.test(p.name ?? "");
+}
+
 export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
   const { base, weather } = ctx;
   const out: ScoredPlace[] = [];
@@ -176,6 +200,12 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
     // hard filters: beyond the discovery radius, or too far to reach on the
     // transport mode (walking is capped tight on purpose).
     // Pinned places are exempt — they are what the user searched for.
+    // A food search never shows karaoke boxes or hotel dining rooms (unless
+    // the user pinned that exact place, in which case intent wins).
+    if (!pinned && isFoodNoise(p)) {
+      if (ctx.stats) ctx.stats.noise = (ctx.stats.noise ?? 0) + 1;
+      continue;
+    }
     if (!pinned && ctx.maxDistKm !== undefined && distanceKm > ctx.maxDistKm) {
       ctx.stats && ctx.stats.tooFar++;
       continue;

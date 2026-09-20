@@ -17,6 +17,11 @@ import { crowdForPool, type CrowdPoolPlace } from "./crowd";
 type Candidate = Place & { periods?: OpenPeriod[] };
 
 export interface RecommendOptions extends RecommendInput {
+  /** debug only: how many places to return. Defaults to RESULT_LIMIT (the UI
+   *  cap). Raising it exposes the full ranked pool so the ranking can be
+   *  measured with `scripts/ranking.bench.ts` without the top-30 cut hiding
+   *  whether the order itself is right. */
+  poolLimit?: number;
   /** the requesting user's API keys (BYOK) — empty for anonymous */
   config?: AppConfig;
   /** signed-in user id — their own crowd reports feed the "gente ahora" estimate */
@@ -105,6 +110,9 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
   const startedAt = performance.now();
   const mode: TransportMode = input.mode ?? "transit";
   const radiusKm = input.radiusKm ?? RADIUS_KM[mode];
+  // poolLimit is debug-only; 300 is the cache pool cap, so it can never ask
+  // for more than discovery could have produced.
+  const limit = Math.max(1, Math.min(input.poolLimit ?? RESULT_LIMIT, 300));
   const simulated = input.now ? new Date(input.now) : null;
   // optional interest keyword — normalized once here. The raw term goes to
   // Google as-is; single Spanish words ("gatos") are translated by the free
@@ -186,7 +194,7 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
   }
 
   const profile = getProfile();
-  const stats = { closed: 0, tooFar: 0, nameMatches: 0 };
+  const stats = { closed: 0, tooFar: 0, nameMatches: 0, noise: 0 };
   // Destination-local wall clock in UTC fields: simulated dates already are
   // (JST convention); real instants get shifted by the longitude offset.
   const scoringNow = simulated ?? localTimeAt(new Date(), input.lng);
@@ -251,9 +259,9 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
     const rest = scored.filter(
       (p) => !p.fromKeyword && !p.reasons.some((r) => r.key === "keywordMatch")
     );
-    top = [...fromQuery, ...nameOnly, ...rest].slice(0, RESULT_LIMIT);
+    top = [...fromQuery, ...nameOnly, ...rest].slice(0, limit);
   } else {
-    top = diversify(scored, RESULT_LIMIT).sort(
+    top = diversify(scored, limit).sort(
       (a, b) => b.score - a.score || a.travelMin - b.travelMin
     );
   }
@@ -275,7 +283,7 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
       top = [
         { ...chosen, reasons: [{ key: "pinned" }, ...chosen.reasons] },
         ...top.filter((p) => p.id !== chosen.id && p.id !== pinPlace.id),
-      ].slice(0, RESULT_LIMIT);
+      ].slice(0, limit);
     } else {
       top = [
         {
@@ -286,7 +294,7 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
           reasons: [{ key: "pinned" }],
         },
         ...top,
-      ].slice(0, RESULT_LIMIT);
+      ].slice(0, limit);
     }
   }
   const emptyReason = emptyReasonFor(candidates, top.length);
@@ -314,7 +322,7 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
     source,
     sources: sources ?? [source],
     candidates: candidates.length,
-    filters: { closed: stats.closed, tooFar: stats.tooFar, nameMatches: stats.nameMatches },
+    filters: { closed: stats.closed, tooFar: stats.tooFar, nameMatches: stats.nameMatches, noise: stats.noise },
     scored: top.length,
     emptyReason,
     keyword,

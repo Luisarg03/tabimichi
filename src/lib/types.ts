@@ -173,6 +173,9 @@ export interface RecommendInput {
   mode?: TransportMode;
   /** standing user preference: "gente ahora" moves the order, not just the badge */
   avoidCrowds?: boolean;
+  /** debug only: return the full ranked pool instead of the UI's 30, so the
+   *  ranking can be measured (scripts/ranking.bench.ts). Ignored by the UI. */
+  poolLimit?: number;
   /** UI language for discovery: "es" | "en" */
   lang?: string;
   /** ISO instant — when set, the pipeline simulates this time (JST evaluation) */
