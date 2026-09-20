@@ -18,6 +18,8 @@ export default function SearchOverlay({
   loading,
   onDiscover,
   onClose,
+  simPreset,
+  onSimChange,
   mode,
   types,
   keyword,
@@ -30,6 +32,8 @@ export default function SearchOverlay({
   loading: boolean;
   onDiscover: (payload: DiscoverPayload) => void;
   onClose: () => void;
+  simPreset: string | null;
+  onSimChange: (id: string | null) => void;
   mode: TransportMode;
   types: string[];
   keyword: string;
@@ -49,6 +53,8 @@ export default function SearchOverlay({
           loading={loading}
           onDiscover={onDiscover}
           onClose={onClose}
+          simPreset={simPreset}
+          onSimChange={onSimChange}
           mode={mode}
           types={types}
           keyword={keyword}

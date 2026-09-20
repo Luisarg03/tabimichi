@@ -6,7 +6,6 @@ import Link from "next/link";
 import DayPanel, { type DiscoverPayload } from "@/components/DayPanel";
 import ResultsList from "@/components/ResultsList";
 import LocaleToggle from "@/components/LocaleToggle";
-import SimTabs from "@/components/SimTabs";
 import BottomSheet from "@/components/BottomSheet";
 import MobileDetailSheet from "@/components/MobileDetailSheet";
 import SearchOverlay from "@/components/SearchOverlay";
@@ -421,7 +420,7 @@ export default function HomePage() {
       <div className="pointer-events-none absolute inset-0 z-20 hidden md:block">
         {/* brand + time simulation pills (prototype .brand-pill / .sim-pill) */}
         <BrandPill className="pointer-events-auto absolute left-3 top-3" />
-        {/* settings + locale + time simulation (top-right cluster) */}
+        {/* settings + locale (top-right cluster) */}
         <div className="pointer-events-auto absolute right-3 top-3 flex items-center gap-1.5">
           <LocaleToggle />
           <Link
@@ -432,7 +431,6 @@ export default function HomePage() {
           >
             <Icon name="gear" size={18} />
           </Link>
-          <SimTabs preset={simPreset} onChange={setSimPreset} />
         </div>
 
         {/* left rail: search + filters (rail-top) + results (rail-body) */}
@@ -444,6 +442,8 @@ export default function HomePage() {
               userLocated={savedLocation != null}
               loading={loading}
               onDiscover={handleDiscover}
+              simPreset={simPreset}
+              onSimChange={setSimPreset}
               mode={mode}
               types={types}
               keyword={keyword}
@@ -477,7 +477,7 @@ export default function HomePage() {
       {/* ============ MOBILE (<md) ============ */}
       <div className="pointer-events-none absolute inset-0 z-10 md:hidden">
         <div className="pointer-events-none flex h-full flex-col gap-1.5 p-2 tabi-safe-top tabi-safe-x">
-          {/* top: search pill + locale/settings */}
+          {/* top: search pill + locale/settings (hour lives in the form now) */}
           <div className="pointer-events-auto flex items-center justify-between gap-2">
             <button
               onClick={() => setSearchOpen(true)}
@@ -500,11 +500,6 @@ export default function HomePage() {
                 <Icon name="gear" size={18} />
               </Link>
             </div>
-          </div>
-
-          {/* time simulation chips */}
-          <div className="pointer-events-auto">
-            <SimTabs preset={simPreset} onChange={setSimPreset} className="max-w-[calc(100%-1rem)]" />
           </div>
         </div>
       </div>
@@ -552,6 +547,8 @@ export default function HomePage() {
             loading={loading}
             onDiscover={handleDiscover}
             onClose={() => setSearchOpen(false)}
+            simPreset={simPreset}
+            onSimChange={setSimPreset}
             mode={mode}
             types={types}
             keyword={keyword}

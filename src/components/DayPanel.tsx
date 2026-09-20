@@ -7,6 +7,7 @@ import { EXPERIENCE_TYPES } from "@/lib/places/taxonomy";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import SearchSuggestions from "@/components/SearchSuggestions";
+import SimTabs from "@/components/SimTabs";
 import Icon from "@/components/ui/Icon";
 import IconButton from "@/components/ui/IconButton";
 import Segmented from "@/components/ui/Segmented";
@@ -52,6 +53,8 @@ export default function DayPanel({
   onDiscover,
   onClose,
   embedded = false,
+  simPreset,
+  onSimChange,
   mode,
   types,
   keyword,
@@ -73,6 +76,8 @@ export default function DayPanel({
   embedded?: boolean;
   /** Filter state lifted to the page so it survives panel remounts
    *  (mobile overlay) and stays shared between desktop/mobile. */
+  simPreset: string | null;
+  onSimChange: (id: string | null) => void;
   mode: TransportMode;
   types: string[];
   keyword: string;
@@ -343,6 +348,12 @@ export default function DayPanel({
           {location.label} · {location.lat.toFixed(4)}, {location.lng.toFixed(4)}
         </p>
       )}
+
+      {/* hour to evaluate — the only time selector */}
+      <div className="mt-3">
+        <span className="eyebrow">{t("sim.label")}</span>
+        <SimTabs preset={simPreset} onChange={onSimChange} className="mt-1.5 w-full" />
+      </div>
 
       {/* transport mode */}
       <div className="mt-3">
