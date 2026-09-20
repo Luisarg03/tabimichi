@@ -1,8 +1,29 @@
-/** Fase 4: admin console + borrado de cuenta + errores full. */
+/** Fase 4: admin console + borrado de cuenta + errores full.
+ *  DESTRUCTIVO: borra la cuenta con la que corre. Nunca apuntarlo a la cuenta
+ *  persistente de data/TEST-ACCOUNT.md — usar un usuario descartable. */
 import { chromium } from "playwright";
+import { readFileSync } from "node:fs";
 
 const BASE = process.argv[2] ?? "http://localhost:3000";
 const { E2E_EMAIL, E2E_PASS } = process.env;
+if (!E2E_EMAIL || !E2E_PASS) {
+  console.error("FALTAN E2E_EMAIL/E2E_PASS (usuario DESCARTABLE, no el persistente)");
+  process.exit(2);
+}
+
+// guard: la cuenta de pruebas persistente no se borra desde acá
+try {
+  const note = readFileSync("data/TEST-ACCOUNT.md", "utf8");
+  const protectedEmail = /`([^`]+@tabimichi\.test)`/.exec(note)?.[1];
+  if (protectedEmail && E2E_EMAIL === protectedEmail) {
+    console.error(`✗ E2E_EMAIL apunta a la cuenta persistente (${protectedEmail}).`);
+    console.error("  Este script la borraría. Usá un usuario descartable.");
+    process.exit(2);
+  }
+} catch {
+  // sin nota local → nada que proteger
+}
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let failures = 0;
 function check(label, ok, detail = "") {

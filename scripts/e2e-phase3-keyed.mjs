@@ -1,14 +1,32 @@
 /**
  * E2E Fase 3 — autenticado con keys reales (BYOK) contra server live.
  *   E2E_EMAIL=… E2E_PASS=… node scripts/e2e-phase3-keyed.mjs [baseUrl]
+ * Sin env, usa la cuenta persistente de data/TEST-ACCOUNT.md (no se borra).
  * Creds por env: nunca hardcodear ni loguear valores de keys.
  */
 import { chromium } from "playwright";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 
 const BASE = process.argv[2] ?? "http://localhost:3000";
-const { E2E_EMAIL, E2E_PASS } = process.env;
-if (!E2E_EMAIL || !E2E_PASS) { console.error("FALTAN E2E_EMAIL/E2E_PASS"); process.exit(2); }
+
+/** Credenciales desde env, o desde la nota local gitignored. */
+function credsFromNote() {
+  try {
+    const note = readFileSync("data/TEST-ACCOUNT.md", "utf8");
+    const email = /`([^`]+@tabimichi\.test)`/.exec(note)?.[1];
+    const pass = /\| Password \| `([^`]+)` \|/.exec(note)?.[1];
+    return email && pass ? { email, pass } : null;
+  } catch {
+    return null;
+  }
+}
+const noted = credsFromNote();
+const E2E_EMAIL = process.env.E2E_EMAIL ?? noted?.email;
+const E2E_PASS = process.env.E2E_PASS ?? noted?.pass;
+if (!E2E_EMAIL || !E2E_PASS) {
+  console.error("FALTAN E2E_EMAIL/E2E_PASS y no hay data/TEST-ACCOUNT.md usable");
+  process.exit(2);
+}
 const SHOT = `data/e2e-audit/${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}`;
 mkdirSync(SHOT, { recursive: true });
 
