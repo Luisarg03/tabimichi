@@ -322,6 +322,7 @@ const es: Dict = {
       legendLow: "menos gente",
       legendHigh: "más gente",
       caption: "Afluencia estimada · {time}",
+      zone: "Zona {n}",
     },
   },
 };
@@ -641,6 +642,7 @@ const en: Dict = {
       legendLow: "fewer people",
       legendHigh: "more people",
       caption: "Estimated footfall · {time}",
+      zone: "Zone {n}",
     },
   },
 };

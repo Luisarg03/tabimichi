@@ -269,7 +269,7 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
     wikipedia: p.wikipedia,
     periods: p.periods,
   }));
-  const { byId: crowdById, cells: crowdCellList } = await crowdForPool(crowdPool, {
+  const { byId: crowdById, cells: crowdCellList, zones: crowdZoneList } = await crowdForPool(crowdPool, {
     now: scoringNow,
     lat: input.lat,
     lng: input.lng,
@@ -319,6 +319,14 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
       reasons: p.reasons.map((r) => r.key),
       crowd: p.crowd ? { level: Number(p.crowd.level.toFixed(2)), label: p.crowd.label } : undefined,
     })),
+    crowdCells: crowdCellList.length,
+    hotZones: crowdZoneList.map((z) => ({
+      lat: z.lat,
+      lng: z.lng,
+      weight: z.weight,
+      label: z.label,
+      places: z.placeIds.length,
+    })),
   });
 
   return {
@@ -335,6 +343,7 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
     keywordResults: keywordResults ?? 0,
     keywordMiss: kwMiss,
     crowdCells: crowdCellList,
+    hotZones: crowdZoneList,
     crowdAt: scoringNow.toISOString(),
   };
 }

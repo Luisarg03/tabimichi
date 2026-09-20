@@ -149,6 +149,18 @@ describe("recommend — pipeline outcomes", () => {
 
     expect(r.crowdCells?.length ?? 0).toBeGreaterThan(0);
     expect(r.crowdAt).toBeDefined();
+
+    // hot zones: named clusters over the same field, heaviest first
+    expect(r.hotZones?.length ?? 0).toBeGreaterThan(0);
+    for (const z of r.hotZones!) {
+      expect(z.weight).toBeGreaterThanOrEqual(0);
+      expect(z.weight).toBeLessThanOrEqual(1);
+      expect(z.radiusM).toBeGreaterThanOrEqual(150);
+      expect(z.radiusM).toBeLessThanOrEqual(600);
+    }
+    for (let i = 1; i < r.hotZones!.length; i++) {
+      expect(r.hotZones![i].weight).toBeLessThanOrEqual(r.hotZones![i - 1].weight);
+    }
   });
 
   it("threads the interest keyword into discovery, scoring and the log", async () => {    mockFetch([

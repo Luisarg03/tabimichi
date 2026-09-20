@@ -129,7 +129,7 @@ update public.profiles set role = 'admin' where email = 'tu@email.com';
 | 🔍 **Live place search** | Autocomplete of places/addresses as you type (Google Autocomplete with your key + local cache + Photon + Nominatim), keyboard navigable; picking one searches immediately and pins it to the top |
 | 🔍 **Multi-source discovery** | Google → Geoapify → Overpass → cache, auto-fallback |
 | 🌤️ **Weather-aware scoring** | Open-Meteo forecast drives indoor/outdoor picks |
-| 👥 **Gente ahora** | Live crowd estimate per place (popularity × hour × day × weather, Japanese holidays) + your own one-tap reports; zone heat layer on the map and "quietest hour left today" |
+| 👥 **Gente ahora** | Live crowd estimate per place (popularity × hour × day × weather, Japanese holidays) + your own one-tap reports; zone heat layer on the map, named hot zones (top 5, tappable circles) and "quietest hour left today" |
 | 🚃 **Transport modes** | Walking / transit / car affect radius and travel time |
 | 🧠 **LLM narrative** | Two-tier provider writes day summaries and per-place "why" |
 | 📸 **Photo gallery** | Up to 8 photos per place, async enrichment |

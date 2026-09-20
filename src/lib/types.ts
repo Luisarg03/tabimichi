@@ -132,6 +132,22 @@ export interface CrowdEstimate {
   bestHour?: number;
 }
 
+/** One named hot zone over the crowd field: "people are around HERE". */
+export interface HotZone {
+  /** stable within the response (`z1` = heaviest) */
+  id: string;
+  /** weight-averaged centroid of the member cells */
+  lat: number;
+  lng: number;
+  /** p95 distance of member cells to the centroid, clamped 150–600 m */
+  radiusM: number;
+  /** max member-cell weight, 0..1 on the request-normalized crowd scale */
+  weight: number;
+  label: CrowdLabel;
+  /** member place ids within radiusM, busiest first (max 8) */
+  placeIds: string[];
+}
+
 export interface ScoredPlace extends Place {
   score: number;
   distanceKm: number;
@@ -214,6 +230,8 @@ export interface RecommendResult {
   keywordMiss?: boolean;
   /** zone-level crowd layer [lat, lng, weight 0..1] for the map heat overlay */
   crowdCells?: Array<[number, number, number]>;
+  /** named hot zones clustered over the crowd field (heaviest first, max 5) */
+  hotZones?: HotZone[];
   /** ISO instant the crowd field was computed for */
   crowdAt?: string;
 }

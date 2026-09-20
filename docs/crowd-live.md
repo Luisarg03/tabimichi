@@ -98,3 +98,13 @@ user's own taps use — the estimate already knows how to blend observations.
 - Nothing in the ranking is silently reordered by crowd level in v1.
 - The model never invents an absolute number of people — only a relative level
   against the places you are choosing between.
+
+## Hot zones (Fase 1 — named clusters over the heat field)
+
+`src/lib/crowd/zones.ts` groups hot cells (`weight ≥ 0.55`) by single-linkage
+(≤300 m between members) into at most 5 zones: weight-averaged centroid,
+p95 radius clamped to 150–600 m, member places (≤8, busiest first). A lone
+cell only counts when `weight ≥ 0.8`. Zones ride on `RecommendResult.hotZones`,
+are logged as summaries (`lat/lng/weight/label/places`, no user data), and
+render as tappable Leaflet circles + legend chips in `MapView` — same
+opt-in toggle, same honesty labels. No new API route, no new table.

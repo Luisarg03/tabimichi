@@ -1,10 +1,10 @@
 "use client";
 
 import { memo, useEffect, useRef, useState } from "react";
-import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import type { CrowdLabel, LatLng, ScoredPlace } from "@/lib/types";
+import type { CrowdLabel, HotZone, LatLng, ScoredPlace } from "@/lib/types";
 import { DEFAULT_TILE, TILE_STYLES, tileStyleById } from "@/lib/tiles";
 import { useI18n } from "@/lib/i18n";
 import { CROWD_COLOR } from "@/components/ui/CrowdBadge";
@@ -262,8 +262,61 @@ function CrowdHeat({
   return null;
 }
 
+/** Named hot zones as map circles: real metres, so they scale with zoom.
+ *  Colours match the per-place pin rings (quiet → busy). */
+function ZoneCircles({
+  zones,
+  visible,
+  selectedId,
+}: {
+  zones: HotZone[];
+  visible: boolean;
+  selectedId: string | null;
+}) {
+  if (!visible) return null;
+  return (
+    <>
+      {zones.map((z) => (
+        <Circle
+          key={z.id}
+          center={[z.lat, z.lng]}
+          radius={z.radiusM}
+          pathOptions={{
+            color: CROWD_COLOR[z.label],
+            weight: z.id === selectedId ? 3 : 2,
+            opacity: 0.75,
+            fillColor: CROWD_COLOR[z.label],
+            fillOpacity: z.id === selectedId ? 0.2 : 0.12,
+          }}
+        />
+      ))}
+    </>
+  );
+}
+
+/** Fly to the tapped hot zone so the user can follow the selection. */
+function FlyToZone({ zone }: { zone: HotZone | null }) {
+  const map = useMap();
+  useEffect(() => {
+    if (zone) {
+      map.flyTo([zone.lat, zone.lng], 15, { duration: 0.7 });
+    }
+  }, [zone?.id, map]); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
+
 /** Legend for the crowd layer: what the colours mean and how fresh the data is. */
-function CrowdLegend({ at }: { at?: string }) {
+function CrowdLegend({
+  at,
+  zones,
+  selectedId,
+  onZone,
+}: {
+  at?: string;
+  zones: HotZone[];
+  selectedId: string | null;
+  onZone: (id: string | null) => void;
+}) {
   const { t, locale } = useI18n();
   const time = at
     ? new Date(at).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })
@@ -276,6 +329,31 @@ function CrowdLegend({ at }: { at?: string }) {
         <span>{t("map.crowd.legendHigh")}</span>
       </div>
       <p className="mt-1 text-[10px] leading-tight text-muted">{t("map.crowd.caption", { time })}</p>
+      {zones.length > 0 && (
+        <div className="mt-1.5 flex flex-col gap-1">
+          {zones.map((z, i) => {
+            const active = z.id === selectedId;
+            return (
+              <button
+                key={z.id}
+                onClick={() => onZone(active ? null : z.id)}
+                aria-pressed={active}
+                className={`flex items-center gap-1 rounded-lg px-1.5 py-1 text-left text-[10px] font-semibold transition-colors ${
+                  active ? "bg-verm text-surface" : "text-fg hover:bg-fg/5 active:bg-fg/10"
+                }`}
+              >
+                <span
+                  className="h-2 w-2 shrink-0 rounded-full"
+                  style={{ background: active ? "#fff" : CROWD_COLOR[z.label] }}
+                />
+                <span>
+                  {t("map.crowd.zone", { n: i + 1 })} · {t(`crowd.label.${z.label}`)}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -285,6 +363,7 @@ export default function MapView({
   places,
   selectedId,
   crowdCells,
+  hotZones,
   crowdAt,
   userApproximate = false,
   userLabel,
@@ -295,6 +374,8 @@ export default function MapView({
   selectedId?: string | null;
   /** zone-level crowd field [lat, lng, weight] from the last search */
   crowdCells?: Array<[number, number, number]>;
+  /** named hot zones clustered over the crowd field (heaviest first) */
+  hotZones?: HotZone[];
   /** when the crowd field was computed (ISO) */
   crowdAt?: string;
   /** true when the position comes from a searched address (geocoded, not GPS) */
@@ -338,6 +419,9 @@ export default function MapView({
   }, [crowdOn]);
   const tile = tileStyleById(tileId);
   const heat = crowdCells ?? [];
+  const zones = hotZones ?? [];
+  const [zoneSel, setZoneSel] = useState<string | null>(null);
+  const selectedZone = zones.find((z) => z.id === zoneSel) ?? null;
 
   return (
     <div className="relative h-full w-full">
@@ -399,6 +483,8 @@ export default function MapView({
       {/* "my location" FAB — must live inside MapContainer to use useMap() */}
       <LocateButton center={center} />
       <CrowdHeat cells={heat} visible={crowdOn} />
+      <ZoneCircles zones={zones} visible={crowdOn} selectedId={zoneSel} />
+      <FlyToZone zone={crowdOn ? selectedZone : null} />
       </MapContainer>
       {/* switcher sits above the map but below the page overlay */}
       <TileSwitcher
@@ -408,7 +494,9 @@ export default function MapView({
         onCrowdChange={setCrowdOn}
         crowdAvailable={heat.length > 0}
       />
-      {crowdOn && heat.length > 0 && <CrowdLegend at={crowdAt} />}
+      {crowdOn && heat.length > 0 && (
+        <CrowdLegend at={crowdAt} zones={zones} selectedId={zoneSel} onZone={setZoneSel} />
+      )}
     </div>
   );
 }

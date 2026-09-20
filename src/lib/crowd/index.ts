@@ -1,12 +1,14 @@
 import type { WeatherInfo } from "../types";
+import type { HotZone } from "../types";
 import type { OpenPeriod } from "../open-hours";
 import { popularityScores, type PopularityInput } from "./popularity";
 import { estimateCrowd, type CrowdEstimate } from "./estimate";
 import { readCrowdReports } from "./store";
 import { isInJapan, isJapaneseHoliday } from "./holidays";
 import { crowdCells, type HeatCell } from "./heat";
+import { hotZones } from "./zones";
 
-export type { CrowdEstimate, CrowdLabel } from "./estimate";
+export type { CrowdEstimate, CrowdLabel, HotZone } from "../types";
 export type { CrowdReport } from "./reports";
 export type { HeatCell } from "./heat";
 
@@ -21,6 +23,8 @@ export interface CrowdResult {
   byId: Map<string, CrowdEstimate>;
   /** zone layer for the map */
   cells: HeatCell[];
+  /** named hot zones clustered over the cells, heaviest first */
+  zones: HotZone[];
 }
 
 export interface CrowdOptions {
@@ -46,7 +50,7 @@ export async function crowdForPool(
   opts: CrowdOptions
 ): Promise<CrowdResult> {
   const byId = new Map<string, CrowdEstimate>();
-  if (pool.length === 0) return { byId, cells: [] };
+  if (pool.length === 0) return { byId, cells: [], zones: [] };
 
   const reports = await readCrowdReports(
     pool.map((p) => p.id),
@@ -68,5 +72,9 @@ export async function crowdForPool(
   const cells = crowdCells(
     pool.map((p) => ({ lat: p.lat, lng: p.lng, weight: byId.get(p.id)?.level ?? 0 }))
   );
-  return { byId, cells };
+  const zones = hotZones(
+    cells,
+    pool.map((p) => ({ id: p.id, lat: p.lat, lng: p.lng, level: byId.get(p.id)?.level ?? 0 }))
+  );
+  return { byId, cells, zones };
 }
