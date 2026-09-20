@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { emptyReasonFor, diversify, recommend, RESULT_LIMIT } from "@/lib/recommend";
+import { emptyReasonFor, diversify, pickQuietAlternative, recommend, RESULT_LIMIT } from "@/lib/recommend";
 import { clearWeatherCache } from "@/lib/weather";
 import { readLogTail } from "@/lib/logger";
 import { mockFetch, jsonResponse, urlContains, isolatedStore } from "@/test-utils/helpers";
@@ -629,5 +629,39 @@ describe("recommend — pinned place (Google-Maps parity)", () => {
     expect(r.places).toHaveLength(1);
     expect(r.places[0].name).toBe("Solo Pin");
     expect(r.emptyReason).toBeUndefined();
+  });
+});
+
+describe("pickQuietAlternative", () => {
+  type P = { id: string; rating?: number; travelMin: number; crowd?: { level: number } };
+  const mk = (id: string, travelMin: number, level?: number, rating: number | null = 4.4): P => ({
+    id, travelMin, rating: rating === null ? undefined : rating,
+    ...(level === undefined ? {} : { crowd: { level } }),
+  });
+
+  it("names the quiet alternative when it is close and rated", () => {
+    const out = pickQuietAlternative([
+      mk("best", 5, 0.9),
+      mk("noise", 6, 0.88), // difference < 0.1 → not a real alternative
+      mk("quiet", 12, 0.4),
+    ] as never);
+    expect(out).toEqual({ id: "quiet", extraMin: 7, level: 0.4 });
+  });
+
+  it("refuses a quiet place that is a different trip", () => {
+    const out = pickQuietAlternative([mk("best", 5, 0.9), mk("far", 40, 0.2)] as never);
+    expect(out).toBeUndefined(); // 35 min extra > 15
+  });
+
+  it("refuses an unrated place: empty is not the same as good", () => {
+    const out = pickQuietAlternative([
+      mk("best", 5, 0.9),
+      mk("unknown", 8, 0.2, null),
+    ] as never);
+    expect(out).toBeUndefined();
+  });
+
+  it("returns nothing when the top pick has no crowd estimate", () => {
+    expect(pickQuietAlternative([mk("best", 5), mk("quiet", 6, 0.2)] as never)).toBeUndefined();
   });
 });

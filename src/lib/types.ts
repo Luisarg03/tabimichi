@@ -244,4 +244,19 @@ export interface RecommendResult {
   hotZones?: HotZone[];
   /** ISO instant the crowd field was computed for */
   crowdAt?: string;
+  /**
+   * The contrast answer: "the best pick is #1, but if you want it quiet go
+   * here". This is the one thing a directory cannot offer — Google Maps shows
+   * popularity, it never says "you will enjoy this more in 20 minutes".
+   *
+   * Present only when a genuinely quieter option exists close enough to be a
+   * real alternative; a quiet place twice as far is not a recommendation, it
+   * is a different trip.
+   */
+  quietPick?: {
+    id: string;
+    /** extra minutes on top of the top pick's travel time */
+    extraMin: number;
+    level: number;
+  };
 }

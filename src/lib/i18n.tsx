@@ -95,6 +95,9 @@ const es: Dict = {
     source: "Fuente: {src}",
     guideButton: "Preguntale al guía",
     guideRegenerate: "Regenerar resumen del guía",
+    quietPick: "Si preferís tranquilidad",
+    quietPickExtra: "A {min} min de caminata más, con menos gente",
+    quietPickSame: "Igual de cerca pero con menos gente",
   },
   detail: {
     close: "Cerrar",
@@ -425,6 +428,9 @@ const en: Dict = {
     source: "Source: {src}",
     guideButton: "Ask the guide",
     guideRegenerate: "Regenerate guide summary",
+    quietPick: "If you want it quiet",
+    quietPickExtra: "{min} min further, with fewer people",
+    quietPickSame: "Just as close but with fewer people",
   },
   detail: {
     close: "Close",

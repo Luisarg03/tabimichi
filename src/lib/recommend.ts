@@ -306,6 +306,19 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
     return crowd ? { ...p, crowd } : p;
   });
   const names = new Map(candidates.map((p) => [p.id, p.name]));
+
+  // ---- the contrast pick -------------------------------------------------
+  // "The best is #1; if you want it quiet, go here." The crowd estimate is
+  // already computed for the whole pool, so this costs nothing — and it is the
+  // one answer a popularity-ranked directory cannot give.
+  //
+  // Rules, deliberately strict so it never becomes noise:
+  //   - a real difference (at least 0.1 on the 0..1 scale),
+  //   - within 15 min extra of the top pick (a quiet place across town is a
+  //     different trip, not an alternative),
+  //   - same value class: it must be rated (no sending someone to an unknown
+  //     place just because it is empty).
+  const quietPick = pickQuietAlternative(placesWithCrowd);
   const namedZones = crowdZoneList.map((z) => ({
     ...z,
     name: names.get(z.placeIds[0] ?? ""),
@@ -375,6 +388,7 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
     crowdCells: crowdCellList,
     hotZones: namedZones,
     crowdAt: scoringNow.toISOString(),
+    ...(quietPick ? { quietPick } : {}),
   };
 }
 
@@ -384,6 +398,34 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
  *  - all_closed: candidates existed but every one is closed right now
  *  - too_far: candidates exist but all fall outside distance/mode reach
  */
+/**
+ * The contrast answer: given the ranked list, which place is the quieter
+ * alternative worth naming? Pure so it can be tested directly.
+ *
+ * Rules, deliberately strict so it never becomes noise:
+ *   - a real difference (>= 0.1 on the 0..1 crowd scale),
+ *   - within 15 min extra of the top pick (a quiet place across town is a
+ *     different trip, not an alternative),
+ *   - it must be RATED: never send someone to an unknown place just because
+ *     nobody is there.
+ */
+export function pickQuietAlternative(
+  ranked: ScoredPlace[]
+): { id: string; extraMin: number; level: number } | undefined {
+  const best = ranked[0];
+  if (!best?.crowd) return undefined;
+  let candidate: { p: ScoredPlace; extraMin: number } | undefined;
+  for (const p of ranked.slice(1)) {
+    if (!p.crowd || p.rating === undefined) continue;
+    if (best.crowd.level - p.crowd.level < 0.1) continue;
+    const extraMin = p.travelMin - best.travelMin;
+    if (extraMin > 15) continue;
+    if (!candidate || p.crowd.level < candidate.p.crowd!.level) candidate = { p, extraMin };
+  }
+  if (!candidate) return undefined;
+  return { id: candidate.p.id, extraMin: Math.max(0, candidate.extraMin), level: candidate.p.crowd!.level };
+}
+
 export function emptyReasonFor(candidates: Candidate[], scoredCount: number): EmptyReason | undefined {
   if (candidates.length === 0) return "no_results";
   if (scoredCount > 0) return undefined;

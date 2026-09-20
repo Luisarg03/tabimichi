@@ -41,6 +41,10 @@ export default function ResultsList({
   simCtx?: string;
 }) {
   const { t } = useI18n();
+  // The contrast pick points at an id; the card list already has the place.
+  const quietPlace = result?.quietPick
+    ? result.places.find((p) => p.id === result.quietPick!.id) ?? null
+    : null;
   // Merged discovery: a combined label when several sources contributed
   // (e.g. "Datos: Google Places + OpenStreetMap"), the plain label otherwise.
   const multiSources = (result?.sources?.length ?? 0) > 1;
@@ -204,6 +208,30 @@ export default function ResultsList({
                   </div>
                   {result.summary}
                 </div>
+              )}
+              {/* the contrast answer: the best pick is #1, but here is the
+                  quiet one if that matters more. Only rendered when a
+                  genuinely quieter alternative exists close enough. */}
+              {result.quietPick && quietPlace && (
+                <button
+                  onClick={() => onSelect(quietPlace.id)}
+                  className="flex w-full items-center gap-2 rounded-panel border border-ok/30 bg-ok/5 p-2.5 text-left transition-colors hover:bg-ok/10"
+                >
+                  <span className="shrink-0 text-[15px]">🤫</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[11px] font-bold uppercase tracking-[0.05em] text-ok">
+                      {t("card.quietPick")}
+                    </span>
+                    <span className="block truncate text-[13px] font-semibold text-fg">
+                      {quietPlace.name}
+                    </span>
+                    <span className="block text-[11.5px] text-muted">
+                      {result.quietPick.extraMin > 0
+                        ? t("card.quietPickExtra", { min: result.quietPick.extraMin })
+                        : t("card.quietPickSame")}
+                    </span>
+                  </span>
+                </button>
               )}
               {result.places.length === 0 ? (
                 <div className="rounded-panel border border-dashed border-border p-6 text-center text-[13px] text-muted">
