@@ -88,8 +88,9 @@ async function main() {
     const q = await page.getByText("¿Qué tan lleno está?", { exact: false }).first().isVisible().catch(() => false);
     check("detalle con pregunta de gente", q);
     if (q) {
-      // detalle desktop + sheet móvil coexisten en el DOM (uno oculto): scopear
-      await page.getByText("Normal", { exact: true }).first().click();
+      // solo el botón del detalle (la card muestra el badge "Normal" como texto)
+      const normalBtn = page.getByRole("button", { name: "Normal" }).filter({ visible: true });
+      await normalBtn.first().click();
       await sleep(1500);
       // el "¡Anotado!" es transitorio: tras guardar, el badge pasa a "observado HH:MM"
       const thanks = await page.getByText("¡Anotado!", { exact: false }).first().isVisible().catch(() => false);
