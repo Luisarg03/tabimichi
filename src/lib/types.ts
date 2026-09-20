@@ -27,6 +27,9 @@ export interface Place {
   photoRefs?: string[];
   /** OSM `wikipedia`/`wikidata` tag (page title or Q-id) — landmark signal */
   wikipedia?: string;
+  /** Google place id matched by reconcile (OSM/Geoapify rows) — exact identity
+   *  for Maps links; g_* rows carry it in the id itself */
+  googlePlaceId?: string;
   url?: string;
   /** true when this candidate came from the keyword text query (in-memory only) */
   fromKeyword?: boolean;

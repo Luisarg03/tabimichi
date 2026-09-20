@@ -65,7 +65,9 @@ export async function GET(req: NextRequest) {
           googleId = hit.place_id;
           refs = (hit.photos ?? []).slice(0, MAX_PHOTOS).map((p) => p.photo_reference);
           // enrich the cached row now — the NEXT recommend shows the Google
-          // rating/reviews/url for this OSM place, not just the photos
+          // rating/reviews/url for this OSM place, not just the photos.
+          // The place_id itself is the prize: Maps links open it directly.
+          enriched.googlePlaceId = hit.place_id;
           enriched.rating = hit.rating ?? cached.rating;
           enriched.userRatingsTotal = hit.user_ratings_total ?? cached.userRatingsTotal;
           enriched.url = hit.url ?? cached.url;

@@ -149,7 +149,7 @@ function CrowdSection({ place }: { place: ScoredPlace }) {
   onFeedback?: (placeId: string, liked: boolean, tags?: string[]) => void;
 }) {
   const { t, locale } = useI18n();
-  const googlePlaceId = place.id.startsWith("g_") ? place.id.slice(2) : null;
+  const googlePlaceId = place.googlePlaceId ?? (place.id.startsWith("g_") ? place.id.slice(2) : null);
   const mapsPlace = { name: place.name, googlePlaceId, lat: place.lat, lng: place.lng };
   const dirsUrl = dirsUrlFor({ lat: origin.lat, lng: origin.lng }, mapsPlace, mode);
   const mapsUrl = placeUrlFor(mapsPlace);
