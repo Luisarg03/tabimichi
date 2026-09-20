@@ -20,8 +20,12 @@ export interface MapsPlace {
   lng: number;
 }
 
-/** Google Maps search URL that opens the place DIRECTLY (name + place id),
- *  or a plain coordinate search for OSM-only places. */
+/** Google Maps search URL that opens the place directly.
+ *
+ *  Priority: place id (exact identity) → NAME (Google resolves the business,
+ *  which is what the user actually wants: a raw coordinate query only drops a
+ *  pin "a few meters off" and makes them hunt among everything around).
+ *  Coordinates are the last resort, kept only for unnamed rows. */
 export function placeUrl(place: MapsPlace): string {
   const base = "https://www.google.com/maps/search/?api=1";
   if (place.googlePlaceId) {
@@ -30,10 +34,15 @@ export function placeUrl(place: MapsPlace): string {
       `&query_place_id=${place.googlePlaceId}`
     );
   }
-  return `${base}&query=${place.lat.toFixed(6)},${place.lng.toFixed(6)}`;
+  const q = place.name?.trim();
+  return q
+    ? `${base}&query=${encodeURIComponent(q)}`
+    : `${base}&query=${place.lat.toFixed(6)},${place.lng.toFixed(6)}`;
 }
 
-/** Directions link: origin coords → destination (place id or coords). */
+/** Directions link: origin coords → destination (place id, name, or coords).
+ *  Same priority as placeUrl: an id resolves exactly, a name gets Google's own
+ *  listing as destination, coordinates are the unnamed fallback. */
 export function dirsUrl(
   origin: { lat: number; lng: number },
   place: MapsPlace,
@@ -50,8 +59,8 @@ export function dirsUrl(
       `&travelmode=${travelMode}`
     );
   }
-  return (
-    `${base}&destination=${place.lat.toFixed(6)},${place.lng.toFixed(6)}` +
-    `&travelmode=${travelMode}`
-  );
+  const destination = place.name?.trim()
+    ? encodeURIComponent(place.name.trim())
+    : `${place.lat.toFixed(6)},${place.lng.toFixed(6)}`;
+  return `${base}&destination=${destination}&travelmode=${travelMode}`;
 }
