@@ -183,6 +183,36 @@ describe("scorePlaces — noise penalties (chains & hotels)", () => {
     const byId = Object.fromEntries(out.map((p) => [p.id, p]));
     expect(byId[ok.id].score).toBeGreaterThan(byId[meh.id].score + 10);
   });
+
+  it("a rated place nearby beats an unrated one a few steps closer (best-of-nearby)", () => {
+    // Standing at Kamakura station: the OSM row at 100 m has no rating at all,
+    // the Google one at 500 m has 4.5/124. The user asked for "lo mejor de lo
+    // mejor cerca" — the rated place must win, or the list is arbitrary.
+    const unrated = place({
+      id: "osm-close", source: "overpass", name: "裏町食堂",
+      lat: 36.6494, lng: 138.1954, tags: ["food"], openNow: null,
+    });
+    const rated = place({
+      id: "google-500m", source: "google", name: "Poiger",
+      lat: 36.6533, lng: 138.1949, tags: ["food"], rating: 4.5, userRatingsTotal: 124, openNow: true,
+    });
+    const out = scorePlaces([unrated, rated], ctx({ mode: "walking" }));
+    expect(out[0].id).toBe("google-500m");
+    expect(out[0].reasons.some((r) => r.key === "highRated")).toBe(true);
+  });
+
+  it("still prefers a much closer unrated place when the rated one is a trip away", () => {
+    const unrated = place({
+      id: "osm-close", source: "overpass", name: "そば処",
+      lat: 36.6494, lng: 138.1954, tags: ["food"], openNow: null,
+    });
+    const rated = place({
+      id: "google-far", source: "google", name: "Far Bistro",
+      lat: 36.6750, lng: 138.2100, tags: ["food"], rating: 4.5, userRatingsTotal: 124, openNow: true,
+    });
+    const out = scorePlaces([unrated, rated], ctx({ mode: "walking" }));
+    expect(out[0].id).toBe("osm-close");
+  });
 });
 
 describe("scorePlaces — interest keyword", () => {

@@ -171,15 +171,17 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
     const reasons: Reason[] = [];
     const name = p.name ?? "";
 
-    // --- travel (graduated by minutes so close wins over far) ---
+    // --- travel: proximity is the whole promise ("the best of the best
+    // NEAR my point"), so close wins decisively (≤5 min +25 vs ≤2.5 km +4)
+    // and a 100 m walk can no longer be outweighed by one rating step.
     if (t <= 5) {
-      score += 18;
+      score += 25;
       reasons.push({ key: "distanceGood", params: { min: t, modeId: ctx.mode ?? "transit" } });
     } else if (t <= 10) {
-      score += 15;
+      score += 20;
       reasons.push({ key: "distanceGood", params: { min: t, modeId: ctx.mode ?? "transit" } });
     } else if (t <= 20) {
-      score += 12;
+      score += 14;
       reasons.push({ key: "distanceGood", params: { min: t, modeId: ctx.mode ?? "transit" } });
     } else if (t <= 35) {
       score += 9;
@@ -263,43 +265,38 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
 
     // --- quality signals: rating shrunk by review count + volume ---
     if (p.rating !== undefined) {
-      // Bayesian shrinkage with a lower prior (3.7/25) and a review cap (500):
-      // a 4.7 local with 50 reviews keeps its edge over a 4.0 chain with 5k
-      // reviews, while a 4.9 with 3 reviews still gets pulled down.
+      // Bayesian shrinkage (prior 3.9 with m=15 reviews) keeps a 4.9-with-3
+      // from beating a 4.5-with-800, but it is shallow enough that a genuine
+      // 4.4/61 still reads as 4.34 — the old m=25 pulled it to 4.30 and lost
+      // to an anonymous OSM row with no rating at all.
       const n = Math.min(p.userRatingsTotal ?? 0, 500);
-      const weighted = n > 0 ? (p.rating * n + 3.7 * 25) / (n + 25) : p.rating;
+      const weighted = n > 0 ? (p.rating * n + 3.9 * 15) / (n + 15) : p.rating;
+      // Two sloped segments that meet at 3.8: continuous (a 4.5 must outrank a
+      // 4.3 instead of sharing a bucket, which is what made the order random),
+      // but steep enough below 3.8 that a mediocre place loses clearly.
+      score +=
+        weighted >= 3.8
+          ? Math.round((weighted - 3.8) * 12) + 4
+          : Math.round((weighted - 3.8) * 26) - 4;
 
-      if (weighted >= 4.6) {
-        score += 16;
-        reasons.push({ key: "highRated", params: { r: weighted.toFixed(1) } });
-      } else if (weighted >= 4.3) {
-        score += 12;
-        reasons.push({ key: "highRated", params: { r: weighted.toFixed(1) } });
-      } else if (weighted >= 4.0) {
-        score += 8;
-      } else if (weighted >= 3.5) {
-        score += 3;
-      } else {
-        score -= 4; // actively penalize mediocre places
-      }
-
-      // review volume: established places, capped so it never dominates
+      // review volume only decides ties (1-6): the rating already carries it,
+      // so the old 7-tier bonus double-counted popularity.
       const total = p.userRatingsTotal ?? 0;
-      if (total >= 5000) {
-        score += 6;
-        reasons.push({ key: "popular", params: { n: fmtCount(total) } });
-      } else if (total >= 1000) {
-        score += 5;
-        reasons.push({ key: "popular", params: { n: fmtCount(total) } });
-      } else if (total >= 300) {
-        score += 4;
-      } else if (total >= 100) {
-        score += 3;
-      } else if (total >= 30) {
-        score += 2;
-      } else if (total >= 5) {
-        score += 1;
+      if (total > 0) {
+        score += Math.min(6, Math.round(Math.log10(total) * 2));
+        if (total >= 1000) {
+          reasons.push({ key: "popular", params: { n: fmtCount(total) } });
+        }
       }
+      if (weighted >= 4.3) {
+        reasons.push({ key: "highRated", params: { r: weighted.toFixed(1) } });
+      }
+    } else if (!p.wikipedia) {
+      // No rating at all (bare OSM row). Google-rated places must win when
+      // they are anywhere near, which is what "best of the best nearby" means;
+      // this small tax keeps the 250 anonymous rows from burying them while
+      // still letting a landmark row compete.
+      score -= 4;
     }
 
     // --- landmark signal: Wikipedia/Wikidata-documented places are notable
@@ -315,7 +312,9 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
     // The kind also feeds the per-kind spread in recommend.ts. ---
     const cuisine = cuisineOf(name, p.tags);
     if (!kwHit && cuisine !== "other" && isLocalCuisine(name)) {
-      score += 6;
+      // +3 is a tiebreaker among unrated rows: at +6 it outranked an actually
+      // well-rated neighbour, which is the opposite of "best of the best".
+      score += 3;
       reasons.push({ key: "localCuisine" });
     }
 
