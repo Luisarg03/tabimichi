@@ -28,14 +28,12 @@ export default function WikiPhoto({
   className?: string;
 }) {
   const [src, setSrc] = useState<string | null>(null);
-  const [dead, setDead] = useState(false);
+  // unparseable refs die without an effect round-trip (no setState-in-effect)
+  const [dead, setDead] = useState(() => parseWikiRef(wikiRef) == null);
 
   useEffect(() => {
     const parsed = parseWikiRef(wikiRef);
-    if (!parsed) {
-      setDead(true);
-      return;
-    }
+    if (!parsed) return;
     let cancelled = false;
     (async () => {
       try {
