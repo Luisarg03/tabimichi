@@ -187,34 +187,6 @@ async function googleReference(key, zone) {
   return out.filter((p) => (seen.has(p.placeId) ? false : seen.add(p.placeId)));
 }
 
-/** Referencia libre: los mejor valorados de OSM/Overpass en la zona. */
-async function overpassTop(zone) {
-  const q = `[out:json][timeout:25];
-(
-  nwr["amenity"="restaurant"](around:1500,${zone.lat},${zone.lng});
-);
-out center 120;`;
-  try {
-    const res = await fetch("https://overpass-api.de/api/interpreter", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded", "User-Agent": "tabi-bench/0.1" },
-      body: new URLSearchParams({ data: q }),
-      signal: AbortSignal.timeout(30000),
-    });
-    const data = await res.json();
-    return (data.elements ?? [])
-      .map((e) => ({
-        name: e.tags?.name,
-        lat: e.lat ?? e.center?.lat,
-        lng: e.lon ?? e.center?.lon,
-        stars: Number(e.tags?.stars ?? 0),
-      }))
-      .filter((p) => p.name && Number.isFinite(p.lat));
-  } catch {
-    return [];
-  }
-}
-
 /** ¿Es el mismo lugar? Google place_id exacto si lo tenemos cacheado, si no
  *  nombre normalizado dentro de 120 m (los OSM vienen a 40-100 m del centroide). */
 function matchAppToRef(appPlace, ref, byName) {
