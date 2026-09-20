@@ -16,7 +16,7 @@ import Icon from "@/components/ui/Icon";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { DEFAULT_LOCATION } from "@/lib/geo";
-import type { PlaceProfile, RecommendResult, TimeBudget, TransportMode } from "@/lib/types";
+import type { PlaceProfile, RecommendResult, TransportMode } from "@/lib/types";
 import type { SheetSnap } from "@/lib/sheet";
 import { SIM_PRESETS, jstSimulatedDate } from "@/lib/jst";
 
@@ -97,7 +97,6 @@ export default function HomePage() {
   const [simPreset, setSimPreset] = useState<string | null>(null);
   /** Search filters — lifted so they survive the mobile overlay remount and
    *  stay shared between the desktop panel and the mobile overlay. */
-  const [budget, setBudget] = useState<TimeBudget>("afternoon");
   const [mode, setMode] = useState<TransportMode>("transit");
   const [types, setTypes] = useState<string[]>([]);
   const [keyword, setKeyword] = useState("");
@@ -111,7 +110,6 @@ export default function HomePage() {
   const lastQueryRef = useRef<{
     lat: number;
     lng: number;
-    budget: string;
     types: string[];
     mode: string;
     now?: string;
@@ -221,7 +219,6 @@ export default function HomePage() {
           body: JSON.stringify({
             lat: payload.lat,
             lng: payload.lng,
-            budget: payload.budget,
             types: payload.types,
             mode: payload.mode,
             lang: locale,
@@ -274,7 +271,6 @@ export default function HomePage() {
           lastQueryRef.current = {
             lat: payload.lat,
             lng: payload.lng,
-            budget: payload.budget,
             types: payload.types,
             mode: payload.mode,
             now,
@@ -448,11 +444,9 @@ export default function HomePage() {
               userLocated={savedLocation != null}
               loading={loading}
               onDiscover={handleDiscover}
-              budget={budget}
               mode={mode}
               types={types}
               keyword={keyword}
-              onBudgetChange={setBudget}
               onModeChange={setMode}
               onTypesChange={setTypes}
               onKeywordChange={setKeyword}
@@ -558,11 +552,9 @@ export default function HomePage() {
             loading={loading}
             onDiscover={handleDiscover}
             onClose={() => setSearchOpen(false)}
-            budget={budget}
             mode={mode}
             types={types}
             keyword={keyword}
-            onBudgetChange={setBudget}
             onModeChange={setMode}
             onTypesChange={setTypes}
             onKeywordChange={setKeyword}

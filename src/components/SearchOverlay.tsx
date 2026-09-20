@@ -1,7 +1,7 @@
 "use client";
 
 import DayPanel, { type DiscoverPayload } from "@/components/DayPanel";
-import type { TimeBudget, TransportMode } from "@/lib/types";
+import type { TransportMode } from "@/lib/types";
 
 interface PanelLocation {
   lat: number;
@@ -18,11 +18,9 @@ export default function SearchOverlay({
   loading,
   onDiscover,
   onClose,
-  budget,
   mode,
   types,
   keyword,
-  onBudgetChange,
   onModeChange,
   onTypesChange,
   onKeywordChange,
@@ -32,11 +30,9 @@ export default function SearchOverlay({
   loading: boolean;
   onDiscover: (payload: DiscoverPayload) => void;
   onClose: () => void;
-  budget: TimeBudget;
   mode: TransportMode;
   types: string[];
   keyword: string;
-  onBudgetChange: (b: TimeBudget) => void;
   onModeChange: (m: TransportMode) => void;
   onTypesChange: (t: string[]) => void;
   onKeywordChange: (k: string) => void;
@@ -53,11 +49,9 @@ export default function SearchOverlay({
           loading={loading}
           onDiscover={onDiscover}
           onClose={onClose}
-          budget={budget}
           mode={mode}
           types={types}
           keyword={keyword}
-          onBudgetChange={onBudgetChange}
           onModeChange={onModeChange}
           onTypesChange={onTypesChange}
           onKeywordChange={onKeywordChange}

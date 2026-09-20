@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
-import type { SearchSuggestion, TimeBudget, TransportMode } from "@/lib/types";
+import type { SearchSuggestion, TransportMode } from "@/lib/types";
 import { EXPERIENCE_TYPES } from "@/lib/places/taxonomy";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
@@ -16,7 +16,6 @@ export interface DiscoverPayload {
   lat: number;
   lng: number;
   label: string;
-  budget: TimeBudget;
   types: string[];
   mode: TransportMode;
   /** true when the position is exact GPS, false when geocoded address */
@@ -27,7 +26,6 @@ export interface DiscoverPayload {
   pin?: { name: string; lat: number; lng: number; typeId?: string };
 }
 
-const BUDGETS: TimeBudget[] = ["lunch", "afternoon", "full_day"];
 const MODES: Array<{ id: TransportMode; icon: string }> = [
   { id: "walking", icon: "walk" },
   { id: "transit", icon: "train" },
@@ -54,11 +52,9 @@ export default function DayPanel({
   onDiscover,
   onClose,
   embedded = false,
-  budget,
   mode,
   types,
   keyword,
-  onBudgetChange,
   onModeChange,
   onTypesChange,
   onKeywordChange,
@@ -77,11 +73,9 @@ export default function DayPanel({
   embedded?: boolean;
   /** Filter state lifted to the page so it survives panel remounts
    *  (mobile overlay) and stays shared between desktop/mobile. */
-  budget: TimeBudget;
   mode: TransportMode;
   types: string[];
   keyword: string;
-  onBudgetChange: (b: TimeBudget) => void;
   onModeChange: (m: TransportMode) => void;
   onTypesChange: (t: string[]) => void;
   onKeywordChange: (k: string) => void;
@@ -169,7 +163,6 @@ export default function DayPanel({
       lat: loc.lat,
       lng: loc.lng,
       label: loc.name,
-      budget,
       types,
       mode,
       // the searched place: keyword + pin guarantee it ranks first
@@ -282,7 +275,7 @@ export default function DayPanel({
   function submit() {
     if (!location) return;
     const kw = keyword.trim();
-    onDiscover({ ...location, budget, types, mode, keyword: kw || undefined });
+    onDiscover({ ...location, types, mode, keyword: kw || undefined });
     // Collapse after discover so results are visible on mobile.
     // On desktop (md+) the CSS keeps the body open regardless.
     setCollapsed(true);
@@ -350,18 +343,6 @@ export default function DayPanel({
           {location.label} · {location.lat.toFixed(4)}, {location.lng.toFixed(4)}
         </p>
       )}
-
-      {/* time budget */}
-      <div className="mt-3">
-        <span className="eyebrow">{t("panel.timeBudget")}</span>
-        <Segmented
-          className="mt-1.5"
-          ariaLabel={t("panel.timeBudget")}
-          value={budget}
-          onChange={onBudgetChange}
-          options={BUDGETS.map((b) => ({ id: b, label: t(`panel.budget.${b}`) }))}
-        />
-      </div>
 
       {/* transport mode */}
       <div className="mt-3">
