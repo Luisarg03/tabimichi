@@ -88,6 +88,8 @@ export const CHAIN_NAMES = [
   "サイゼリヤ",
   "coco ichibanya",
   "ココイチ",
+  "go go curry",
+  "ゴーゴーカレー",
   "bikkuri donkey",
   "びっくりドンキー",
   "joyfull",
@@ -199,8 +201,11 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
     const name = p.name ?? "";
 
     // --- travel: proximity is the whole promise ("the best of the best
-    // NEAR my point"), so close wins decisively (≤5 min +25 vs ≤2.5 km +4)
-    // and a 100 m walk can no longer be outweighed by one rating step.
+    // NEAR my point"), but it must NOT outrank quality. Measured in Kanazawa:
+    // with the old flat tail, Go Go Curry (4.1★, 1 min away) came 1st over
+    // Kourin Sushi (4.7★/1502 reviews, 22 min) — the list was "closest and
+    // good enough", which is what a directory does, not a recommender.
+    // The curve now drops hard after 20 min so a 15-point quality gap can win.
     if (t <= 5) {
       score += 25;
       reasons.push({ key: "distanceGood", params: { min: t, modeId: ctx.mode ?? "transit" } });
@@ -211,11 +216,9 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
       score += 14;
       reasons.push({ key: "distanceGood", params: { min: t, modeId: ctx.mode ?? "transit" } });
     } else if (t <= 35) {
-      score += 9;
+      score += 4;
     } else if (t <= 60) {
-      score += 6;
-    } else {
-      score += 3;
+      score += 1;
     }
 
     // --- weather fit ---
@@ -306,8 +309,8 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
           ? Math.round((weighted - 3.8) * 12) + 4
           : Math.round((weighted - 3.8) * 26) - 4;
 
-      // review volume only decides ties (1-6): the rating already carries it,
-      // so the old 7-tier bonus double-counted popularity.
+      // review volume: a log-scaled nudge (1-6) plus a real bonus once a place
+      // is PROVEN (many reviews). "Popular" only announces itself at 1000+.
       const total = p.userRatingsTotal ?? 0;
       if (total > 0) {
         score += Math.min(6, Math.round(Math.log10(total) * 2));
@@ -317,6 +320,16 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
       }
       if (weighted >= 4.3) {
         reasons.push({ key: "highRated", params: { r: weighted.toFixed(1) } });
+      }
+      // Proven quality: a high rating backed by a LOT of reviews is the
+      // strongest signal we have that a place is genuinely good rather than
+      // locally tolerated. Without this, a 4.1★ chain with volume ties a
+      // 4.7★/1502 institution and proximity decides — measured in Kanazawa.
+      if (total >= 500) score += 10;
+      else if (total >= 150) score += 7;
+      else if (total >= 40) score += 4;
+      if (weighted >= 4.5 && total >= 500) {
+        reasons.push({ key: "established", params: { n: fmtCount(total) } });
       }
     } else if (!p.wikipedia) {
       // No rating at all (bare OSM row). Google-rated places must win when
@@ -338,9 +351,11 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
     // anonymous storefront, which the rating alone cannot do at equal volume.
     // The kind also feeds the per-kind spread in recommend.ts. ---
     const cuisine = cuisineOf(name, p.tags);
-    if (!kwHit && cuisine !== "other" && isLocalCuisine(name)) {
+    if (!kwHit && cuisine !== "other" && isLocalCuisine(name) && !isChainName(name)) {
       // +3 is a tiebreaker among unrated rows: at +6 it outranked an actually
       // well-rated neighbour, which is the opposite of "best of the best".
+      // Chains are excluded: "Go Go Curry" matching the curry rule was enough
+      // to keep a 4.1★ chain above a 4.7★/1502 institution in Kanazawa.
       score += 3;
       reasons.push({ key: "localCuisine" });
     }
