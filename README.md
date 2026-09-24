@@ -66,6 +66,8 @@ Users can also set their own keys in the app (**⚙️ Ajustes** → API keys) �
 vercel link    # then add env vars → vercel --prod
 ``` Preview deploys are created automatically for every PR.
 
+Pipeline por ramas (`develop → staging → main`): ver [docs/environments.md](docs/environments.md).
+
 ---
 
 ## 🗄️ Supabase (accounts & per-user keys)
