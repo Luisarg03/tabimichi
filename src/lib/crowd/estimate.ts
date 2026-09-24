@@ -9,6 +9,7 @@ import {
   seasonFactor,
   weatherFactor,
 } from "./curves";
+import type { CrowdCategory } from "./curves";
 import { blendWithReports, learnedDelta, type CrowdReport } from "./reports";
 
 export type { CrowdEstimate, CrowdLabel } from "../types";
@@ -33,6 +34,64 @@ export interface CrowdInput {
 
 function clamp01(v: number): number {
   return Math.min(1, Math.max(0, v));
+}
+
+/**
+ * Base popularity: review volume (the same base Google's Popular Times builds
+ * on) with a per-category pseudo-count fallback for sourceless rows, so one
+ * scale serves both. Normalized against the pool's own p95 — one runaway
+ * magnet must not flatten the rest to zero.
+ */
+
+/** Assumed review volume when the source reports none. */
+const PSEUDO_REVIEWS: Record<CrowdCategory, number> = {
+  temple: 300,
+  museum: 120,
+  food: 60,
+  market: 100,
+  shopping: 250,
+  park: 150,
+  sakura: 200,
+  viewpoint: 80,
+  trekking: 30,
+  onsen: 70,
+  nightlife: 40,
+  other: 25,
+};
+
+/** A documented landmark (Wikipedia/Wikidata) draws beyond its review count. */
+const WIKIPEDIA_BOOST = 1.3;
+
+export interface PopularityInput {
+  id: string;
+  tags: string[];
+  userRatingsTotal?: number;
+  wikipedia?: string;
+}
+
+function rawScore(p: PopularityInput): number {
+  const category = categoryOf(p.tags);
+  const reviews = p.userRatingsTotal && p.userRatingsTotal > 0 ? p.userRatingsTotal : PSEUDO_REVIEWS[category];
+  const boosted = p.wikipedia ? reviews * WIKIPEDIA_BOOST : reviews;
+  return Math.log10(1 + boosted);
+}
+
+function percentile(sorted: number[], q: number): number {
+  if (sorted.length === 0) return 0;
+  const idx = Math.min(sorted.length - 1, Math.max(0, Math.round((sorted.length - 1) * q)));
+  return sorted[idx];
+}
+
+export function popularityScores(pool: PopularityInput[]): Map<string, number> {
+  const out = new Map<string, number>();
+  if (pool.length === 0) return out;
+  const raws = pool.map(rawScore);
+  const sorted = [...raws].sort((a, b) => a - b);
+  const scale = Math.max(percentile(sorted, 0.95), 0.5);
+  pool.forEach((p, i) => {
+    out.set(p.id, Math.min(1, Math.max(0, raws[i] / scale)));
+  });
+  return out;
 }
 
 export function labelFor(level: number): CrowdLabel {

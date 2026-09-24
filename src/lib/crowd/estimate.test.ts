@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { categoryOf, dayFactor, hourCurve, seasonFactor, weatherFactor } from "@/lib/crowd/curves";
-import { popularityScores } from "@/lib/crowd/popularity";
-import { bestHourToday, estimateCrowd, labelFor } from "@/lib/crowd/estimate";
+import { bestHourToday, estimateCrowd, labelFor, popularityScores } from "@/lib/crowd/estimate";
 import type { WeatherInfo } from "@/lib/types";
 
 /** Weather fixture — only the fields the crowd model reads. */
