@@ -11,7 +11,6 @@ import BottomSheet from "@/components/BottomSheet";
 import MobileDetailSheet from "@/components/MobileDetailSheet";
 import SearchOverlay from "@/components/SearchOverlay";
 import PlaceDetailPanel from "@/components/PlaceDetailPanel";
-import BrandPill from "@/components/BrandPill";
 import Icon from "@/components/ui/Icon";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
@@ -423,7 +422,15 @@ export default function HomePage() {
       {/* ============ DESKTOP (md+) ============ */}
       <div className="pointer-events-none absolute inset-0 z-20 hidden md:block">
         {/* brand + time simulation pills (prototype .brand-pill / .sim-pill) */}
-        <BrandPill className="pointer-events-auto absolute left-3 top-3" />
+        <div className="flex items-center gap-2 rounded-full border border-border bg-surface/94 px-3 py-2 shadow-soft backdrop-blur-md pointer-events-auto absolute left-3 top-3">
+          <span className="grid h-[30px] w-[30px] place-items-center rounded-[9px] bg-verm font-display text-[15px] font-bold text-surface shadow-[0_2px_6px_oklch(46%_0.16_30/0.35)]">
+            旅
+          </span>
+          <span className="font-display text-[15px] font-bold tracking-[-0.01em] text-fg">
+            Tabimichi{" "}
+            <small className="ml-0.5 text-[12px] font-medium text-muted">旅道</small>
+          </span>
+        </div>
         {/* settings + locale + time simulation (top-right cluster) */}
         <div className="pointer-events-auto absolute right-3 top-3 flex items-center gap-1.5">
           <LocaleToggle />
