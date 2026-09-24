@@ -238,6 +238,11 @@ export async function overpassSearch(
   if (bestPartial) return bestPartial;
 
   const results = await settled;
+  // A mirror may have landed real data after the grace window closed (slow
+  // network, fast thin mirror answered first): never discard it in favor of
+  // an "empty" verdict from another mirror.
+  if (complete) return complete;
+  if (bestPartial) return bestPartial;
   const reasons = results
     .filter((r): r is PromiseRejectedResult => r.status === "rejected")
     .map((r) => r.reason as Error);
