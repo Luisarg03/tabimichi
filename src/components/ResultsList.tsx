@@ -68,7 +68,7 @@ export default function ResultsList({
 
       {result && !loading && (
         <>
-          <WeatherCard weather={result.weather} compact />
+          <WeatherCard weather={result.weather} />
           {result.keywordMiss && (
             <div className="rounded-panel border border-warn/40 bg-warn-soft p-4 text-sm text-warn shadow-soft">
               {t("status.keywordMiss", { kw: result.keyword ?? "" })}
