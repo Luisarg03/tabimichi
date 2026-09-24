@@ -41,6 +41,10 @@ yarn-error.log*
 .env*
 !.env.example
 
+# Bitwarden: raw vault session + one-off credential drops (scripts/secrets.sh)
+.bw-session.tmp
+*.token.tmp
+
 # local data (sqlite + config with API keys)
 /data/
 

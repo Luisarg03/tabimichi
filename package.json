@@ -10,7 +10,11 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "node scripts/smoke-e2e.mjs",
-    "test:e2e:browser": "node scripts/test-e2e.mjs"
+    "test:e2e:browser": "node scripts/test-e2e.mjs",
+    "secrets": "bash scripts/secrets.sh",
+    "secrets:notes": "bash scripts/secrets-notes.sh",
+    "secrets:check": "bash scripts/secrets.sh --check",
+    "secrets:test": "node --test scripts/secrets.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.3",
