@@ -4,7 +4,7 @@ import { placeById } from "@/lib/cache";
 import { getSupabaseForUser } from "@/lib/supabase/server";
 import { extractToken, verifyUser } from "@/lib/supabase/auth";
 import { enforceRateLimit } from "@/lib/security";
-import { cloudProfile } from "@/app/api/profile/route";
+import { cloudProfile } from "./profile";
 
 export const runtime = "nodejs";
 

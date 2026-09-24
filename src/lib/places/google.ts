@@ -185,12 +185,31 @@ function toPlace(r: GoogleResult, type: ExperienceType, fromKeyword = false): Pl
 }
 
 /**
- * Hotels (Google type "lodging") pollute text-search results — a hotel with a
- * bakery inside matches "restaurant". They are noise for every experience type
- * except onsen, where ryokan-hotels with baths are exactly what we want.
+ * Entertainment venues Google tags as "restaurant"/"food" because they serve
+ * something: a karaoke box with a menu, a bowling alley, a cinema. Measured:
+ * "Karaoke Pasela Shinjuku Honten" (4.3★/1358) comes 7th by rating+volume in
+ * Shinjuku and would sit 3rd in the app if it were not penalised by name.
+ *
+ * Blocked outright when the venue is PURELY entertainment — a real restaurant
+ * that also has a bar keeps its "restaurant" type and survives.
  */
+const ENTERTAINMENT_TYPES = new Set([
+  "karaoke", "bowling_alley", "movie_theater", "casino", "amusement_park",
+  "night_club", "gambling", "video_arcade",
+]);
+
+/** Places with beds are not "somewhere to eat" — a hotel with a restaurant
+ *  inside is, only when the restaurant is a place of its own (its own listing
+ *  carries restaurant/cafe/bakery/food without `lodging`). */
+const LODGING_TYPES = new Set(["lodging"]);
+
 function isNoiseForType(r: GoogleResult, type: ExperienceType): boolean {
-  return type.id !== "onsen" && (r.types ?? []).includes("lodging");
+  // onsen keeps ryokan-hotels: a bath is exactly what the user wants there
+  if (type.id === "onsen") return false;
+  const types = r.types ?? [];
+  if (types.some((t) => ENTERTAINMENT_TYPES.has(t))) return true;
+  if (types.some((t) => LODGING_TYPES.has(t))) return true;
+  return false;
 }
 
 /**

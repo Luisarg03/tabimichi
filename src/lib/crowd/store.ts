@@ -13,6 +13,9 @@ import { LEARNED_MAX_AGE_MS, type CrowdReport } from "./reports";
  */
 
 const REPORT_TABLE = "crowd_reports";
+// ponytail: PostgREST cae con ~600 ids en un .in() ("URI too long"); 50 deja
+// la URL en ~2KB. Subir si los pools crecen.
+const IN_CHUNK = 50;
 
 type AdminClient = ReturnType<typeof getSupabaseAdmin>;
 let adminFactory: () => AdminClient = getSupabaseAdmin;
@@ -63,16 +66,18 @@ export async function readCrowdReports(
 
   if (userId) {
     try {
-      const { data, error } = await adminFactory()
-        .from(REPORT_TABLE)
-        .select("place_id,level,reported_at,local_hour,weekend")
-        .eq("user_id", userId)
-        .in("place_id", placeIds)
-        .gte("reported_at", new Date(sinceMs).toISOString())
-        .order("reported_at", { ascending: false })
-        .limit(500);
-      if (error) console.warn(`[tabi] crowd_reports read failed: ${error.message}`);
-      for (const row of (data as ReportRow[] | null) ?? []) push(rowToReport(row));
+      for (let i = 0; i < placeIds.length; i += IN_CHUNK) {
+        const { data, error } = await adminFactory()
+          .from(REPORT_TABLE)
+          .select("place_id,level,reported_at,local_hour,weekend")
+          .eq("user_id", userId)
+          .in("place_id", placeIds.slice(i, i + IN_CHUNK))
+          .gte("reported_at", new Date(sinceMs).toISOString())
+          .order("reported_at", { ascending: false })
+          .limit(500);
+        if (error) throw new Error(error.message);
+        for (const row of (data as ReportRow[] | null) ?? []) push(rowToReport(row));
+      }
     } catch (e) {
       console.warn(`[tabi] crowd_reports read failed: ${String(e)}`);
     }
