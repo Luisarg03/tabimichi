@@ -170,7 +170,7 @@ export default function ResultsList({
                 <button
                   onClick={onNarrate}
                   disabled={guideState === "thinking"}
-                  className="flex w-full min-h-[40px] items-center justify-center gap-2 rounded-[12px] border border-border bg-surface text-[13px] font-semibold text-fg transition-colors hover:bg-fg/5 active:bg-fg/10 disabled:opacity-55"
+                  className="flex w-full min-h-[44px] items-center justify-center gap-2 rounded-[12px] border border-border bg-surface text-[13px] font-semibold text-fg transition-colors hover:bg-fg/5 active:bg-fg/10 disabled:opacity-55"
                 >
                   <Icon name="spark" size={15} className="text-brand-600" />
                   {guideState === "thinking"
