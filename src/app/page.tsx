@@ -6,7 +6,6 @@ import Link from "next/link";
 import DayPanel, { type DiscoverPayload } from "@/components/DayPanel";
 import ResultsList from "@/components/ResultsList";
 import LocaleToggle from "@/components/LocaleToggle";
-import SimTabs from "@/components/SimTabs";
 import BottomSheet from "@/components/BottomSheet";
 import MobileDetailSheet from "@/components/MobileDetailSheet";
 import PlaceDetail from "@/components/PlaceDetail";
@@ -14,7 +13,7 @@ import Icon from "@/components/ui/Icon";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { DEFAULT_LOCATION } from "@/lib/geo";
-import type { PlaceProfile, RecommendResult, TimeBudget, TransportMode } from "@/lib/types";
+import type { PlaceProfile, RecommendResult, TransportMode } from "@/lib/types";
 import type { SheetSnap } from "@/lib/sheet";
 import { SIM_PRESETS, jstSimulatedDate } from "@/lib/jst";
 
@@ -95,10 +94,25 @@ export default function HomePage() {
   const [simPreset, setSimPreset] = useState<string | null>(null);
   /** Search filters — lifted so they survive the mobile overlay remount and
    *  stay shared between the desktop panel and the mobile overlay. */
-  const [budget, setBudget] = useState<TimeBudget>("afternoon");
   const [mode, setMode] = useState<TransportMode>("transit");
   const [types, setTypes] = useState<string[]>([]);
   const [keyword, setKeyword] = useState("");
+  /** standing preference: the crowd estimate reorders the list. Stored like
+   *  the map layers so it survives a reload. */
+  const [avoidCrowds, setAvoidCrowds] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("tabi.avoidCrowds") === "1";
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem("tabi.avoidCrowds", avoidCrowds ? "1" : "0");
+    } catch {
+      // ignore
+    }
+  }, [avoidCrowds]);
   /** Mobile results bottom sheet: hidden until a discover runs. */
   const [sheet, setSheet] = useState<SheetSnap>("hidden");
   /** Mobile search overlay (full-screen form). */
@@ -109,11 +123,11 @@ export default function HomePage() {
   const lastQueryRef = useRef<{
     lat: number;
     lng: number;
-    budget: string;
     types: string[];
     mode: string;
     now?: string;
     keyword?: string;
+    avoidCrowds?: boolean;
     traceId?: string;
   } | null>(null);
   const lastPlacesRef = useRef<
@@ -219,12 +233,12 @@ export default function HomePage() {
           body: JSON.stringify({
             lat: payload.lat,
             lng: payload.lng,
-            budget: payload.budget,
             types: payload.types,
             mode: payload.mode,
             lang: locale,
             now,
             keyword: payload.keyword,
+            avoidCrowds,
             pin: payload.pin,
           }),
         });
@@ -272,11 +286,11 @@ export default function HomePage() {
           lastQueryRef.current = {
             lat: payload.lat,
             lng: payload.lng,
-            budget: payload.budget,
             types: payload.types,
             mode: payload.mode,
             now,
             keyword: payload.keyword,
+            avoidCrowds,
             traceId: data.traceId,
           };
           // /api/narrate caps the payload at 12 places — send the visible top
@@ -294,7 +308,7 @@ export default function HomePage() {
         setLoading(false);
       }
     },
-    [locale, simPreset, getToken]
+    [locale, simPreset, getToken, avoidCrowds]
   );
 
   /** "Tus gustos": set one tag weight directly (optimistic, then server truth). */
@@ -410,6 +424,7 @@ export default function HomePage() {
           places={result?.places ?? []}
           selectedId={selectedId}
           crowdCells={result?.crowdCells}
+          hotZones={result?.hotZones}
           crowdAt={result?.crowdAt}
           userApproximate={location.gps !== true}
           // default start: label the pin "Tokio" instead of "Estás acá"
@@ -441,7 +456,6 @@ export default function HomePage() {
           >
             <Icon name="gear" size={18} />
           </Link>
-          <SimTabs preset={simPreset} onChange={setSimPreset} />
         </div>
 
         {/* left rail: search + filters (rail-top) + results (rail-body) */}
@@ -450,13 +464,16 @@ export default function HomePage() {
             <DayPanel
               embedded
               initialLocation={location}
+              userLocated={savedLocation != null}
               loading={loading}
               onDiscover={handleDiscover}
-              budget={budget}
+              simPreset={simPreset}
+              onSimChange={setSimPreset}
               mode={mode}
               types={types}
               keyword={keyword}
-              onBudgetChange={setBudget}
+              avoidCrowds={avoidCrowds}
+              onCrowdsChange={setAvoidCrowds}
               onModeChange={setMode}
               onTypesChange={setTypes}
               onKeywordChange={setKeyword}
@@ -492,7 +509,7 @@ export default function HomePage() {
       {/* ============ MOBILE (<md) ============ */}
       <div className="pointer-events-none absolute inset-0 z-10 md:hidden">
         <div className="pointer-events-none flex h-full flex-col gap-1.5 p-2 tabi-safe-top tabi-safe-x">
-          {/* top: search pill + locale/settings */}
+          {/* top: search pill + locale/settings (hour lives in the form now) */}
           <div className="pointer-events-auto flex items-center justify-between gap-2">
             <button
               onClick={() => setSearchOpen(true)}
@@ -515,11 +532,6 @@ export default function HomePage() {
                 <Icon name="gear" size={18} />
               </Link>
             </div>
-          </div>
-
-          {/* time simulation chips */}
-          <div className="pointer-events-auto">
-            <SimTabs preset={simPreset} onChange={setSimPreset} className="max-w-[calc(100%-1rem)]" />
           </div>
         </div>
       </div>
@@ -565,14 +577,17 @@ export default function HomePage() {
             <div className="tabi-rise-in min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
               <DayPanel
                 initialLocation={location}
+                userLocated={savedLocation != null}
                 loading={loading}
                 onDiscover={handleDiscover}
                 onClose={() => setSearchOpen(false)}
-                budget={budget}
+                simPreset={simPreset}
+                onSimChange={setSimPreset}
                 mode={mode}
                 types={types}
                 keyword={keyword}
-                onBudgetChange={setBudget}
+                avoidCrowds={avoidCrowds}
+                onCrowdsChange={setAvoidCrowds}
                 onModeChange={setMode}
                 onTypesChange={setTypes}
                 onKeywordChange={setKeyword}

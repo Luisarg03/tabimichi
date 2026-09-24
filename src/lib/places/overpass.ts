@@ -13,6 +13,9 @@ interface OverpassElement {
 
 interface OverpassResponse {
   elements: OverpassElement[];
+  /** Overpass sets this on a PARTIAL answer ("runtime error: Query timed out",
+   *  "…out of memory"). It is how a truncated mirror announces itself. */
+  remark?: string;
 }
 
 const MIRRORS = [
@@ -175,11 +178,26 @@ export async function overpassSearch(
     }
   }
 
-  // Each mirror races with its own timeout (shrunk to the remaining budget, so
-  // an in-flight request can never blow past the total). Rejections are how a
-  // loser exits the race: HTTP errors, timeouts, or "200 but zero matches"
-  // (thin mirrors like osm.ch for Asia answer valid-but-empty).
-  const attempts = endpoints.map(async (endpoint): Promise<Place[]> => {
+  // The mirrors do NOT answer with the same data: overpass.osm.ch is thin for
+  // Asia, and a busy or memory-capped mirror replies 200 with a truncated
+  // element list carrying a `remark`. Racing with Promise.any therefore handed
+  // the pool to whichever mirror replied FASTEST, not to the one that had the
+  // data — measured at Shinjuku/Ueno: 20 restaurants where a single complete
+  // mirror returns 250. So we now wait for a COMPLETE answer (no `remark`),
+  // and only accept a truncated one if no mirror produced a full reply in time.
+  const GRACE_MS = 4000;
+  let bestPartial: Place[] | null = null;
+  let complete: Place[] | null = null;
+  // Grace window, cut short the moment a complete answer lands.
+  let endGrace = (): void => {};
+  const grace = new Promise<void>((r) => {
+    const t = setTimeout(r, GRACE_MS);
+    endGrace = () => {
+      clearTimeout(t);
+      r();
+    };
+  });
+  const settled = Promise.allSettled(endpoints.map(async (endpoint): Promise<Place[]> => {
     const remaining = totalBudget - (Date.now() - startedAt);
     if (remaining <= 0) throw new Error("overpass-budget");
     const res = await fetch(endpoint, {
@@ -197,20 +215,40 @@ export async function overpassSearch(
 
     const assigned = assignTypes(data.elements, valid);
     // A mirror that answers 200 with zero matching elements usually has
-    // stale/partial coverage — it loses the race so a data-bearing mirror
-    // can still win.
+    // stale/partial coverage — it is not evidence of "nothing here".
     if (assigned.length === 0) throw new Error("overpass-empty");
-    return assigned.map(({ element: e, matched }) => toPlace(e, matched)).filter((p): p is Place => p !== null);
-  });
+    const places = assigned
+      .map(({ element: e, matched }) => toPlace(e, matched))
+      .filter((p): p is Place => p !== null);
 
-  try {
-    return await Promise.any(attempts);
-  } catch (agg) {
-    const reasons = (agg as AggregateError).errors ?? [];
-    // Every mirror exhausted. One that answered valid-but-empty means "nothing
-    // matches here" (return []); total unreachability is an error (throw →
-    // callers fall back to the cache).
-    if (reasons.some((e) => (e as Error)?.message === "overpass-empty")) return [];
-    throw (reasons[0] as Error) ?? new Error("overpass-unreachable");
-  }
+    // complete answer → richest one wins, and the wait ends immediately
+    if (!data.remark) {
+      if (!complete || places.length > complete.length) complete = places;
+      endGrace();
+    } else if (!complete && (!bestPartial || places.length > bestPartial.length)) {
+      bestPartial = places; // truncated fallback, keep the richest
+    }
+    return places;
+  }));
+
+  // Bounded: all mirrors settle, or the grace window closes (whichever first).
+  await Promise.race([settled, grace]);
+
+  if (complete) return complete;
+  if (bestPartial) return bestPartial;
+
+  const results = await settled;
+  // A mirror may have landed real data after the grace window closed (slow
+  // network, fast thin mirror answered first): never discard it in favor of
+  // an "empty" verdict from another mirror.
+  if (complete) return complete;
+  if (bestPartial) return bestPartial;
+  const reasons = results
+    .filter((r): r is PromiseRejectedResult => r.status === "rejected")
+    .map((r) => r.reason as Error);
+  // Every mirror exhausted. One that answered valid-but-empty means "nothing
+  // matches here" (return []); total unreachability is an error (throw →
+  // callers fall back to the cache).
+  if (reasons.some((e) => e?.message === "overpass-empty")) return [];
+  throw reasons[0] ?? new Error("overpass-unreachable");
 }

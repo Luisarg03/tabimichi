@@ -30,7 +30,6 @@ const place = (over: Partial<Place> = {}): Place => ({
 
 const ctx = (over: Record<string, unknown> = {}) => ({
   base: { lat: 36.6485, lng: 138.1949 },
-  budgetMin: 300,
   weather: weather(),
   now: new Date(),
   ...over,
@@ -44,25 +43,25 @@ describe("scorePlaces — hard filters", () => {
     expect(out.map((p) => p.id)).toEqual([near.id]);
   });
 
-  it("drops places too far for the budget", () => {
-    const out = scorePlaces([place({ lat: 36.9, lng: 138.5 })], ctx({ budgetMin: 60 }));
+  it("drops places beyond the mode travel cap", () => {
+    // transit cap 90 min: ~40 km ≈ 94 min → dropped
+    const out = scorePlaces([place({ lat: 36.9, lng: 138.5 })], ctx({}));
     expect(out).toHaveLength(0);
   });
 
   it("drops far places in walking mode that transit would accept", () => {
     const far = place({ lat: 36.69, lng: 138.23 }); // ~5.5 km
     // walking: 5.5 km ≈ 73 min on foot > 45 min cap → dropped ("around me" only)
-    expect(scorePlaces([far], ctx({ mode: "walking", budgetMin: 300 }))).toHaveLength(0);
+    expect(scorePlaces([far], ctx({ mode: "walking" }))).toHaveLength(0);
     // transit: 5.5 km ≈ 20 min < 90 min cap → accepted
-    expect(scorePlaces([far], ctx({ mode: "transit", budgetMin: 300 }))).toHaveLength(1);
+    expect(scorePlaces([far], ctx({ mode: "transit" }))).toHaveLength(1);
   });
 
-  it("caps travel at half the day budget regardless of mode", () => {
-    // lunch = 90 min budget → cap = min(45, mode cap) = 45 min even for transit
+  it("caps travel per mode: transit takes 61 min trips, walking does not", () => {
     const mid = place({ lat: 36.69, lng: 138.23 }); // ~5.5 km ≈ 20 min transit
-    const far = place({ lat: 36.78, lng: 138.42 }); // ~25 km ≈ 61 min transit
-    const out = scorePlaces([mid, far], ctx({ mode: "transit", budgetMin: 90 }));
-    expect(out.map((p) => p.id)).toEqual([mid.id]);
+    const far = place({ lat: 36.95, lng: 138.55 }); // ~40 km ≈ 136 min transit
+    expect(scorePlaces([mid, far], ctx({ mode: "transit" })).map((p) => p.id)).toEqual([mid.id]);
+    expect(scorePlaces([mid, far], ctx({ mode: "walking" }))).toHaveLength(0);
   });
 
   it("never recommends closed places", () => {
@@ -160,13 +159,24 @@ describe("scorePlaces — noise penalties (chains & hotels)", () => {
     expect(byId[chain.id].score).toBeLessThan(byId[local.id].score);
   });
 
-  it("penalizes hotels but not ryokan-onsen", () => {
+  it("drops hotel dining rooms from a food search but keeps ryokan-onsen", () => {
+    // Google types hotels as "restaurant" when they serve breakfast; the user
+    // reported seeing "Hotel … Dining" in the food list. A hard filter is
+    // correct here — a hotel is not a place you go to eat — while a ryokan
+    // with a bath stays, because that IS a destination for this app.
     const hotel = place({ name: "Marunouchi Hotel", tags: ["food"], rating: 4.2, userRatingsTotal: 300, openNow: true });
+    const dining = place({ name: "All Day Dining Jurin", tags: ["food"], rating: 4.2, userRatingsTotal: 1074, openNow: true });
+    const karaoke = place({ name: "Karaoke Pasela Shinjuku Honten", tags: ["food", "nightlife"], rating: 4.3, userRatingsTotal: 1358, openNow: true });
     const ryokan = place({ name: "Ryokan Sanga", tags: ["onsen"], rating: 4.6, userRatingsTotal: 200, openNow: true });
-    const out = scorePlaces([hotel, ryokan], ctx());
-    const byId = Object.fromEntries(out.map((p) => [p.id, p]));
-    expect(byId[hotel.id].reasons.some((r) => r.key === "hotel")).toBe(true);
-    expect(byId[ryokan.id].reasons.some((r) => r.key === "hotel")).toBe(false);
+    const out = scorePlaces([hotel, dining, karaoke, ryokan], ctx({ types: ["food"] }));
+    expect(out.map((p) => p.id)).toEqual([ryokan.id]);
+  });
+
+  it("keeps a food place whose name merely contains a lodging word elsewhere", () => {
+    // the filter is name-anchored, so a normal restaurant is untouched
+    const soba = place({ name: "信州そば本陣", tags: ["food"], rating: 4.4, userRatingsTotal: 400, openNow: true });
+    const out = scorePlaces([soba], ctx({ types: ["food"] }));
+    expect(out.map((p) => p.id)).toEqual([soba.id]);
   });
 
   it("a highly rated local gem beats a mediocre chain at the same distance", () => {
@@ -183,6 +193,57 @@ describe("scorePlaces — noise penalties (chains & hotels)", () => {
     const out = scorePlaces([meh, ok], ctx());
     const byId = Object.fromEntries(out.map((p) => [p.id, p]));
     expect(byId[ok.id].score).toBeGreaterThan(byId[meh.id].score + 10);
+  });
+
+  it("a rated place nearby beats an unrated one a few steps closer (best-of-nearby)", () => {
+    // Standing at Kamakura station: the OSM row at 100 m has no rating at all,
+    // the Google one at 500 m has 4.5/124. The user asked for "lo mejor de lo
+    // mejor cerca" — the rated place must win, or the list is arbitrary.
+    const unrated = place({
+      id: "osm-close", source: "overpass", name: "裏町食堂",
+      lat: 36.6494, lng: 138.1954, tags: ["food"], openNow: null,
+    });
+    const rated = place({
+      id: "google-500m", source: "google", name: "Poiger",
+      lat: 36.6533, lng: 138.1949, tags: ["food"], rating: 4.5, userRatingsTotal: 124, openNow: true,
+    });
+    const out = scorePlaces([unrated, rated], ctx({ mode: "walking" }));
+    expect(out[0].id).toBe("google-500m");
+    expect(out[0].reasons.some((r) => r.key === "highRated")).toBe(true);
+  });
+
+  it("still prefers a much closer unrated place when the rated one is a trip away", () => {
+    const unrated = place({
+      id: "osm-close", source: "overpass", name: "そば処",
+      lat: 36.6494, lng: 138.1954, tags: ["food"], openNow: null,
+    });
+    const rated = place({
+      id: "google-far", source: "google", name: "Far Bistro",
+      lat: 36.6750, lng: 138.2100, tags: ["food"], rating: 4.5, userRatingsTotal: 124, openNow: true,
+    });
+    const out = scorePlaces([unrated, rated], ctx({ mode: "walking" }));
+    expect(out[0].id).toBe("osm-close");
+  });
+
+  it("avoidCrowds reorders by the crowd rank inside the pool", () => {
+    // Both at the same distance and unrated: only the crowd can separate them.
+    // Levels are the realistic dense-city pair (0.93 / 1.00 saturated), which
+    // is exactly why the ranking rescales onto the pool instead of comparing
+    // against an absolute threshold.
+    const quiet = place({ id: "quiet", name: "静食堂", lat: 36.6500, lng: 138.1955, tags: ["food"] });
+    const busy = place({ id: "busy", name: "人気食堂", lat: 36.6500, lng: 138.1955, tags: ["food"] });
+    const crowd = new Map([["quiet", { level: 0.93 }], ["busy", { level: 1.0 }]]);
+
+    const off = scorePlaces([quiet, busy], ctx());
+    const on = scorePlaces([quiet, busy], ctx({ avoidCrowds: true, crowd }));
+    expect(on[0].id).toBe("quiet"); // quietest first, and it outranks its own no-flag score
+    expect(on[0].score).toBeGreaterThan(off.find((p) => p.id === "quiet")!.score);
+    expect(on[1].id).toBe("busy");
+    // the label quotes the ABSOLUTE level: both are saturated here, so both
+    // read "busy" even though the ranking put one ahead of the other
+    for (const p of on) {
+      expect(p.reasons.some((r) => ["crowdBusy", "crowdMild", "crowdQuiet"].includes(r.key))).toBe(true);
+    }
   });
 });
 
@@ -239,8 +300,12 @@ describe("scorePlaces — profile affinity", () => {
 
   it("clamps affinity", () => {
     const onsen = place({ tags: ["onsen"] });
-    const out = scorePlaces([onsen], ctx({ profile: { onsen: 50 } }))[0];
-    expect(out.score).toBeLessThanOrEqual(100);
+    const boosted = scorePlaces([onsen], ctx({ profile: { onsen: 50 } }))[0];
+    const neutral = scorePlaces([onsen], ctx())[0];
+    // affinity is capped at +12, so a weight of 50 buys the same as 12
+    const capped = scorePlaces([onsen], ctx({ profile: { onsen: 12 } }))[0];
+    expect(boosted.score).toBe(capped.score);
+    expect(boosted.score - neutral.score).toBe(12);
   });
 });
 

@@ -42,8 +42,9 @@ export function proxy(request: NextRequest) {
     // map tiles (OSM/Carto/Esri) + photos proxied from /api/photo (self)
     "img-src 'self' data: blob: https:",
     "font-src 'self' data:",
-    // Supabase REST + realtime (ws) + Vercel Speed Insights beacon
-    `connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.vercel-insights.com${supabaseOrigin ? ` ${supabaseOrigin}` : ""}`,
+    // Supabase REST + realtime (ws) + Vercel Speed Insights beacon +
+    // Wikipedia PageImages (free keyless hero photos)
+    `connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.vercel-insights.com https://*.wikipedia.org${supabaseOrigin ? ` ${supabaseOrigin}` : ""}`,
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

@@ -53,7 +53,9 @@ export default function SearchSuggestions({
         <li className="px-3 py-2.5 text-sm text-muted">{t("search.noResults", { q: query })}</li>
       )}
       {items.map((s, i) => (
-        <li key={s.id} role="option" aria-selected={i === active} id={`tabi-sugg-${i}`}>
+        // id+source: photon/nominatim comparten el fallback a_lat_lng para el
+        // mismo punto con distinto nombre — el id solo colisiona (dup key).
+        <li key={`${s.id}:${s.source}`} role="option" aria-selected={i === active} id={`tabi-sugg-${i}`}>
           <button
             type="button"
             onMouseDown={(e) => {

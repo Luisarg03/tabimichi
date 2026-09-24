@@ -18,8 +18,17 @@ describe("placeUrl", () => {
     );
   });
 
-  it("falls back to a coordinate search without a google id", () => {
+  it("without a google id, searches the NAME (a coordinate pin lands meters off)", () => {
     expect(placeUrl(place({ googlePlaceId: null }))).toBe(
+      "https://www.google.com/maps/search/?api=1&query=Wakasato%20Park"
+    );
+  });
+
+  it("falls back to coordinates only for unnamed rows", () => {
+    expect(placeUrl(place({ googlePlaceId: null, name: "" }))).toBe(
+      "https://www.google.com/maps/search/?api=1&query=36.640900,138.194900"
+    );
+    expect(placeUrl(place({ googlePlaceId: null, name: "   " }))).toBe(
       "https://www.google.com/maps/search/?api=1&query=36.640900,138.194900"
     );
   });
@@ -37,8 +46,14 @@ describe("dirsUrl", () => {
     expect(url).not.toContain("place_id:");
   });
 
-  it("uses coordinates as destination without a google id", () => {
+  it("without a google id, sends the NAME as destination", () => {
     expect(dirsUrl({ lat: 1, lng: 2 }, place({ googlePlaceId: null }), "walking")).toBe(
+      "https://www.google.com/maps/dir/?api=1&origin=1.000000,2.000000&destination=Wakasato%20Park&travelmode=walking"
+    );
+  });
+
+  it("uses coordinates as destination only for unnamed rows", () => {
+    expect(dirsUrl({ lat: 1, lng: 2 }, place({ googlePlaceId: null, name: "" }), "walking")).toBe(
       "https://www.google.com/maps/dir/?api=1&origin=1.000000,2.000000&destination=36.640900,138.194900&travelmode=walking"
     );
   });

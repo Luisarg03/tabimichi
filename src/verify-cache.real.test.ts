@@ -97,7 +97,7 @@ describe.skipIf(!live)("discovery cache against real Postgres", () => {
 
   it("persists keyword provenance and serves the repeat search from cache", async () => {
     const first = await recommend({
-      lat: LAT, lng: LNG, budget: "afternoon", types: ["food"], mode: "walking",
+      lat: LAT, lng: LNG, types: ["food"], mode: "walking",
       keyword: KW, config: CONFIG,
     });
     expect(first.places.length).toBeGreaterThan(0);
@@ -114,7 +114,7 @@ describe.skipIf(!live)("discovery cache against real Postgres", () => {
     expect(rows!.every((r) => r.from_keyword === true)).toBe(true);
 
     const second = await recommend({
-      lat: LAT, lng: LNG, budget: "afternoon", types: ["food"], mode: "walking",
+      lat: LAT, lng: LNG, types: ["food"], mode: "walking",
       keyword: KW, config: CONFIG,
     });
     expect(googleCalls).toBe(googleAfterFirst); // no new Google round trip
@@ -127,7 +127,7 @@ describe.skipIf(!live)("discovery cache against real Postgres", () => {
 
   it("remembers a conclusive empty area and skips the sources on retry", async () => {
     const first = await recommend({
-      lat: EMPTY_LAT, lng: EMPTY_LNG, budget: "afternoon", types: ["park"], mode: "walking",
+      lat: EMPTY_LAT, lng: EMPTY_LNG, types: ["park"], mode: "walking",
       config: CONFIG,
     });
     expect(first.places).toEqual([]);
@@ -142,7 +142,7 @@ describe.skipIf(!live)("discovery cache against real Postgres", () => {
 
     // this retry is the case that cost 20-84 s in production
     const second = await recommend({
-      lat: EMPTY_LAT, lng: EMPTY_LNG, budget: "afternoon", types: ["park"], mode: "walking",
+      lat: EMPTY_LAT, lng: EMPTY_LNG, types: ["park"], mode: "walking",
       config: CONFIG,
     });
     expect(overpassCalls).toBe(overpassAfterFirst);

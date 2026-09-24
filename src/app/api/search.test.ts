@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { NextRequest } from "next/server";
-import { GET as suggestGET } from "@/app/api/search/suggest/route";
+import { GET as suggestGET } from "@/lib/api/routes/search/suggest";
 import type { SearchSuggestion } from "@/lib/types";
 import { setAdminForTests } from "@/lib/cache";
 import { resetRateLimits } from "@/lib/security";

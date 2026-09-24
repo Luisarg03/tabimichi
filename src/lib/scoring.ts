@@ -1,12 +1,12 @@
 import type { Place, Reason, ScoredPlace, WeatherInfo, LatLng, TransportMode } from "./types";
 import { haversineKm, travelMin } from "./geo";
 import { EXPERIENCE_TYPE_MAP } from "./places/taxonomy";
+import { cuisineOf, isLocalCuisine } from "./cuisine";
 import { fmtCount } from "./format";
 import { keywordTokens, matchesKeyword } from "./keywords";
 
 export interface ScoreContext {
   base: LatLng;
-  budgetMin: number;
   weather: WeatherInfo;
   /** destination-local wall clock stored in UTC fields (JST for simulated
    *  dates, longitude-shifted for real ones) — read with getUTC* getters */
@@ -32,10 +32,17 @@ export interface ScoreContext {
   /** M3: learned tag weights from 👍/👎 feedback, e.g. { onsen: 2, food: -1 } */
   profile?: Record<string, number>;
   /** dev tracing: counters of why candidates were dropped (mutated) */
-  stats?: { closed: number; tooFar: number; nameMatches?: number };
+  stats?: { closed: number; tooFar: number; nameMatches?: number; noise?: number };
   /** ids exempt from the closed/too-far hard filters — the pinned searched
    *  place must always show (with a closed badge when closed), never drop */
   pinnedIds?: Set<string>;
+  /** "gente ahora" levels by place id — only consulted when avoidCrowds */
+  crowd?: Map<string, { level: number }>;
+  /** user asked to stay away from the crowds: the crowd estimate MOVES the
+   *  order instead of only decorating the card. Off by default: the estimate
+   *  is a model, not a measurement, and silently reordering by it would
+   *  contradict the app's own honesty rules. */
+  avoidCrowds?: boolean;
 }
 
 function isIndoor(tag: string): boolean {
@@ -81,6 +88,19 @@ export const CHAIN_NAMES = [
   "サイゼリヤ",
   "coco ichibanya",
   "ココイチ",
+  "go go curry",
+  "ゴーゴーカレー",
+  "blue bottle",
+  "komeda",
+  "コメダ",
+  "tully",
+  "タリーズ",
+  "excelsior",
+  "エクセルシオール",
+  "katsukura",
+  "かつくら",
+  "kani douraku",
+  "かに道楽",
   "bikkuri donkey",
   "びっくりドンキー",
   "joyfull",
@@ -125,21 +145,52 @@ export function isHotelName(name: string): boolean {
   return HOTEL_RE.test(name);
 }
 
-/** One-way travel cap (minutes) per transport mode — the day budget must not
- *  be spendable entirely on travel: walking means "around the point" (≤45 min
- *  on foot ≈ 3.4 km), transit ≤90, car ≤120. Also never more than half the
- *  day budget (a lunch outing has no 90-minute trips). */
+/** One-way travel cap (minutes) per transport mode — walking means
+ *  "around the point" (≤45 min on foot ≈ 3.4 km), transit ≤90, car ≤120. */
 const MODE_TRAVEL_CAP_MIN: Record<TransportMode, number> = { walking: 45, transit: 90, car: 120 };
 
 /**
  * Rule-based "base fit" score (0-100) + human-readable reasons.
  * The LLM (next phase) will narrate, not score.
  */
+/** Entertainment venues and lodgings Google types as food because they serve
+ *  something (a karaoke box with a menu, a hotel breakfast room). Reported by
+ *  the user: "Karaoke Pasela" and "Hotel … Dining" showed up as restaurants.
+ *  Checked HERE and not only at discovery because cached rows were stored
+ *  before that filter existed — a cache hit would keep serving them. A place
+ *  tagged onsen is exempt: a ryokan with a bath is a destination, not noise. */
+const FOOD_NOISE_RE = /karaoke|カラオケ|pasela|hotel|ホテル|旅館|ryokan|lodging|bowling|casino|dining/i;
+
+function isFoodNoise(p: Place): boolean {
+  if (!p.tags.includes("food") || p.tags.includes("onsen")) return false;
+  return FOOD_NOISE_RE.test(p.name ?? "");
+}
+
 export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
-  const { base, budgetMin, weather } = ctx;
+  const { base, weather } = ctx;
   const out: ScoredPlace[] = [];
   const kwTokens = ctx.keywordTerms ?? (ctx.keyword ? keywordTokens(ctx.keyword) : []);
-  const travelCap = Math.min(budgetMin * 0.5, MODE_TRAVEL_CAP_MIN[ctx.mode ?? "transit"]);
+  const travelCap = MODE_TRAVEL_CAP_MIN[ctx.mode ?? "transit"];
+
+  // Crowd rank inside this pool. The published level is normalized against the
+  // pool's p95 popularity, so in a dense area EVERY candidate lands at
+  // 0.93–1.00 — an absolute comparison sees no difference to rank. What the
+  // user asks is "which of these is the quiet one HERE", so the level is
+  // rescaled onto this pool's min–max before ranking. The badge the user reads
+  // still shows the honest absolute label; only the ordering uses the spread.
+  let crowdRank: Map<string, number> | undefined;
+  if (ctx.avoidCrowds && ctx.crowd && ctx.crowd.size > 1) {
+    const entries = [...ctx.crowd.entries()];
+    const levels = entries.map(([, c]) => c.level);
+    const lo = Math.min(...levels);
+    const hi = Math.max(...levels);
+    crowdRank = new Map();
+    for (const [id, c] of entries) {
+      // higher crowd level = busier, so the rank must DECREASE with it:
+      // 1 = quietest of the pool, 0 = busiest.
+      crowdRank.set(id, hi > lo ? (hi - c.level) / (hi - lo) : 0.5);
+    }
+  }
 
   for (const p of places) {
     const distanceKm = haversineKm(base, p);
@@ -147,8 +198,14 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
     const pinned = ctx.pinnedIds?.has(p.id) === true;
 
     // hard filters: beyond the discovery radius, or too far to reach on the
-    // day's budget + transport mode (walking is capped tight on purpose).
+    // transport mode (walking is capped tight on purpose).
     // Pinned places are exempt — they are what the user searched for.
+    // A food search never shows karaoke boxes or hotel dining rooms (unless
+    // the user pinned that exact place, in which case intent wins).
+    if (!pinned && isFoodNoise(p)) {
+      if (ctx.stats) ctx.stats.noise = (ctx.stats.noise ?? 0) + 1;
+      continue;
+    }
     if (!pinned && ctx.maxDistKm !== undefined && distanceKm > ctx.maxDistKm) {
       ctx.stats && ctx.stats.tooFar++;
       continue;
@@ -171,23 +228,27 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
 
     let score = 50;
     const reasons: Reason[] = [];
+    const name = p.name ?? "";
 
-    // --- travel (graduated by minutes so close wins over far) ---
+    // --- travel: proximity is the whole promise ("the best of the best
+    // NEAR my point"), but it must NOT outrank quality. Measured in Kanazawa:
+    // with the old flat tail, Go Go Curry (4.1★, 1 min away) came 1st over
+    // Kourin Sushi (4.7★/1502 reviews, 22 min) — the list was "closest and
+    // good enough", which is what a directory does, not a recommender.
+    // The curve now drops hard after 20 min so a 15-point quality gap can win.
     if (t <= 5) {
-      score += 18;
+      score += 25;
       reasons.push({ key: "distanceGood", params: { min: t, modeId: ctx.mode ?? "transit" } });
     } else if (t <= 10) {
-      score += 15;
+      score += 20;
       reasons.push({ key: "distanceGood", params: { min: t, modeId: ctx.mode ?? "transit" } });
     } else if (t <= 20) {
-      score += 12;
+      score += 14;
       reasons.push({ key: "distanceGood", params: { min: t, modeId: ctx.mode ?? "transit" } });
     } else if (t <= 35) {
-      score += 9;
+      score += 4;
     } else if (t <= 60) {
-      score += 6;
-    } else {
-      score += 3;
+      score += 1;
     }
 
     // --- weather fit ---
@@ -264,43 +325,48 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
 
     // --- quality signals: rating shrunk by review count + volume ---
     if (p.rating !== undefined) {
-      // Bayesian shrinkage with a lower prior (3.7/25) and a review cap (500):
-      // a 4.7 local with 50 reviews keeps its edge over a 4.0 chain with 5k
-      // reviews, while a 4.9 with 3 reviews still gets pulled down.
+      // Bayesian shrinkage (prior 3.9 with m=15 reviews) keeps a 4.9-with-3
+      // from beating a 4.5-with-800, but it is shallow enough that a genuine
+      // 4.4/61 still reads as 4.34 — the old m=25 pulled it to 4.30 and lost
+      // to an anonymous OSM row with no rating at all.
       const n = Math.min(p.userRatingsTotal ?? 0, 500);
-      const weighted = n > 0 ? (p.rating * n + 3.7 * 25) / (n + 25) : p.rating;
+      const weighted = n > 0 ? (p.rating * n + 3.9 * 15) / (n + 15) : p.rating;
+      // Two sloped segments that meet at 3.8: continuous (a 4.5 must outrank a
+      // 4.3 instead of sharing a bucket, which is what made the order random),
+      // but steep enough below 3.8 that a mediocre place loses clearly.
+      score +=
+        weighted >= 3.8
+          ? Math.round((weighted - 3.8) * 12) + 4
+          : Math.round((weighted - 3.8) * 26) - 4;
 
-      if (weighted >= 4.6) {
-        score += 16;
-        reasons.push({ key: "highRated", params: { r: weighted.toFixed(1) } });
-      } else if (weighted >= 4.3) {
-        score += 12;
-        reasons.push({ key: "highRated", params: { r: weighted.toFixed(1) } });
-      } else if (weighted >= 4.0) {
-        score += 8;
-      } else if (weighted >= 3.5) {
-        score += 3;
-      } else {
-        score -= 4; // actively penalize mediocre places
-      }
-
-      // review volume: established places, capped so it never dominates
+      // review volume: a log-scaled nudge (1-6) plus a real bonus once a place
+      // is PROVEN (many reviews). "Popular" only announces itself at 1000+.
       const total = p.userRatingsTotal ?? 0;
-      if (total >= 5000) {
-        score += 6;
-        reasons.push({ key: "popular", params: { n: fmtCount(total) } });
-      } else if (total >= 1000) {
-        score += 5;
-        reasons.push({ key: "popular", params: { n: fmtCount(total) } });
-      } else if (total >= 300) {
-        score += 4;
-      } else if (total >= 100) {
-        score += 3;
-      } else if (total >= 30) {
-        score += 2;
-      } else if (total >= 5) {
-        score += 1;
+      if (total > 0) {
+        score += Math.min(6, Math.round(Math.log10(total) * 2));
+        if (total >= 1000) {
+          reasons.push({ key: "popular", params: { n: fmtCount(total) } });
+        }
       }
+      if (weighted >= 4.3) {
+        reasons.push({ key: "highRated", params: { r: weighted.toFixed(1) } });
+      }
+      // Proven quality: a high rating backed by a LOT of reviews is the
+      // strongest signal we have that a place is genuinely good rather than
+      // locally tolerated. Without this, a 4.1★ chain with volume ties a
+      // 4.7★/1502 institution and proximity decides — measured in Kanazawa.
+      if (total >= 500) score += 10;
+      else if (total >= 150) score += 7;
+      else if (total >= 40) score += 4;
+      if (weighted >= 4.5 && total >= 500) {
+        reasons.push({ key: "established", params: { n: fmtCount(total) } });
+      }
+    } else if (!p.wikipedia) {
+      // No rating at all (bare OSM row). Google-rated places must win when
+      // they are anywhere near, which is what "best of the best nearby" means;
+      // this small tax keeps the 250 anonymous rows from burying them while
+      // still letting a landmark row compete.
+      score -= 4;
     }
 
     // --- landmark signal: Wikipedia/Wikidata-documented places are notable
@@ -308,6 +374,20 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
     if (p.wikipedia && !kwHit) {
       score += 6;
       reasons.push({ key: "landmark" });
+    }
+
+    // --- named Japanese speciality ("東京ラーメン 大番", "すし好"): a free,
+    // cache-stable signal that separates a real local kitchen from an
+    // anonymous storefront, which the rating alone cannot do at equal volume.
+    // The kind also feeds the per-kind spread in recommend.ts. ---
+    const cuisine = cuisineOf(name, p.tags);
+    if (!kwHit && cuisine !== "other" && isLocalCuisine(name) && !isChainName(name)) {
+      // +3 is a tiebreaker among unrated rows: at +6 it outranked an actually
+      // well-rated neighbour, which is the opposite of "best of the best".
+      // Chains are excluded: "Go Go Curry" matching the curry rule was enough
+      // to keep a 4.1★ chain above a 4.7★/1502 institution in Kanazawa.
+      score += 3;
+      reasons.push({ key: "localCuisine" });
     }
 
     // --- interest keyword: explicit user intent wins over noise rules ---
@@ -318,7 +398,6 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
 
     // --- noise penalties: chains & hotels (skipped when the keyword matched:
     // the user asked for that exact place, e.g. "Sukiya") ---
-    const name = p.name ?? "";
     if (!kwHit && isChainName(name)) {
       score -= 12;
       reasons.push({ key: "chain" });
@@ -327,6 +406,28 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
     if (!kwHit && isHotelName(name) && !p.tags.includes("onsen")) {
       score -= 12;
       reasons.push({ key: "hotel" });
+    }
+
+    // --- "gente ahora" as a ranking signal (opt-in) ---
+    // The one signal Google Maps does not sell. The level is rescaled onto
+    // THIS pool's spread (see crowdRank above): in a dense area every
+    // candidate is published at 0.93 or 1.00, where an absolute comparison
+    // sees almost no difference to rank. Ordering uses the rescaled rank; the
+    // reason shown to the user quotes the ABSOLUTE level, so the card and the
+    // number can never contradict each other.
+    //
+    // ponytail: with only two distinct levels in the pool this separates two
+    // tiers, not a gradient. Upgrade by deriving real per-hour footfall from
+    // the crowd model (curves.ts) instead of the pool-normalized popularity.
+    if (ctx.avoidCrowds && ctx.crowd && crowdRank) {
+      const pct = crowdRank.get(p.id);
+      const level = ctx.crowd.get(p.id)?.level;
+      if (pct !== undefined && level !== undefined) {
+        score += Math.round(-16 + 24 * pct);
+        reasons.push({
+          key: level < 0.55 ? "crowdQuiet" : level < 0.85 ? "crowdMild" : "crowdBusy",
+        });
+      }
     }
 
     if (p.openNow === true) {
@@ -363,10 +464,15 @@ export function scorePlaces(places: Place[], ctx: ScoreContext): ScoredPlace[] {
 
     out.push({
       ...p,
-      score: Math.max(0, Math.min(100, Math.round(score))),
+      // Kept UNCLAMPED: the top candidates all earn well over 100, so clamping
+      // here made the first twenty tie at exactly 100 and threw away every
+      // signal that separated them (this is what made the order look random).
+      // The UI already renders the ring against 100 and floors the overflow.
+      score: score,
       distanceKm: Math.round(distanceKm * 10) / 10,
       travelMin: t,
       reasons,
+      ...(cuisine !== "other" ? { cuisine } : {}),
     });
   }
 

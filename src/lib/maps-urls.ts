@@ -22,12 +22,17 @@ export interface MapsPlace {
 
 const f6 = (n: number): string => n.toFixed(6);
 
-/** `&key=name&keyId=id` when the place id is known, else `&key=lat,lng`. */
+/** `&key=name&keyId=id` when the id is known, else the name (Google resolves
+ *  the business — a raw coordinate query only drops a pin meters off),
+ *  else `&key=lat,lng` for unnamed rows. */
 function dest(place: MapsPlace, key: string, idKey: string): string {
   if (place.googlePlaceId) {
     return `&${key}=${encodeURIComponent(place.name)}&${idKey}=${place.googlePlaceId}`;
   }
-  return `&${key}=${f6(place.lat)},${f6(place.lng)}`;
+  const q = place.name?.trim();
+  return q
+    ? `&${key}=${encodeURIComponent(q)}`
+    : `&${key}=${f6(place.lat)},${f6(place.lng)}`;
 }
 
 /** Google Maps search URL that opens the place DIRECTLY (name + place id),
@@ -36,7 +41,9 @@ export function placeUrl(place: MapsPlace): string {
   return `https://www.google.com/maps/search/?api=1${dest(place, "query", "query_place_id")}`;
 }
 
-/** Directions link: origin coords → destination (place id or coords). */
+/** Directions link: origin coords → destination (place id, name, or coords).
+ *  Same priority as placeUrl: an id resolves exactly, a name gets Google's own
+ *  listing as destination, coordinates are the unnamed fallback. */
 export function dirsUrl(
   origin: { lat: number; lng: number },
   place: MapsPlace,
