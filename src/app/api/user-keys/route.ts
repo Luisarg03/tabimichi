@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseForUser } from "@/lib/supabase/server";
-import { extractToken, requireUser } from "@/lib/supabase/auth";
+import { requireUser } from "@/lib/supabase/auth";
 import { enforceRateLimit, validateEndpoint } from "@/lib/security";
 import { isKnownGuideModel } from "@/lib/llm/models";
 import type { AppConfig } from "@/lib/settings";
@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
   const limited = enforceRateLimit(req, "user-keys", { perIp: 30, perUser: 60 });
   if (limited) return limited;
 
-  const token = extractToken(req)!;
+  const token = auth.token;
   try {
     const { data: keys, error } = await getSupabaseForUser(token).from("api_keys").select(
       "key_name, key_value"
@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid json" }, { status: 400 });
   }
 
-  const token = extractToken(req)!;
+  const token = auth.token;
   try {
     const client = getSupabaseForUser(token);
 

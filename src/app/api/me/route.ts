@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseForUser } from "@/lib/supabase/server";
-import { extractToken, verifyUser } from "@/lib/supabase/auth";
+import { requireUser } from "@/lib/supabase/auth";
 import { enforceRateLimit } from "@/lib/security";
 
 export const runtime = "nodejs";
@@ -11,14 +11,12 @@ export const runtime = "nodejs";
  * The profile row is read with the user's JWT; RLS restricts it to the owner.
  */
 export async function GET(req: NextRequest) {
-  const token = extractToken(req);
-  if (!token) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const auth = await requireUser(req);
+  if ("error" in auth) return auth.error;
+  const { user, token } = auth;
 
   const limited = enforceRateLimit(req, "me", { perIp: 60, perUser: 120 });
   if (limited) return limited;
-
-  const user = await verifyUser(token);
-  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const { data: profile } = await getSupabaseForUser(token)
     .from("profiles")
