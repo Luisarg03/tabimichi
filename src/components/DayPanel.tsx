@@ -8,7 +8,6 @@ import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import SearchSuggestions from "@/components/SearchSuggestions";
 import Icon from "@/components/ui/Icon";
-import IconButton from "@/components/ui/IconButton";
 import Segmented from "@/components/ui/Segmented";
 import Chip from "@/components/ui/Chip";
 
@@ -324,14 +323,15 @@ export default function DayPanel({
             onHover={setSuggActive}
           />
         </div>
-        <IconButton
+        <button
           onClick={useGps}
           disabled={locating}
-          label={t("panel.useMyLocation")}
-          className="shrink-0"
+          aria-label={t("panel.useMyLocation")}
+          title={t("panel.useMyLocation")}
+          className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-border bg-surface text-fg shadow-soft transition-colors hover:bg-fg/5 active:bg-fg/10 md:min-h-[40px] md:min-w-[40px] shrink-0"
         >
           <Icon name="locate" />
-        </IconButton>
+        </button>
       </div>
       {geocodeError && <p className="mt-1 text-xs text-bad">{t("status.geocodeError")}</p>}
       {location && (
@@ -438,9 +438,9 @@ export default function DayPanel({
                 {location ? location.label : t("panel.where")}
               </span>
             </div>
-            <IconButton label={t("detail.close")} onClick={onClose} className="m-1 shrink-0">
+            <button onClick={onClose} aria-label={t("detail.close")} title={t("detail.close")} className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-border bg-surface text-fg shadow-soft transition-colors hover:bg-fg/5 active:bg-fg/10 md:min-h-[40px] md:min-w-[40px] m-1 shrink-0">
               <Icon name="close" size={16} />
-            </IconButton>
+            </button>
           </>
         ) : (
           <>
