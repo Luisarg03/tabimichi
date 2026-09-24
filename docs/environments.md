@@ -40,7 +40,7 @@ pool de Preview. Configurar una sola vez en el dashboard:
 
 | Secret | Uso |
 |--------|-----|
-| `VERCEL_TOKEN` / `VERCEL_ORG_ID` / `VERCEL_PROJECT_ID` | `deploy.yml` (IDs buenos en la nota Bitwarden `Tabi admin`) |
+| `VERCEL_TOKEN` / `VERCEL_ORG_ID` / `VERCEL_PROJECT_ID` | `deploy.yml` (los tres viven en la nota Bitwarden `Tabi admin`; si el deploy falla con `Could not retrieve Project Settings`, el token es el primer sospechoso) |
 | `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | jobs `build` (valores sandbox; el build solo necesita presencia) |
 | `SUPABASE_ACCESS_TOKEN` (opcional) | dry-run de migraciones en `staging` |
 
