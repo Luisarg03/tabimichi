@@ -18,9 +18,14 @@ export async function GET(req: NextRequest) {
   const limited = enforceRateLimit(req, "me", { perIp: 60, perUser: 120 });
   if (limited) return limited;
 
+  // The id filter is REQUIRED, not redundant with RLS: the policy also lets an
+  // admin read every profile, so without it `maybeSingle()` would see many rows,
+  // error out, and the route would report the fallback role "user" — which hid
+  // the admin console from the very accounts meant to use it.
   const { data: profile } = await getSupabaseForUser(token)
     .from("profiles")
     .select("display_name, role")
+    .eq("id", user.id)
     .maybeSingle();
 
   return NextResponse.json({

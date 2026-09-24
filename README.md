@@ -44,6 +44,68 @@ No keys needed to try it — discovery falls back to free sources (Overpass + lo
 
 ---
 
+## 🔐 Secrets (Bitwarden)
+
+**Bitwarden is the single source of truth.** The `.env` files are generated artifacts — never hand-edit them, and never let `vercel env pull` write one.
+
+Everything lives in a `Tabi` folder, in **two kinds of entry that must not be mixed**:
+
+| Vault item | Holds | Read by |
+|------------|-------|---------|
+| `Tabi dev (local)` | runtime config → `.env.local` | Next.js in dev |
+| `Tabi sandbox` | runtime config → `.env.sandbox` | Vercel **Preview** |
+| `Tabi production` | runtime config → `.env.production` | Vercel **Production** |
+| `Tabi admin` | `VERCEL_TOKEN`, org/project IDs | CI, scripts — **never an app** |
+
+The split is the point. Runtime config **differs per environment** and is read by the deployed app; management credentials are **the same for all of them** and are read by tooling. Copying `VERCEL_TOKEN` into all three environment notes is how you end up rotating one secret in four places — and missing one.
+
+`Tabi admin` also keeps the *correct* Vercel IDs: `VERCEL_ORG_ID=team_CvqikJBhxLyKj34X1r3nOwt6` and `VERCEL_PROJECT_ID=prj_F0T4Zm9xv3Wik3O4NQ9SvuL3ct5g`. Deploys failed once already because CI held a different pair.
+
+Each note is a **single secure note** whose body is the entire payload — one `KEY=value` per line, nothing else:
+
+```ini
+NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOi...
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOi...
+```
+
+Names are flat, not `Tabi/local`: `bw get` matches the item's own name, never its folder path, so a slash would imply a hierarchy the CLI does not resolve.
+
+> **Why one note and not one item per secret.** `bw get` exposes no getter for custom fields, and `bw get password` requires a Login item (`"Not a login."` otherwise) — so a per-secret layout costs one call *plus* a name→variable mapping per variable, while `bw get notes` returns the whole payload in one. `ddot`, which exists only to render `.env` files from password managers, does the same thing (`bw://myapp-dev` = one secure note holding the `.env`).
+
+```bash
+pnpm secrets:notes               # create/update the notes from the .env files
+pnpm secrets                     # write .env.local from "Tabi dev (local)"
+pnpm secrets sandbox             # write .env.sandbox from "Tabi sandbox"
+pnpm secrets production --check  # verify, change nothing (exit 1 on drift)
+```
+
+`secrets:notes` is the only thing that *writes* to the vault, and it never puts a secret on a command line: the item JSON goes to `bw` through stdin. It takes `all`, `local`, `sandbox`, `production` or `admin`.
+
+The reader prompts for your master password (`bw unlock`; export `BW_SESSION` to skip it), then refuses to write anything if the note would not survive dotenv intact — see below.
+
+Requires `bw` on `PATH` ([install](https://bitwarden.com/help/cli/)) and `jq` for `secrets:notes`. `.env*` stays gitignored, as do `.bw-session.tmp` and `*.token.tmp`.
+
+### Why the values come out quoted
+
+dotenv — which is what `@next/env` uses — ends an **unquoted** value at the first `#`, with or without a space before it, and trims surrounding whitespace:
+
+```ini
+SUPABASE_SERVICE_ROLE_KEY=abc#def     # loads as "abc"
+PASSPHRASE=  con espacios             # loads as "con espacios"
+```
+
+A secret key containing `#` would load silently truncated, with no error anywhere. So the renderer re-emits every value double-quoted, which makes the round trip exact:
+
+```ini
+SUPABASE_SERVICE_ROLE_KEY="abc#def"
+PASSPHRASE="  con espacios"
+```
+
+Quoting is only correct if it survives the real parser, so `pnpm secrets:test` round-trips rendered notes through dotenv 16.3.1's parser — the copy bundled in `@next/env` — and asserts the loaded values equal what the note said.
+
+---
+
 ## 🔑 API keys (optional)
 
 | Service | Purpose | Cost |

@@ -145,7 +145,7 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
       - name: Smoke E2E against production build
         run: |
-          (pnpm start -- -p 3000 >/tmp/next.log 2>&1 & echo $! >/tmp/next.pid)
+          (pnpm exec next start -p 3000 >/tmp/next.log 2>&1 & echo $! >/tmp/next.pid)
           for i in $(seq 1 60); do
             curl -sf http://localhost:3000/ >/dev/null && break
             sleep 2
