@@ -9,7 +9,6 @@ import LocaleToggle from "@/components/LocaleToggle";
 import SimTabs from "@/components/SimTabs";
 import BottomSheet from "@/components/BottomSheet";
 import MobileDetailSheet from "@/components/MobileDetailSheet";
-import SearchOverlay from "@/components/SearchOverlay";
 import PlaceDetail from "@/components/PlaceDetail";
 import Icon from "@/components/ui/Icon";
 import { useI18n } from "@/lib/i18n";
@@ -562,20 +561,24 @@ export default function HomePage() {
       {/* mobile search overlay (hidden on desktop) */}
       {searchOpen && (
         <div className="md:hidden">
-          <SearchOverlay
-            location={location}
-            loading={loading}
-            onDiscover={handleDiscover}
-            onClose={() => setSearchOpen(false)}
-            budget={budget}
-            mode={mode}
-            types={types}
-            keyword={keyword}
-            onBudgetChange={setBudget}
-            onModeChange={setMode}
-            onTypesChange={setTypes}
-            onKeywordChange={setKeyword}
-          />
+          <div className="fixed inset-0 z-40 flex flex-col bg-bg tabi-safe-top tabi-safe-x tabi-safe-bottom">
+            <div className="tabi-rise-in min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
+              <DayPanel
+                initialLocation={location}
+                loading={loading}
+                onDiscover={handleDiscover}
+                onClose={() => setSearchOpen(false)}
+                budget={budget}
+                mode={mode}
+                types={types}
+                keyword={keyword}
+                onBudgetChange={setBudget}
+                onModeChange={setMode}
+                onTypesChange={setTypes}
+                onKeywordChange={setKeyword}
+              />
+            </div>
+          </div>
         </div>
       )}
     </div>
