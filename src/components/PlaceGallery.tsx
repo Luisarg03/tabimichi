@@ -28,6 +28,9 @@ export default function PlaceGallery({
   const prev = () => setActiveIdx((i) => (i - 1 + photoRefs.length) % photoRefs.length);
   const next = () => setActiveIdx((i) => (i + 1) % photoRefs.length);
 
+  const navBtn =
+    "absolute top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-xl text-white backdrop-blur-sm transition-colors hover:bg-black/65";
+
   return (
     <div
       className="relative overflow-hidden bg-slate-100"
@@ -71,28 +74,28 @@ export default function PlaceGallery({
       )}
       {photoRefs.length > 1 && (
         <>
-          <span
+          <button
+            type="button"
             onClick={(e) => {
               e.stopPropagation();
               prev();
             }}
-            className="absolute left-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-xl text-white backdrop-blur-sm transition-colors hover:bg-black/65"
-            style={{ cursor: "pointer" }}
-            title="←"
+            aria-label="←"
+            className={`${navBtn} left-2`}
           >
             ‹
-          </span>
-          <span
+          </button>
+          <button
+            type="button"
             onClick={(e) => {
               e.stopPropagation();
               next();
             }}
-            className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-xl text-white backdrop-blur-sm transition-colors hover:bg-black/65"
-            style={{ cursor: "pointer" }}
-            title="→"
+            aria-label="→"
+            className={`${navBtn} right-2`}
           >
             ›
-          </span>
+          </button>
           <span className="absolute bottom-2 right-2 rounded-full bg-black/50 px-2 py-0.5 text-xs font-medium text-white backdrop-blur-sm">
             {activeIdx + 1}/{photoRefs.length}
           </span>
