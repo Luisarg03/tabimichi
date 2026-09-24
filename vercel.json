@@ -1,8 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "nextjs",
-  "buildCommand": "pnpm run build",
-  "outputDirectory": ".next",
   "installCommand": "pnpm install --frozen-lockfile",
   "regions": ["gru1"],
   "functions": {
@@ -10,7 +7,6 @@
       "maxDuration": 30
     }
   },
-  "crons": [],
   "headers": [
     {
       "source": "/api/((?!photo$).*)",
