@@ -1,10 +1,14 @@
 name: Deploy
 
+# develop / staging → Vercel Preview (vars = sandbox).
+# main → Vercel Production (vars = prod), automático.
+# Los gates de calidad viven en develop.yml / staging.yml / ci.yml;
+# proteger las ramas (ver docs/environments.md) para exigirlos en verde.
 on:
   push:
-    branches: [main]
+    branches: [main, staging, develop]
   pull_request:
-    branches: [main]
+    branches: [main, staging, develop]
 
 env:
   VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
@@ -13,7 +17,7 @@ env:
 jobs:
   deploy-preview:
     name: Deploy Preview
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref != 'refs/heads/main')
     runs-on: ubuntu-latest
     permissions:
       deployments: write
@@ -29,6 +33,7 @@ jobs:
         id: vercel
 
       - uses: actions/github-script@v7
+        if: github.event_name == 'pull_request'
         with:
           script: |
             github.rest.issues.createComment({
@@ -44,7 +49,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: production
-      url: https://tabimichi-hiro-arg.vercel.app
+      url: https://tabi-cyan.vercel.app
     steps:
       - uses: actions/checkout@v4
       - uses: amondnet/vercel-action@v42
