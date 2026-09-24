@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseForUser } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/supabase/auth";
+import { KEY_MAP, REVERSE_MAP } from "@/lib/user-keys";
 import { enforceRateLimit, validateEndpoint } from "@/lib/security";
 import { isKnownGuideModel } from "@/lib/llm/models";
 import type { AppConfig } from "@/lib/settings";
@@ -18,24 +19,6 @@ export const runtime = "nodejs";
  * POST body: { <field>: "<value>" | "" } — an empty string removes the key.
  * Values are trimmed and capped at 2048 chars.
  */
-
-const KEY_MAP: Record<string, keyof AppConfig> = {
-  google_places: "googlePlacesApiKey",
-  geoapify: "geoapifyApiKey",
-  overpass_endpoint: "overpassEndpoint",
-  opencode_zen: "opencodeApiKey",
-  opencode_go: "opencodeGoApiKey",
-  guide_model: "guideModel",
-};
-
-const REVERSE_MAP: Record<keyof AppConfig, string> = {
-  googlePlacesApiKey: "google_places",
-  geoapifyApiKey: "geoapify",
-  overpassEndpoint: "overpass_endpoint",
-  opencodeApiKey: "opencode_zen",
-  opencodeGoApiKey: "opencode_go",
-  guideModel: "guide_model",
-};
 
 const MAX_VALUE_LENGTH = 2048;
 
