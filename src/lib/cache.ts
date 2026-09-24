@@ -30,7 +30,8 @@ const PHOTO_BUCKET = "photos";
  *  `photos_verified` and any column added later. Keep in sync with it. */
 const PLACE_COLUMNS =
   "id,source,name,lat,lng,tags,rating,user_ratings_total,price_level," +
-  "open_now,address,photo_ref,photo_refs,url,fetched_at,wikipedia,from_keyword";
+  "open_now,address,photo_ref,photo_refs,url,fetched_at,wikipedia,from_keyword," +
+  "google_place_id";
 
 /**
  * Empty-area markers live in the same table as discovery rows: one row per
@@ -78,6 +79,7 @@ function rowToPlace(r: Record<string, unknown>): Place {
     photoRef: photoRefs?.[0] ?? (r.photo_ref ? String(r.photo_ref) : undefined),
     photoRefs,
     wikipedia: r.wikipedia ? String(r.wikipedia) : undefined,
+    googlePlaceId: r.google_place_id ? String(r.google_place_id) : undefined,
     url: r.url ? String(r.url) : undefined,
     fromKeyword: r.from_keyword === true,
   };
@@ -99,6 +101,7 @@ function placeRow(p: Place): Record<string, unknown> {
     photo_ref: p.photoRef ?? null,
     photo_refs: p.photoRefs && p.photoRefs.length > 0 ? JSON.stringify(p.photoRefs) : null,
     wikipedia: p.wikipedia ?? null,
+    google_place_id: p.googlePlaceId ?? null,
     url: p.url ?? null,
     fetched_at: new Date().toISOString(),
     from_keyword: p.fromKeyword === true,

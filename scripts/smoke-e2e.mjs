@@ -34,7 +34,7 @@ async function main() {
   console.log("recommend (real mode):");
   await seedPlaceCache(34.7048, 135.4944, "smoke-seed");
   let r = await post("/api/recommend", {
-    lat: 34.7048, lng: 135.4944, budget: "afternoon", types: [], mode: "walking", lang: "es",
+    lat: 34.7048, lng: 135.4944, types: [], mode: "walking", lang: "es",
   });
   check("200", r.status === 200, `status ${r.status}`);
   check("places > 0", (r.json?.places ?? []).length > 0);
@@ -46,7 +46,7 @@ async function main() {
   console.log("recommend (simulation):");
   const at = async (iso) =>
     (await post("/api/recommend", {
-      lat: 34.7048, lng: 135.4944, budget: "afternoon", types: ["food"], mode: "walking", lang: "es", now: iso,
+      lat: 34.7048, lng: 135.4944, types: ["food"], mode: "walking", lang: "es", now: iso,
     })).json;
   const sim9 = await at("2026-08-16T09:00:00.000Z");
   const sim3 = await at("2026-08-16T03:00:00.000Z");
@@ -72,7 +72,7 @@ async function main() {
     console.log("   ⚠ keyword skipped — needs GOOGLE_PLACES_API_KEY (keyword discovery is Google Text Search only)");
   } else {
     const kw = (await post("/api/recommend", {
-      lat: 35.681619, lng: 139.7653303, budget: "afternoon", types: [], mode: "transit", lang: "es",
+      lat: 35.681619, lng: 139.7653303, types: [], mode: "transit", lang: "es",
       keyword: "pokemon",
     })).json;
     check("keyword request 200 + places", kw && (kw.places ?? []).length > 0);
@@ -117,7 +117,7 @@ async function main() {
   // 6. narrate (async phase, best-effort: provider may be rate-limited)
   console.log("narrate (best-effort):");
   const narr = await post("/api/narrate", {
-    lat: 34.7048, lng: 135.4944, budget: "afternoon", mode: "walking", types: [],
+    lat: 34.7048, lng: 135.4944, mode: "walking", types: [],
     lang: "es", places: (r.json?.places ?? []).slice(0, 3).map((p) => ({
       id: p.id, name: p.name, distanceKm: p.distanceKm, travelMin: p.travelMin,
       rating: p.rating, tags: p.tags,

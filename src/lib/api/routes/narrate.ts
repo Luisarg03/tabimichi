@@ -14,7 +14,6 @@ export const maxDuration = 60;
 interface NarrateBody {
   lat: number;
   lng: number;
-  budget: "lunch" | "afternoon" | "full_day";
   mode: "walking" | "transit" | "car";
   types: string[];
   lang?: string;
@@ -32,12 +31,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid json" }, { status: 400 });
   }
 
-  const { lat, lng, budget, mode = "transit", types = [], lang = "es", now, traceId, keyword, places = [] } = body ?? {};
+  const { lat, lng, mode = "transit", types = [], lang = "es", now, traceId, keyword, places = [] } = body ?? {};
   if (!Number.isFinite(lat) || !Number.isFinite(lng) || !Array.isArray(places) || places.length === 0) {
     return NextResponse.json({ error: "lat/lng + places required" }, { status: 400 });
-  }
-  if (!["lunch", "afternoon", "full_day"].includes(budget)) {
-    return NextResponse.json({ error: "invalid budget" }, { status: 400 });
   }
   if (!["walking", "transit", "car"].includes(mode)) {
     return NextResponse.json({ error: "invalid mode" }, { status: 400 });
@@ -65,13 +61,13 @@ export async function POST(req: NextRequest) {
 
     const startedAt = performance.now();
     const { narratives, summary, provider, model } = await narrateTop({
-      places: scored, weather, budget, mode,
+      places: scored, weather, mode,
       lang: lang === "en" ? "en" : "es", types, keyword,
       config,
     });
 
     logEntry({
-      type: "narrate", traceId, lat, lng, budget, mode, lang, keyword,
+      type: "narrate", traceId, lat, lng, mode, lang, keyword,
       sim: simulated !== null, provider, model, narratives: narratives.size,
       summary: Boolean(summary), ms: Math.round(performance.now() - startedAt),
     });

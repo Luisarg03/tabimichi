@@ -14,7 +14,8 @@
     "secrets": "bash scripts/secrets.sh",
     "secrets:notes": "bash scripts/secrets-notes.sh",
     "secrets:check": "bash scripts/secrets.sh --check",
-    "secrets:test": "node --test scripts/secrets.test.mjs"
+    "secrets:test": "node --test scripts/secrets.test.mjs",
+    "bench:ranking": "vitest run --config vitest.bench.config.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.3",

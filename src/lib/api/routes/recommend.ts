@@ -17,12 +17,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid json" }, { status: 400 });
   }
 
-  const { lat, lng, budget, types = [], radiusKm, mode, lang, now, keyword, pin } = body ?? {};
+  const { lat, lng, types = [], radiusKm, mode, lang, now, keyword, pin, avoidCrowds, poolLimit } = body ?? {};
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
     return NextResponse.json({ error: "lat/lng required" }, { status: 400 });
-  }
-  if (!["lunch", "afternoon", "full_day"].includes(budget)) {
-    return NextResponse.json({ error: "invalid budget" }, { status: 400 });
   }
   if (mode !== undefined && !["walking", "transit", "car"].includes(mode)) {
     return NextResponse.json({ error: "invalid mode" }, { status: 400 });
@@ -61,7 +58,6 @@ export async function POST(req: NextRequest) {
     const result = await recommend({
       lat,
       lng,
-      budget,
       types,
       radiusKm,
       mode,
@@ -69,6 +65,10 @@ export async function POST(req: NextRequest) {
       now,
       keyword: typeof keyword === "string" ? keyword.trim() : undefined,
       pin,
+      avoidCrowds: avoidCrowds === true,
+      // debug knob used by scripts/ranking.bench.ts to expose the full ranked
+      // pool instead of the 30 the UI shows
+      ...(Number.isFinite(poolLimit) ? { poolLimit: Number(poolLimit) } : {}),
       config,
       userId,
     });

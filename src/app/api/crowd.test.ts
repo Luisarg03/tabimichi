@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
-import { POST as reportPOST } from "@/app/api/crowd/report/route";
+import { POST as reportPOST } from "@/lib/api/routes/crowd/report";
 import { getLocalCrowdReports } from "@/lib/db";
 import { isolatedStore } from "@/test-utils/helpers";
 
