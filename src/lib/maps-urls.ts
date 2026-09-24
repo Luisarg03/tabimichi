@@ -2,14 +2,14 @@
  * Google Maps universal URL builders.
  *
  * Place ids must be passed through the dedicated `query_place_id` /
- * `destination_place_id` parameters: the legacy formats (`place/?q=place_id:…`
+ * `destination_place_id` parameters: the legacy formats (`place/?q=place_id:…
  * and `destination=place_id:…`) are no longer resolved by Google Maps — they
  * just drop the raw id into the search box. place ids are URL-safe
  * ([A-Za-z0-9_-]), so no encoding is needed for the id itself; the human
  * query/name IS encoded.
  */
 
-export type MapsMode = "walking" | "transit" | "car" | string;
+export type MapsMode = string;
 
 export interface MapsPlace {
   /** place name — used as the human query/destination label */
@@ -20,17 +20,20 @@ export interface MapsPlace {
   lng: number;
 }
 
+const f6 = (n: number): string => n.toFixed(6);
+
+/** `&key=name&keyId=id` when the place id is known, else `&key=lat,lng`. */
+function dest(place: MapsPlace, key: string, idKey: string): string {
+  if (place.googlePlaceId) {
+    return `&${key}=${encodeURIComponent(place.name)}&${idKey}=${place.googlePlaceId}`;
+  }
+  return `&${key}=${f6(place.lat)},${f6(place.lng)}`;
+}
+
 /** Google Maps search URL that opens the place DIRECTLY (name + place id),
  *  or a plain coordinate search for OSM-only places. */
 export function placeUrl(place: MapsPlace): string {
-  const base = "https://www.google.com/maps/search/?api=1";
-  if (place.googlePlaceId) {
-    return (
-      `${base}&query=${encodeURIComponent(place.name)}` +
-      `&query_place_id=${place.googlePlaceId}`
-    );
-  }
-  return `${base}&query=${place.lat.toFixed(6)},${place.lng.toFixed(6)}`;
+  return `https://www.google.com/maps/search/?api=1${dest(place, "query", "query_place_id")}`;
 }
 
 /** Directions link: origin coords → destination (place id or coords). */
@@ -40,18 +43,10 @@ export function dirsUrl(
   mode: MapsMode
 ): string {
   const travelMode = mode === "car" ? "driving" : mode; // walking | transit | driving
-  const base =
-    "https://www.google.com/maps/dir/?api=1" +
-    `&origin=${origin.lat.toFixed(6)},${origin.lng.toFixed(6)}`;
-  if (place.googlePlaceId) {
-    return (
-      `${base}&destination=${encodeURIComponent(place.name)}` +
-      `&destination_place_id=${place.googlePlaceId}` +
-      `&travelmode=${travelMode}`
-    );
-  }
   return (
-    `${base}&destination=${place.lat.toFixed(6)},${place.lng.toFixed(6)}` +
+    `https://www.google.com/maps/dir/?api=1` +
+    `&origin=${f6(origin.lat)},${f6(origin.lng)}` +
+    `${dest(place, "destination", "destination_place_id")}` +
     `&travelmode=${travelMode}`
   );
 }

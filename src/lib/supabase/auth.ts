@@ -39,22 +39,21 @@ export function forbidden(): NextResponse {
 /** Resolve the caller of a request, or a 401 response. */
 export async function requireUser(
   req: NextRequest
-): Promise<{ user: User } | { error: NextResponse }> {
+): Promise<{ user: User; token: string } | { error: NextResponse }> {
   const token = extractToken(req);
   if (!token) return { error: unauthorized() };
   const user = await verifyUser(token);
   if (!user) return { error: unauthorized() };
-  return { user };
+  return { user, token };
 }
 
 /** Resolve the caller and confirm they are an admin, or a 401/403 response. */
 export async function requireAdmin(
   req: NextRequest
 ): Promise<{ user: User } | { error: NextResponse }> {
-  const token = extractToken(req);
-  if (!token) return { error: unauthorized() };
-  const user = await verifyUser(token);
-  if (!user) return { error: unauthorized() };
+  const auth = await requireUser(req);
+  if ("error" in auth) return auth;
+  const user = auth.user;
 
   // Role check runs with the service-role client (bypasses RLS — this is the
   // authoritative source, never trust a client-supplied role claim).

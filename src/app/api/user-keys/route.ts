@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseForUser } from "@/lib/supabase/server";
-import { extractToken, requireUser } from "@/lib/supabase/auth";
+import { requireUser } from "@/lib/supabase/auth";
+import { KEY_MAP, REVERSE_MAP } from "@/lib/user-keys";
 import { enforceRateLimit, validateEndpoint } from "@/lib/security";
 import { isKnownGuideModel } from "@/lib/llm/models";
 import type { AppConfig } from "@/lib/settings";
@@ -19,24 +20,6 @@ export const runtime = "nodejs";
  * Values are trimmed and capped at 2048 chars.
  */
 
-const KEY_MAP: Record<string, keyof AppConfig> = {
-  google_places: "googlePlacesApiKey",
-  geoapify: "geoapifyApiKey",
-  overpass_endpoint: "overpassEndpoint",
-  opencode_zen: "opencodeApiKey",
-  opencode_go: "opencodeGoApiKey",
-  guide_model: "guideModel",
-};
-
-const REVERSE_MAP: Record<keyof AppConfig, string> = {
-  googlePlacesApiKey: "google_places",
-  geoapifyApiKey: "geoapify",
-  overpassEndpoint: "overpass_endpoint",
-  opencodeApiKey: "opencode_zen",
-  opencodeGoApiKey: "opencode_go",
-  guideModel: "guide_model",
-};
-
 const MAX_VALUE_LENGTH = 2048;
 
 export async function GET(req: NextRequest) {
@@ -46,7 +29,7 @@ export async function GET(req: NextRequest) {
   const limited = enforceRateLimit(req, "user-keys", { perIp: 30, perUser: 60 });
   if (limited) return limited;
 
-  const token = extractToken(req)!;
+  const token = auth.token;
   try {
     const { data: keys, error } = await getSupabaseForUser(token).from("api_keys").select(
       "key_name, key_value"
@@ -85,7 +68,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid json" }, { status: 400 });
   }
 
-  const token = extractToken(req)!;
+  const token = auth.token;
   try {
     const client = getSupabaseForUser(token);
 

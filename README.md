@@ -63,10 +63,8 @@ Users can also set their own keys in the app (**⚙️ Ajustes** → API keys) �
 ## 🚀 Deploy to Vercel
 
 ```bash
-bash scripts/setup-vercel.sh    # guided: login + env vars
-```
-
-Or manually: `vercel link` → add env vars → `vercel --prod`. Preview deploys are created automatically for every PR.
+vercel link    # then add env vars → vercel --prod
+``` Preview deploys are created automatically for every PR.
 
 ---
 

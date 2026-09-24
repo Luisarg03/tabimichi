@@ -9,9 +9,7 @@ import LocaleToggle from "@/components/LocaleToggle";
 import SimTabs from "@/components/SimTabs";
 import BottomSheet from "@/components/BottomSheet";
 import MobileDetailSheet from "@/components/MobileDetailSheet";
-import SearchOverlay from "@/components/SearchOverlay";
-import PlaceDetailPanel from "@/components/PlaceDetailPanel";
-import BrandPill from "@/components/BrandPill";
+import PlaceDetail from "@/components/PlaceDetail";
 import Icon from "@/components/ui/Icon";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
@@ -423,7 +421,15 @@ export default function HomePage() {
       {/* ============ DESKTOP (md+) ============ */}
       <div className="pointer-events-none absolute inset-0 z-20 hidden md:block">
         {/* brand + time simulation pills (prototype .brand-pill / .sim-pill) */}
-        <BrandPill className="pointer-events-auto absolute left-3 top-3" />
+        <div className="flex items-center gap-2 rounded-full border border-border bg-surface/94 px-3 py-2 shadow-soft backdrop-blur-md pointer-events-auto absolute left-3 top-3">
+          <span className="grid h-[30px] w-[30px] place-items-center rounded-[9px] bg-verm font-display text-[15px] font-bold text-surface shadow-[0_2px_6px_oklch(46%_0.16_30/0.35)]">
+            旅
+          </span>
+          <span className="font-display text-[15px] font-bold tracking-[-0.01em] text-fg">
+            Tabimichi{" "}
+            <small className="ml-0.5 text-[12px] font-medium text-muted">旅道</small>
+          </span>
+        </div>
         {/* settings + locale + time simulation (top-right cluster) */}
         <div className="pointer-events-auto absolute right-3 top-3 flex items-center gap-1.5">
           <LocaleToggle />
@@ -465,16 +471,21 @@ export default function HomePage() {
       {/* right place-detail panel (desktop) */}
       {selected && origin && (
         <div className="hidden md:block">
-          <PlaceDetailPanel
-            place={selected}
-            origin={origin}
-            mode={mode}
-            narratedBy={result?.narratedBy}
-            model={result?.model}
-            voted={votes[selected.id] ?? null}
-            onFeedback={handleFeedback}
-            onClose={closeDetail}
-          />
+          <aside
+            role="dialog"
+            aria-label={selected.name}
+            className="tabi-slide-in-right pointer-events-auto absolute bottom-3 right-3 top-16 z-20 hidden w-[26rem] max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-panel-lg border border-border bg-surface shadow-panel md:flex"
+          >
+            <PlaceDetail place={selected} origin={origin} mode={mode} narratedBy={result?.narratedBy} model={result?.model} voted={votes[selected.id] ?? null} onFeedback={handleFeedback} />
+            <button
+              onClick={closeDetail}
+              aria-label={t("detail.close")}
+              title={t("detail.close")}
+              className="absolute right-2.5 top-2.5 z-10 grid h-9 w-9 place-items-center rounded-full bg-fg/50 text-surface backdrop-blur-sm transition-colors hover:bg-fg/70"
+            >
+              <Icon name="close" size={16} />
+            </button>
+          </aside>
         </div>
       )}
 
@@ -550,20 +561,24 @@ export default function HomePage() {
       {/* mobile search overlay (hidden on desktop) */}
       {searchOpen && (
         <div className="md:hidden">
-          <SearchOverlay
-            location={location}
-            loading={loading}
-            onDiscover={handleDiscover}
-            onClose={() => setSearchOpen(false)}
-            budget={budget}
-            mode={mode}
-            types={types}
-            keyword={keyword}
-            onBudgetChange={setBudget}
-            onModeChange={setMode}
-            onTypesChange={setTypes}
-            onKeywordChange={setKeyword}
-          />
+          <div className="fixed inset-0 z-40 flex flex-col bg-bg tabi-safe-top tabi-safe-x tabi-safe-bottom">
+            <div className="tabi-rise-in min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
+              <DayPanel
+                initialLocation={location}
+                loading={loading}
+                onDiscover={handleDiscover}
+                onClose={() => setSearchOpen(false)}
+                budget={budget}
+                mode={mode}
+                types={types}
+                keyword={keyword}
+                onBudgetChange={setBudget}
+                onModeChange={setMode}
+                onTypesChange={setTypes}
+                onKeywordChange={setKeyword}
+              />
+            </div>
+          </div>
         </div>
       )}
     </div>

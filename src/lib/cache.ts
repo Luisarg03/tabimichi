@@ -39,7 +39,7 @@ const PLACE_COLUMNS =
  * on every retry (measured: 24 requests at 20–84 s in data/logs).
  * Real ids are g_/geo_/o_/pin_, so the prefix can never collide.
  */
-export const DONE_PREFIX = "__done__:";
+const DONE_PREFIX = "__done__:";
 
 /**
  * Google's `open_now` is a point-in-time snapshot valid only at fetch time —
@@ -412,7 +412,7 @@ export async function markDiscoveryDone(
 }
 
 /** Escape ILIKE wildcards so user input matches literally. */
-export function escapeLike(q: string): string {
+function escapeLike(q: string): string {
   return q.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
 

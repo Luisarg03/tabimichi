@@ -14,7 +14,7 @@ import { getSupabaseAdmin, getSupabaseForUser } from "@/lib/supabase/server";
  * Single source of truth for the key-name mapping — shared by every route
  * that spends a user's quota (recommend, narrate, photo, photos).
  */
-export const USER_KEY_MAP: Record<string, keyof AppConfig> = {
+export const KEY_MAP: Record<string, keyof AppConfig> = {
   google_places: "googlePlacesApiKey",
   geoapify: "geoapifyApiKey",
   overpass_endpoint: "overpassEndpoint",
@@ -22,6 +22,10 @@ export const USER_KEY_MAP: Record<string, keyof AppConfig> = {
   opencode_go: "opencodeGoApiKey",
   guide_model: "guideModel",
 };
+
+export const REVERSE_MAP: Record<keyof AppConfig, string> = Object.fromEntries(
+  Object.entries(KEY_MAP).map(([k, v]) => [v, k])
+) as Record<keyof AppConfig, string>;
 
 const EMPTY_CONFIG: AppConfig = {
   googlePlacesApiKey: "",
@@ -56,7 +60,7 @@ export async function resolveUser(req: NextRequest): Promise<UserContext> {
       .select("key_name, key_value");
     const config: AppConfig = { ...EMPTY_CONFIG };
     for (const row of keys ?? []) {
-      const field = USER_KEY_MAP[row.key_name];
+      const field = KEY_MAP[row.key_name];
       if (field) config[field] = row.key_value;
     }
     return { userId: user.id, config };

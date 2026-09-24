@@ -1,7 +1,6 @@
 import type { WeatherInfo } from "../types";
 import type { OpenPeriod } from "../open-hours";
-import { popularityScores, type PopularityInput } from "./popularity";
-import { estimateCrowd, type CrowdEstimate } from "./estimate";
+import { estimateCrowd, popularityScores, type PopularityInput, type CrowdEstimate } from "./estimate";
 import { readCrowdReports } from "./store";
 import { isInJapan, isJapaneseHoliday } from "./holidays";
 import { crowdCells, type HeatCell } from "./heat";

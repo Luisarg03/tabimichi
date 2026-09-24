@@ -1,7 +1,5 @@
 "use client";
 
-import { ringOffset } from "@/lib/ring";
-
 /** Score ring (prototype .ring): circular progress around a 0–100 score.
  *  sm = 40px (list cards), lg = 72px (detail head). Stroke color follows
  *  the text color (accent by default). */
@@ -15,7 +13,8 @@ export default function ScoreRing({
   className?: string;
 }) {
   const C = 2 * Math.PI * 15.5;
-  const offset = ringOffset(score);
+  const s = Number.isFinite(score) ? Math.max(0, Math.min(100, score)) : 0;
+  const offset = C * (1 - s / 100);
   return (
     <svg
       viewBox="0 0 36 36"
