@@ -1,0 +1,155 @@
+name: Staging
+
+# Candidata a release: todo lo de develop + smoke contra el build
+# + push de migraciones al sandbox (solo si existe el secret).
+# staging deploya a Vercel Preview (vars = sandbox) vía deploy.yml.
+on:
+  push:
+    branches: [staging]
+  pull_request:
+    branches: [staging]
+
+concurrency:
+  group: staging-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec tsc --noEmit
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run lint
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [typecheck, lint, test]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+
+  migrations:
+    name: Migrations (sandbox)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Offline: numeración secuencial sin huecos (001, 002, …).
+      - name: Check migration numbering
+        run: |
+          ls supabase/migrations/*.sql | sort | awk -F/ '{print $NF}' | cut -c1-3 > /tmp/seq.txt
+          awk -v n=1 '$1 != sprintf("%03d", n) {print "❌ gap: expected " sprintf("%03d", n) " got " $1; bad=1} {n++} END {exit bad}' /tmp/seq.txt \
+            && echo "✅ migrations sequential"
+      # Online (opcional): valida contra el sandbox sin mutar.
+      # Requiere el secret SUPABASE_ACCESS_TOKEN; si no existe, se salta.
+      - name: Dry-run push to sandbox
+        if: ${{ secrets.SUPABASE_ACCESS_TOKEN != '' }}
+        run: pnpm exec supabase db push --dry-run --project-ref rjsrzuqyoyxuonvcrpec
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+  smoke:
+    name: Smoke (vs build)
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+      - name: Smoke E2E against production build
+        run: |
+          (pnpm start -- -p 3000 >/tmp/next.log 2>&1 & echo $! >/tmp/next.pid)
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:3000/ >/dev/null && break
+            sleep 2
+          done
+          curl -sf http://localhost:3000/ >/dev/null || (cat /tmp/next.log; exit 1)
+          node scripts/smoke-e2e.mjs http://localhost:3000
+          kill "$(cat /tmp/next.pid)"
+
+  staging:
+    name: Staging
+    if: always()
+    runs-on: ubuntu-latest
+    needs: [typecheck, lint, test, build, migrations, smoke]
+    steps:
+      - name: Check results
+        run: |
+          if [[ "${{ needs.typecheck.result }}" != "success" || "${{ needs.lint.result }}" != "success" || "${{ needs.test.result }}" != "success" || "${{ needs.build.result }}" != "success" || "${{ needs.migrations.result }}" != "success" || "${{ needs.smoke.result }}" != "success" ]]; then
+            echo "❌ Staging failed"
+            echo "  typecheck:  ${{ needs.typecheck.result }}"
+            echo "  lint:       ${{ needs.lint.result }}"
+            echo "  test:       ${{ needs.test.result }}"
+            echo "  build:      ${{ needs.build.result }}"
+            echo "  migrations: ${{ needs.migrations.result }}"
+            echo "  smoke:      ${{ needs.smoke.result }}"
+            exit 1
+          fi
+          echo "✅ Staging passed"
