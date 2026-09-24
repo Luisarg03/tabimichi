@@ -2,11 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
-import type { SearchSuggestion, TimeBudget, TransportMode } from "@/lib/types";
+import type { SearchSuggestion, TransportMode } from "@/lib/types";
 import { EXPERIENCE_TYPES } from "@/lib/places/taxonomy";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import SearchSuggestions from "@/components/SearchSuggestions";
+import SimTabs from "@/components/SimTabs";
 import Icon from "@/components/ui/Icon";
 import Segmented from "@/components/ui/Segmented";
 import Chip from "@/components/ui/Chip";
@@ -15,18 +16,18 @@ export interface DiscoverPayload {
   lat: number;
   lng: number;
   label: string;
-  budget: TimeBudget;
   types: string[];
   mode: TransportMode;
   /** true when the position is exact GPS, false when geocoded address */
   gps?: boolean;
   /** optional interest keyword: "pokemon", "book off", "gatos"… */
   keyword?: string;
+  /** standing preference: rank quieter places first (crowd estimate) */
+  avoidCrowds?: boolean;
   /** the exact place the user searched — guaranteed to appear first */
   pin?: { name: string; lat: number; lng: number; typeId?: string };
 }
 
-const BUDGETS: TimeBudget[] = ["lunch", "afternoon", "full_day"];
 const MODES: Array<{ id: TransportMode; icon: string }> = [
   { id: "walking", icon: "walk" },
   { id: "transit", icon: "train" },
@@ -48,20 +49,26 @@ interface PanelLocation {
 
 export default function DayPanel({
   initialLocation,
+  userLocated,
   loading,
   onDiscover,
   onClose,
   embedded = false,
-  budget,
+  simPreset,
+  onSimChange,
   mode,
   types,
   keyword,
-  onBudgetChange,
+  avoidCrowds,
   onModeChange,
   onTypesChange,
   onKeywordChange,
+  onCrowdsChange,
 }: {
   initialLocation?: PanelLocation | null;
+  /** true cuando initialLocation viene de un acto del usuario (GPS, guardado):
+   *  el default Tokio no cuenta. */
+  userLocated?: boolean;
   loading: boolean;
   onDiscover: (payload: DiscoverPayload) => void;
   /** When set, renders as a full-screen search overlay (mobile):
@@ -72,20 +79,26 @@ export default function DayPanel({
   embedded?: boolean;
   /** Filter state lifted to the page so it survives panel remounts
    *  (mobile overlay) and stays shared between desktop/mobile. */
-  budget: TimeBudget;
+  simPreset: string | null;
+  onSimChange: (id: string | null) => void;
   mode: TransportMode;
   types: string[];
   keyword: string;
-  onBudgetChange: (b: TimeBudget) => void;
+  /** standing preference: quieter places first (crowd estimate moves the order) */
+  avoidCrowds: boolean;
   onModeChange: (m: TransportMode) => void;
   onTypesChange: (t: string[]) => void;
   onKeywordChange: (k: string) => void;
+  onCrowdsChange: (on: boolean) => void;
 }) {
   const { t } = useI18n();
   const { getToken } = useAuth();
   const [query, setQuery] = useState("");
   const [locating, setLocating] = useState(false);
   const [location, setLocation] = useState(initialLocation ?? null);
+  // bias destino solo si el usuario lo puso (GPS, pick, geocode, o guardado
+  // previo): el default Tokio biases todo a Tokio en primera visita.
+  const [touched, setTouched] = useState(userLocated ?? initialLocation?.gps === true);
   const [geocodeError, setGeocodeError] = useState(false);
   /** Mobile: panel collapsed by default to not block the map */
   const [collapsed, setCollapsed] = useState(true);
@@ -117,9 +130,10 @@ export default function DayPanel({
         // Bias suggestions by the current destination when one is set, so
         // results are ranked by distance to the search area. The session JWT
         // lets the server add Google Autocomplete with the user's own key.
-        const bias = location
-          ? `&lat=${location.lat.toFixed(5)}&lng=${location.lng.toFixed(5)}`
-          : "";
+        const bias =
+          location && touched
+            ? `&lat=${location.lat.toFixed(5)}&lng=${location.lng.toFixed(5)}`
+            : "";
         const token = await getToken();
         const res = await fetch(`/api/search/suggest?q=${encodeURIComponent(q)}${bias}`, {
           signal: ctrl.signal,
@@ -154,12 +168,12 @@ export default function DayPanel({
     isPlace: boolean
   ) {
     setLocation({ lat: loc.lat, lng: loc.lng, label: loc.name, gps: false });
+    setTouched(true);
     setGeocodeError(false);
     onDiscover({
       lat: loc.lat,
       lng: loc.lng,
       label: loc.name,
-      budget,
       types,
       mode,
       // the searched place: keyword + pin guarantee it ranks first
@@ -246,6 +260,7 @@ export default function DayPanel({
     }
     const data = await res.json();
     setLocation({ lat: data.lat, lng: data.lng, label: data.name, gps: false });
+    setTouched(true);
     return { lat: data.lat, lng: data.lng, label: data.name };
   }
 
@@ -260,6 +275,7 @@ export default function DayPanel({
           label: "📍",
           gps: true,
         });
+        setTouched(true);
         setLocating(false);
       },
       () => setLocating(false),
@@ -270,7 +286,7 @@ export default function DayPanel({
   function submit() {
     if (!location) return;
     const kw = keyword.trim();
-    onDiscover({ ...location, budget, types, mode, keyword: kw || undefined });
+    onDiscover({ ...location, types, mode, avoidCrowds, keyword: kw || undefined });
     // Collapse after discover so results are visible on mobile.
     // On desktop (md+) the CSS keeps the body open regardless.
     setCollapsed(true);
@@ -340,16 +356,11 @@ export default function DayPanel({
         </p>
       )}
 
-      {/* time budget */}
+      {/* hour to evaluate — the only time selector */}
       <div className="mt-3">
-        <span className="eyebrow">{t("panel.timeBudget")}</span>
-        <Segmented
-          className="mt-1.5"
-          ariaLabel={t("panel.timeBudget")}
-          value={budget}
-          onChange={onBudgetChange}
-          options={BUDGETS.map((b) => ({ id: b, label: t(`panel.budget.${b}`) }))}
-        />
+        <span className="eyebrow">{t("sim.label")}</span>
+        <SimTabs preset={simPreset} onChange={onSimChange} className="mt-1.5 w-full" />
+        <p className="mt-1 text-[11.5px] text-muted">{t("sim.note")}</p>
       </div>
 
       {/* transport mode */}
@@ -410,11 +421,27 @@ export default function DayPanel({
         <p className="mt-1 text-xs text-muted">{t("panel.interestHint")}</p>
       </div>
 
-      {/* discover */}
+      {/* crowd preference: the one signal Maps does not sell. Off by default —
+          the estimate is a model, so it only reorders when asked. */}
+      <label className="mt-3 flex min-h-[44px] cursor-pointer items-center gap-2.5 rounded-[12px] border border-border bg-surface px-3">
+        <input
+          type="checkbox"
+          checked={avoidCrowds}
+          onChange={(e) => onCrowdsChange(e.target.checked)}
+          className="h-4 w-4 shrink-0 accent-[var(--color-brand-600)]"
+        />
+        <span className="min-w-0">
+          <span className="block text-[13px] font-semibold text-fg">{t("panel.avoidCrowds")}</span>
+          <span className="block text-[11.5px] text-muted">{t("panel.avoidCrowdsHint")}</span>
+        </span>
+      </label>
+
+      {/* discover — sticky so it never hides below the fold in the
+          mobile overlay scroll container */}
       <button
         onClick={submit}
         disabled={!location || loading}
-        className="mt-3 flex w-full min-h-[44px] items-center justify-center gap-2 rounded-[12px] bg-brand-600 px-4 text-[14px] font-semibold text-surface shadow-accent transition-[background,transform] hover:bg-brand-700 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-55 disabled:shadow-none"
+        className="sticky bottom-2 mt-3 flex w-full min-h-[44px] items-center justify-center gap-2 rounded-[12px] bg-brand-600 px-4 text-[14px] font-semibold text-surface shadow-accent transition-[background,transform] hover:bg-brand-700 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-55 disabled:shadow-none md:static"
       >
         <Icon name="spark" size={16} />
         {loading ? t("panel.discovering") : t("panel.discover")}

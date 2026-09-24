@@ -27,6 +27,9 @@ export interface Place {
   photoRefs?: string[];
   /** OSM `wikipedia`/`wikidata` tag (page title or Q-id) — landmark signal */
   wikipedia?: string;
+  /** Google place id matched by reconcile (OSM/Geoapify rows) — exact identity
+   *  for Maps links; g_* rows carry it in the id itself */
+  googlePlaceId?: string;
   url?: string;
   /** true when this candidate came from the keyword text query (in-memory only) */
   fromKeyword?: boolean;
@@ -66,8 +69,6 @@ export interface SearchSuggestion {
   rating?: number;
   userRatingsTotal?: number;
 }
-
-export type TimeBudget = "lunch" | "afternoon" | "full_day";
 
 /** How the user will get around — changes radius, times and reasons. */
 export type TransportMode = "walking" | "transit" | "car";
@@ -132,11 +133,32 @@ export interface CrowdEstimate {
   bestHour?: number;
 }
 
+/** One named hot zone over the crowd field: "people are around HERE". */
+export interface HotZone {
+  /** stable within the response (`z1` = heaviest) */
+  id: string;
+  /** weight-averaged centroid of the member cells */
+  lat: number;
+  lng: number;
+  /** p95 distance of member cells to the centroid, clamped 150–600 m */
+  radiusM: number;
+  /** max member-cell weight, 0..1 on the request-normalized crowd scale */
+  weight: number;
+  label: CrowdLabel;
+  /** member place ids within radiusM, busiest first (max 8) */
+  placeIds: string[];
+  /** display name (busiest member place); unset when members are unknown */
+  name?: string;
+}
+
 export interface ScoredPlace extends Place {
   score: number;
   distanceKm: number;
   travelMin: number;
   reasons: Reason[];
+  /** restaurant kind derived from the name (see lib/cuisine.ts) — drives the
+   *  per-kind spread so the list is not five ramen shops in a row */
+  cuisine?: string;
   /** LLM narrative "why now" (M2) — optional, rule reasons are the fallback */
   why?: string;
   /** how busy it is right now (estimate, or observed when reported) */
@@ -146,10 +168,14 @@ export interface ScoredPlace extends Place {
 export interface RecommendInput {
   lat: number;
   lng: number;
-  budget: TimeBudget;
   types: string[]; // empty = any
   radiusKm?: number;
   mode?: TransportMode;
+  /** standing user preference: "gente ahora" moves the order, not just the badge */
+  avoidCrowds?: boolean;
+  /** debug only: return the full ranked pool instead of the UI's 30, so the
+   *  ranking can be measured (scripts/ranking.bench.ts). Ignored by the UI. */
+  poolLimit?: number;
   /** UI language for discovery: "es" | "en" */
   lang?: string;
   /** ISO instant — when set, the pipeline simulates this time (JST evaluation) */
@@ -214,6 +240,23 @@ export interface RecommendResult {
   keywordMiss?: boolean;
   /** zone-level crowd layer [lat, lng, weight 0..1] for the map heat overlay */
   crowdCells?: Array<[number, number, number]>;
+  /** named hot zones clustered over the crowd field (heaviest first, max 5) */
+  hotZones?: HotZone[];
   /** ISO instant the crowd field was computed for */
   crowdAt?: string;
+  /**
+   * The contrast answer: "the best pick is #1, but if you want it quiet go
+   * here". This is the one thing a directory cannot offer — Google Maps shows
+   * popularity, it never says "you will enjoy this more in 20 minutes".
+   *
+   * Present only when a genuinely quieter option exists close enough to be a
+   * real alternative; a quiet place twice as far is not a recommendation, it
+   * is a different trip.
+   */
+  quietPick?: {
+    id: string;
+    /** extra minutes on top of the top pick's travel time */
+    extraMin: number;
+    level: number;
+  };
 }

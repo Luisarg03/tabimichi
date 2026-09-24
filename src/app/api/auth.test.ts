@@ -114,16 +114,16 @@ vi.mock("@/lib/supabase/server", () => {
   };
 });
 
-import { GET as meGET } from "@/app/api/me/route";
-import { GET as userKeysGET, POST as userKeysPOST } from "@/app/api/user-keys/route";
-import { GET as adminUsersGET } from "@/app/api/admin/users/route";
+import { GET as meGET } from "@/lib/api/routes/me";
+import { GET as userKeysGET, POST as userKeysPOST } from "@/lib/api/routes/user-keys";
+import { GET as adminUsersGET } from "@/lib/api/routes/admin/users";
 import {
   PATCH as adminUserPATCH,
   DELETE as adminUserDELETE,
-} from "@/app/api/admin/users/[id]/route";
-import { POST as accountDeletePOST } from "@/app/api/account/delete/route";
-import { GET as profileGET, POST as profilePOST } from "@/app/api/profile/route";
-import { GET as feedbackGET, POST as feedbackPOST } from "@/app/api/feedback/route";
+} from "@/lib/api/routes/admin/users/[id]";
+import { POST as accountDeletePOST } from "@/lib/api/routes/account/delete";
+import { GET as profileGET, POST as profilePOST } from "@/lib/api/routes/profile";
+import { GET as feedbackGET, POST as feedbackPOST } from "@/lib/api/routes/feedback";
 
 function req(
   url: string,

@@ -7,11 +7,27 @@ import { useAuth } from "@/lib/auth-context";
 import { fmtCount } from "@/lib/format";
 import { dirsUrl as dirsUrlFor, placeUrl as placeUrlFor } from "@/lib/maps-urls";
 import PlaceGallery from "@/components/PlaceGallery";
+import WikiPhoto from "@/components/WikiPhoto";
 import Icon from "@/components/ui/Icon";
 import ScoreRing from "@/components/ui/ScoreRing";
 import { CROWD_COLOR, CROWD_SOFT, crowdFactors, crowdSourceLabel } from "@/components/ui/CrowdBadge";
 
 const MODE_ICON: Record<string, string> = { walking: "walk", transit: "train", car: "car" };
+
+/** Fallback emoji per experience type, so photo-less heroes differ. */
+const TAG_EMOJI: Record<string, string> = {
+  temple: "⛩️",
+  museum: "🏛️",
+  food: "🍜",
+  market: "🏮",
+  shopping: "🛍️",
+  park: "🌳",
+  sakura: "🌸",
+  viewpoint: "🗻",
+  trekking: "🥾",
+  onsen: "♨️",
+  nightlife: "🌃",
+};
 
 function renderReason(r: Reason, t: ReturnType<typeof useI18n>["t"]): string {
   const params = { ...r.params };
@@ -147,7 +163,7 @@ function CrowdSection({ place }: { place: ScoredPlace }) {
   onFeedback?: (placeId: string, liked: boolean, tags?: string[]) => void;
 }) {
   const { t, locale } = useI18n();
-  const googlePlaceId = place.id.startsWith("g_") ? place.id.slice(2) : null;
+  const googlePlaceId = place.googlePlaceId ?? (place.id.startsWith("g_") ? place.id.slice(2) : null);
   const mapsPlace = { name: place.name, googlePlaceId, lat: place.lat, lng: place.lng };
   const dirsUrl = dirsUrlFor({ lat: origin.lat, lng: origin.lng }, mapsPlace, mode);
   const mapsUrl = placeUrlFor(mapsPlace);
@@ -156,7 +172,7 @@ function CrowdSection({ place }: { place: ScoredPlace }) {
 
   return (
     <div className="flex h-full flex-col">
-      {/* photo hero (or abstract illustration when there are no photos) */}
+      {/* photo hero: gallery → free Wikipedia photo → per-type illustration */}
       <div className="relative shrink-0">
         {photoRefs.length > 0 ? (
           <PlaceGallery photoRefs={photoRefs} placeId={place.id} alt={place.name} imgClassName="h-52 w-full object-cover sm:h-60" />
@@ -180,6 +196,17 @@ function CrowdSection({ place }: { place: ScoredPlace }) {
                 <rect x="140" y="104" width="112" height="7" />
               </g>
             </svg>
+            <span aria-hidden className="absolute bottom-2 left-3 text-4xl opacity-90">
+              {TAG_EMOJI[place.tags[0] ?? ""] ?? "📍"}
+            </span>
+            {place.wikipedia && (
+              <WikiPhoto
+                key={place.wikipedia}
+                wikiRef={place.wikipedia}
+                alt={place.name}
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+            )}
           </div>
         )}
       </div>

@@ -39,43 +39,13 @@ export function travelMin(distKm: number, mode: TransportMode = "transit"): numb
   }
 }
 
-/** Time budget (minutes) per TimeBudget id */
-export const BUDGET_MIN: Record<string, number> = {
-  lunch: 90,
-  afternoon: 300,
-  full_day: 600,
-};
-
 /**
- * Discovery radius (km) per TimeBudget id and transport mode.
- * The base radii are tuned for transit; walking means "explore AROUND the
- * point" — a 5+ km walk is not "around me" — so walking uses explicit tight
- * radii (1.5–3.5 km ≈ 20–47 min on foot). Car extends the reach.
+ * Discovery radius (km) per transport mode — fixed, no time budget.
+ * Walking means "explore AROUND the point" (2.5 km ≈ 35 min on foot);
+ * transit 12 km and car 24 km cover the metro area.
  */
-export function radiusForBudget(budget: string, mode: TransportMode = "transit"): number {
-  if (mode === "walking") {
-    switch (budget) {
-      case "lunch":
-        return 1.5;
-      case "afternoon":
-        return 2.5;
-      case "full_day":
-        return 3.5;
-      default:
-        return 2;
-    }
-  }
-  const base = (() => {
-    switch (budget) {
-      case "lunch":
-        return 5;
-      case "afternoon":
-        return 12;
-      case "full_day":
-        return 35;
-      default:
-        return 8;
-    }
-  })();
-  return mode === "car" ? base * 2 : base;
-}
+export const RADIUS_KM: Record<TransportMode, number> = {
+  walking: 2.5,
+  transit: 12,
+  car: 24,
+};

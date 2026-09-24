@@ -10,10 +10,14 @@ import { isolatedStore } from "@/test-utils/helpers";
  */
 function fakeAdmin(rows: Array<Record<string, unknown>> = []) {
   const inserted: Array<Record<string, unknown>> = [];
+  const inCalls: unknown[][] = [];
   const chain = {
     select: () => chain,
     eq: () => chain,
-    in: () => chain,
+    in: (_col: string, ids: unknown[]) => {
+      inCalls.push(ids);
+      return chain;
+    },
     gte: () => chain,
     order: () => chain,
     limit: () => chain,
@@ -26,6 +30,7 @@ function fakeAdmin(rows: Array<Record<string, unknown>> = []) {
   };
   return {
     inserted,
+    inCalls,
     fake: { from: () => chain },
   };
 }
@@ -90,5 +95,14 @@ describe("crowd report store", () => {
   it("does not query anything for an empty id list", async () => {
     const map = await readCrowdReports([], "user-1");
     expect(map.size).toBe(0);
+  });
+
+  it("chunks big pools so PostgREST never sees a huge .in() (URI too long)", async () => {
+    const sb = fakeAdmin([]);
+    setAdminForTests(() => sb.fake as never);
+    const ids = Array.from({ length: 120 }, (_, i) => `p${i}`);
+    await readCrowdReports(ids, "user-1");
+    expect(sb.inCalls).toHaveLength(3);
+    expect(sb.inCalls.flat()).toEqual(ids);
   });
 });

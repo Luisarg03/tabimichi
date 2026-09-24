@@ -1,6 +1,6 @@
 import type { EmptyReason, Place, RecommendInput, RecommendResult, ScoredPlace, TransportMode } from "./types";
 import { getWeather, weatherAt } from "./weather";
-import { BUDGET_MIN, radiusForBudget, haversineKm } from "./geo";
+import { RADIUS_KM, haversineKm } from "./geo";
 import { discover, normalizePlaceName } from "./places";
 import { EXPERIENCE_TYPE_MAP } from "./places/taxonomy";
 import { scorePlaces } from "./scoring";
@@ -17,6 +17,11 @@ import { crowdForPool, type CrowdPoolPlace } from "./crowd";
 type Candidate = Place & { periods?: OpenPeriod[] };
 
 export interface RecommendOptions extends RecommendInput {
+  /** debug only: how many places to return. Defaults to RESULT_LIMIT (the UI
+   *  cap). Raising it exposes the full ranked pool so the ranking can be
+   *  measured with `scripts/ranking.bench.ts` without the top-30 cut hiding
+   *  whether the order itself is right. */
+  poolLimit?: number;
   /** the requesting user's API keys (BYOK) — empty for anonymous */
   config?: AppConfig;
   /** signed-in user id — their own crowd reports feed the "gente ahora" estimate */
@@ -31,23 +36,32 @@ export interface RecommendOptions extends RecommendInput {
 export const RESULT_LIMIT = 30;
 
 /**
- * Spread the top picks across experience types so a generic "discover" shows
- * variety (a park, a museum, a shrine, food...) instead of 10 similar places.
- * Within each type, score order is preserved; the global best still comes first.
- * Spatial guard: a candidate hugging an already-picked same-type place
+ * Spread the top picks so the list shows variety instead of near-clones.
+ * Two grouping levels:
+ *   1. experience type (a park, a museum, a shrine, food…) — the generic
+ *      "discover" case;
+ *   2. inside food, the restaurant KIND from the name (ramen, sushi, soba,
+ *      cafe…) — without it a single-type search buckets everything together
+ *      and the spatial guard alone cannot stop five ramen shops in a row.
+ * Within a bucket score order is preserved; the global best still comes first.
+ * Spatial guard: a candidate hugging an already-picked same-bucket place
  * (within 150 m) is deferred to a later round instead of dropped — the list
  * spreads over the map without silently removing real local businesses.
- * Single-type searches are unaffected (one bucket).
  */
 const SAME_TAG_SPREAD_KM = 0.15;
 
-export function diversify<T extends { tags: string[]; lat?: number; lng?: number }>(
+function bucketKey(p: { tags: string[]; cuisine?: string }): string {
+  const tag = p.tags[0] ?? "other";
+  return tag === "food" && p.cuisine ? `food:${p.cuisine}` : tag;
+}
+
+export function diversify<T extends { tags: string[]; lat?: number; lng?: number; cuisine?: string }>(
   scored: T[],
   limit: number
 ): T[] {
   const byTag = new Map<string, T[]>();
   for (const p of scored) {
-    const tag = p.tags[0] ?? "other";
+    const tag = bucketKey(p);
     if (!byTag.has(tag)) byTag.set(tag, []);
     byTag.get(tag)!.push(p);
   }
@@ -95,8 +109,10 @@ export function diversify<T extends { tags: string[]; lat?: number; lng?: number
 export async function recommend(input: RecommendOptions): Promise<RecommendResult> {
   const startedAt = performance.now();
   const mode: TransportMode = input.mode ?? "transit";
-  const budgetMin = BUDGET_MIN[input.budget] ?? 300;
-  const radiusKm = input.radiusKm ?? radiusForBudget(input.budget, mode);
+  const radiusKm = input.radiusKm ?? RADIUS_KM[mode];
+  // poolLimit is debug-only; 300 is the cache pool cap, so it can never ask
+  // for more than discovery could have produced.
+  const limit = Math.max(1, Math.min(input.poolLimit ?? RESULT_LIMIT, 300));
   const simulated = input.now ? new Date(input.now) : null;
   // optional interest keyword — normalized once here. The raw term goes to
   // Google as-is; single Spanish words ("gatos") are translated by the free
@@ -178,13 +194,35 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
   }
 
   const profile = getProfile();
-  const stats = { closed: 0, tooFar: 0, nameMatches: 0 };
+  const stats = { closed: 0, tooFar: 0, nameMatches: 0, noise: 0 };
   // Destination-local wall clock in UTC fields: simulated dates already are
   // (JST convention); real instants get shifted by the longitude offset.
   const scoringNow = simulated ?? localTimeAt(new Date(), input.lng);
+  // ---- "gente ahora": how busy each place is right now ------------------
+  // Computed BEFORE scoring (it used to run after): the crowd estimate is the
+  // one signal Google Maps does not sell, so when the user asks to avoid the
+  // crowds it has to move the order, not just decorate the card. Popularity is
+  // relative to the pool, so it is one pass over every candidate; only what
+  // the user sees gets the badge attached.
+  const crowdPool: CrowdPoolPlace[] = candidates.map((p) => ({
+    id: p.id,
+    lat: p.lat,
+    lng: p.lng,
+    tags: p.tags,
+    userRatingsTotal: p.userRatingsTotal,
+    wikipedia: p.wikipedia,
+    periods: p.periods,
+  }));
+  const { byId: crowdById, cells: crowdCellList, zones: crowdZoneList } = await crowdForPool(crowdPool, {
+    now: scoringNow,
+    lat: input.lat,
+    lng: input.lng,
+    weather,
+    userId: input.userId ?? null,
+  });
+
   const scored = scorePlaces(candidates, {
     base: { lat: input.lat, lng: input.lng },
-    budgetMin,
     weather,
     now: scoringNow,
     mode,
@@ -198,6 +236,11 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
     profile,
     stats,
     pinnedIds: pinPlace ? new Set([pinPlace.id]) : undefined,
+    // the user's standing preference: "gente ahora" moves the order.
+    // Default off — the estimate is a model, not a measurement, so it only
+    // ranks when the user explicitly asked to avoid the crowds.
+    crowd: input.avoidCrowds ? crowdById : undefined,
+    avoidCrowds: input.avoidCrowds === true,
   });
 
   // With an interest keyword the user's intent wins: candidates that came
@@ -216,9 +259,9 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
     const rest = scored.filter(
       (p) => !p.fromKeyword && !p.reasons.some((r) => r.key === "keywordMatch")
     );
-    top = [...fromQuery, ...nameOnly, ...rest].slice(0, RESULT_LIMIT);
+    top = [...fromQuery, ...nameOnly, ...rest].slice(0, limit);
   } else {
-    top = diversify(scored, RESULT_LIMIT).sort(
+    top = diversify(scored, limit).sort(
       (a, b) => b.score - a.score || a.travelMin - b.travelMin
     );
   }
@@ -240,7 +283,7 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
       top = [
         { ...chosen, reasons: [{ key: "pinned" }, ...chosen.reasons] },
         ...top.filter((p) => p.id !== chosen.id && p.id !== pinPlace.id),
-      ].slice(0, RESULT_LIMIT);
+      ].slice(0, limit);
     } else {
       top = [
         {
@@ -251,49 +294,48 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
           reasons: [{ key: "pinned" }],
         },
         ...top,
-      ].slice(0, RESULT_LIMIT);
+      ].slice(0, limit);
     }
   }
   const emptyReason = emptyReasonFor(candidates, top.length);
 
-  // ---- "gente ahora": how busy each place is right now ------------------
-  // Computed over the WHOLE pool (popularity is relative to what else is
-  // around), attached only to what the user sees. No new data source: the
-  // ratings, tags, opening hours and live weather already travelled here.
-  const crowdPool: CrowdPoolPlace[] = candidates.map((p) => ({
-    id: p.id,
-    lat: p.lat,
-    lng: p.lng,
-    tags: p.tags,
-    userRatingsTotal: p.userRatingsTotal,
-    wikipedia: p.wikipedia,
-    periods: p.periods,
-  }));
-  const { byId: crowdById, cells: crowdCellList } = await crowdForPool(crowdPool, {
-    now: scoringNow,
-    lat: input.lat,
-    lng: input.lng,
-    weather,
-    userId: input.userId ?? null,
-  });
+  // Zone display names: busiest member place (placeIds arrive busiest
+  // first). Names already travelled here with the candidates — no new lookup.
   const placesWithCrowd: ScoredPlace[] = top.map((p) => {
     const crowd = crowdById.get(p.id);
     return crowd ? { ...p, crowd } : p;
   });
+  const names = new Map(candidates.map((p) => [p.id, p.name]));
+
+  // ---- the contrast pick -------------------------------------------------
+  // "The best is #1; if you want it quiet, go here." The crowd estimate is
+  // already computed for the whole pool, so this costs nothing — and it is the
+  // one answer a popularity-ranked directory cannot give.
+  //
+  // Rules, deliberately strict so it never becomes noise:
+  //   - a real difference (at least 0.1 on the 0..1 scale),
+  //   - within 15 min extra of the top pick (a quiet place across town is a
+  //     different trip, not an alternative),
+  //   - same value class: it must be rated (no sending someone to an unknown
+  //     place just because it is empty).
+  const quietPick = pickQuietAlternative(placesWithCrowd);
+  const namedZones = crowdZoneList.map((z) => ({
+    ...z,
+    name: names.get(z.placeIds[0] ?? ""),
+  }));
 
   const traceId = newTraceId();
   const summary = {
     traceId,
     lat: input.lat,
     lng: input.lng,
-    budget: input.budget,
     types: input.types,
     mode,
     sim: simulated !== null,
     source,
     sources: sources ?? [source],
     candidates: candidates.length,
-    filters: { closed: stats.closed, tooFar: stats.tooFar, nameMatches: stats.nameMatches },
+    filters: { closed: stats.closed, tooFar: stats.tooFar, nameMatches: stats.nameMatches, noise: stats.noise },
     scored: top.length,
     emptyReason,
     keyword,
@@ -319,6 +361,15 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
       reasons: p.reasons.map((r) => r.key),
       crowd: p.crowd ? { level: Number(p.crowd.level.toFixed(2)), label: p.crowd.label } : undefined,
     })),
+    crowdCells: crowdCellList.length,
+    hotZones: namedZones.map((z) => ({
+      lat: z.lat,
+      lng: z.lng,
+      weight: z.weight,
+      label: z.label,
+      places: z.placeIds.length,
+      name: z.name,
+    })),
   });
 
   return {
@@ -335,7 +386,9 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
     keywordResults: keywordResults ?? 0,
     keywordMiss: kwMiss,
     crowdCells: crowdCellList,
+    hotZones: namedZones,
     crowdAt: scoringNow.toISOString(),
+    ...(quietPick ? { quietPick } : {}),
   };
 }
 
@@ -343,8 +396,36 @@ export async function recommend(input: RecommendOptions): Promise<RecommendResul
  * Classify an empty result so the UI can say *why*:
  *  - no_results: sources returned nothing
  *  - all_closed: candidates existed but every one is closed right now
- *  - too_far: candidates exist but all fall outside distance/budget
+ *  - too_far: candidates exist but all fall outside distance/mode reach
  */
+/**
+ * The contrast answer: given the ranked list, which place is the quieter
+ * alternative worth naming? Pure so it can be tested directly.
+ *
+ * Rules, deliberately strict so it never becomes noise:
+ *   - a real difference (>= 0.1 on the 0..1 crowd scale),
+ *   - within 15 min extra of the top pick (a quiet place across town is a
+ *     different trip, not an alternative),
+ *   - it must be RATED: never send someone to an unknown place just because
+ *     nobody is there.
+ */
+export function pickQuietAlternative(
+  ranked: ScoredPlace[]
+): { id: string; extraMin: number; level: number } | undefined {
+  const best = ranked[0];
+  if (!best?.crowd) return undefined;
+  let candidate: { p: ScoredPlace; extraMin: number } | undefined;
+  for (const p of ranked.slice(1)) {
+    if (!p.crowd || p.rating === undefined) continue;
+    if (best.crowd.level - p.crowd.level < 0.1) continue;
+    const extraMin = p.travelMin - best.travelMin;
+    if (extraMin > 15) continue;
+    if (!candidate || p.crowd.level < candidate.p.crowd!.level) candidate = { p, extraMin };
+  }
+  if (!candidate) return undefined;
+  return { id: candidate.p.id, extraMin: Math.max(0, candidate.extraMin), level: candidate.p.crowd!.level };
+}
+
 export function emptyReasonFor(candidates: Candidate[], scoredCount: number): EmptyReason | undefined {
   if (candidates.length === 0) return "no_results";
   if (scoredCount > 0) return undefined;
