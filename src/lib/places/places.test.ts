@@ -456,6 +456,42 @@ describe("overpassSearch", () => {
     ]);
     expect(fn).toHaveBeenCalled();
   });
+
+  it("keeps late data over an early empty verdict (slow network)", async () => {
+    // CI failure this guards: a fast thin mirror answers valid-but-empty
+    // instantly while the rich mirror is still in flight. The grace window
+    // closes, the pool settles, and the old code returned [] because an
+    // "overpass-empty" reason existed — discarding data that landed later.
+    const el = (id: number) => ({
+      type: "node" as const, id, lat: 36.65, lon: 138.19,
+      tags: { leisure: "park", name: `Park ${id}` },
+    });
+    mockFetch([
+      {
+        match: (u: string) => u.includes("overpass.osm.ch"),
+        response: () => jsonResponse({ elements: [] }),
+      },
+      {
+        match: urlContains("interpreter"),
+        // sync Response whose BODY lands after the grace window: res.json()
+        // still waits for it, so the mirror settles late with real data.
+        response: () => new Response(
+          new ReadableStream({
+            async start(controller) {
+              await new Promise((r) => setTimeout(r, 4300));
+              controller.enqueue(
+                new TextEncoder().encode(JSON.stringify({ elements: [el(1), el(2)] }))
+              );
+              controller.close();
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        ),
+      },
+    ]);
+    const places = await overpassSearch(resolveTypes(["park"]), 36.65, 138.19, 5000);
+    expect(places.map((p) => p.id)).toEqual(["o_node_1", "o_node_2"]);
+  });
 });
 
 describe("discover — merged multi-source chain", () => {
