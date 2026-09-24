@@ -1,7 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { extractJson, narrateTop } from "@/lib/llm";
-import { chatComplete } from "@/lib/llm/client";
-import type { LlmProvider } from "@/lib/llm/providers";
+import { extractJson, narrateTop, chatComplete, type LlmProvider } from "@/lib/llm";
 import type { AppConfig } from "@/lib/settings";
 import { mockFetch, jsonResponse, urlContains, isolatedStore } from "@/test-utils/helpers";
 

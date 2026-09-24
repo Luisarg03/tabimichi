@@ -1,7 +1,157 @@
-import { activeProviders, modelForProvider, type LlmProvider } from "./providers";
-import { chatComplete } from "./client";
+import { getConfig, type AppConfig } from "../settings";
+import { guideModelById } from "./models";
 import type { ScoredPlace, WeatherInfo, TimeBudget, TransportMode } from "../types";
-import type { AppConfig } from "../settings";
+
+/**
+ * LLM provider registry (M2).
+ * Two layers, both OpenAI-compatible gateways reachable with just an API key
+ * (the keys are requested in the app's Settings and never leave the machine):
+ *
+ *   - opencode-zen (free tier)  → https://opencode.ai/zen/v1
+ *       free model: deepseek-v4-flash-free (shared quota → rate-limited often)
+ *   - opencode-go  (paid tier)  → https://opencode.ai/zen/go/v1
+ *       models: deepseek-v4-flash, deepseek-v4-pro, mimo-v2.5, minimax-m3
+ *
+ * Default strategy: try the free layer first, fall back to the paid layer.
+ * When the user picked a guide model (`config.guideModel`), the provider that
+ * serves that model moves to the front (if its key is configured), so the
+ * chosen model is tried first and the rest remain as fallback.
+ */
+
+export interface LlmProvider {
+  id: string;
+  name: string;
+  tier: "free" | "paid";
+  baseURL: string;
+  apiKey: string;
+  models: string[];
+}
+
+/** Free layer: OpenCode Zen. */
+const ZEN: Omit<LlmProvider, "apiKey"> = {
+  id: "opencode-zen",
+  name: "OpenCode Zen",
+  tier: "free",
+  baseURL: "https://opencode.ai/zen/v1",
+  models: ["deepseek-v4-flash-free", "deepseek-v4-flash"],
+};
+
+/** Paid layer: OpenCode Go. */
+const GO: Omit<LlmProvider, "apiKey"> = {
+  id: "opencode-go",
+  name: "OpenCode Go",
+  tier: "paid",
+  baseURL: "https://opencode.ai/zen/go/v1",
+  models: ["deepseek-v4-flash", "deepseek-v4-pro", "mimo-v2.5", "minimax-m3"],
+};
+
+/**
+ * Providers with a configured key, free layer first (fallback order).
+ * A configured `guideModel` moves its serving provider to the front.
+ */
+export function activeProviders(config?: AppConfig): LlmProvider[] {
+  const cfg = config ?? getConfig();
+  const out: LlmProvider[] = [];
+  if (cfg.opencodeApiKey) out.push({ ...ZEN, apiKey: cfg.opencodeApiKey });
+  if (cfg.opencodeGoApiKey) out.push({ ...GO, apiKey: cfg.opencodeGoApiKey });
+
+  const chosen = guideModelById(cfg.guideModel);
+  if (chosen) {
+    const idx = out.findIndex((p) => p.id === chosen.providerId);
+    if (idx > 0) {
+      const [p] = out.splice(idx, 1);
+      out.unshift(p);
+    }
+  }
+  return out;
+}
+
+/**
+ * The model to request for a provider given the user's guide model preference:
+ * the chosen model when the provider serves it (authoritative — the provider
+ * that owns the model is tried first anyway), else the provider's default.
+ */
+export function modelForProvider(provider: LlmProvider, config?: AppConfig): string {
+  const chosen = guideModelById(config?.guideModel);
+  if (chosen && chosen.providerId === provider.id && provider.models.includes(chosen.id)) {
+    return chosen.id;
+  }
+  return provider.models[0] ?? "deepseek-v4-flash";
+}
+
+export interface ChatMessage {
+  role: "system" | "user" | "assistant";
+  content: string;
+}
+
+export interface ChatOptions {
+  model?: string;
+  messages: ChatMessage[];
+  maxTokens?: number;
+  temperature?: number;
+  timeoutMs?: number;
+  /** retries on transient (5xx/network) errors, default 2 */
+  retries?: number;
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * OpenAI-compatible chat completion against a registry provider.
+ * Defaults to the provider's first model. Retries transient gateway errors
+ * (5xx/network) but fails fast on 4xx — a rate-limited free tier (429) won't
+ * clear in milliseconds, so the caller should fall back to the next provider.
+ */
+export async function chatComplete(
+  provider: LlmProvider,
+  opts: ChatOptions
+): Promise<string> {
+  const {
+    model = provider.models[0] ?? "deepseek-v4-flash",
+    messages,
+    maxTokens = 1024,
+    temperature = 0.4,
+    timeoutMs = 45000,
+    retries = 2,
+  } = opts;
+
+  let lastErr: unknown = null;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(`${provider.baseURL}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${provider.apiKey}`,
+        },
+        body: JSON.stringify({ model, messages, max_tokens: maxTokens, temperature }),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+
+      if (!res.ok) {
+        // 4xx (bad key, rate limit…) won't recover on retry — fail fast
+        if (res.status >= 400 && res.status < 500) {
+          throw new Error(`llm-http-${res.status}`, { cause: "fail-fast" });
+        }
+        throw new Error(`llm-http-${res.status}`);
+      }
+
+      const data = (await res.json()) as {
+        choices?: Array<{ message?: { content?: unknown } }>;
+      };
+      const text = data.choices?.[0]?.message?.content;
+      if (typeof text !== "string" || text.length === 0) throw new Error("llm-empty");
+      return text;
+    } catch (err) {
+      // 4xx won't recover on retry — fail fast so the caller can
+      // fall back to the next provider immediately
+      if ((err as Error)?.cause === "fail-fast") throw err;
+      lastErr = err;
+      if (attempt < retries) await sleep(800 * (attempt + 1));
+    }
+  }
+  throw lastErr ?? new Error("llm-unreachable");
+}
 
 export interface NarrateOpts {
   places: ScoredPlace[];
